@@ -586,8 +586,10 @@ void b2World::SolveTOI(const b2TimeStep& step)
 			b->m_sweep.alpha0 = 0.0f;
 		}
 
-		for (b2Contact* c = m_contactManager.m_contactList; c; c = c->m_next)
+		for (int32 i = 0; i < m_contactManager.m_toiContacts.GetCount(); ++i)
 		{
+			b2Contact* c = m_contactManager.m_toiContacts.At(i);
+
 			// Invalidate TOI
 			c->m_flags &= ~(b2Contact::e_toiFlag | b2Contact::e_islandFlag);
 			c->m_toiCount = 0;
@@ -602,8 +604,10 @@ void b2World::SolveTOI(const b2TimeStep& step)
 		b2Contact* minContact = NULL;
 		float32 minAlpha = 1.0f;
 
-		for (b2Contact* c = m_contactManager.m_contactList; c; c = c->m_next)
+		for (int32 i = 0; i < m_contactManager.m_toiContacts.GetCount(); ++i)
 		{
+			b2Contact* c = m_contactManager.m_toiContacts.At(i);
+
 			// Is this contact disabled?
 			if (c->IsEnabled() == false)
 			{

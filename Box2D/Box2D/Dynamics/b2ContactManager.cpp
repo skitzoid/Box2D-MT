@@ -22,10 +22,14 @@
 #include <Box2D/Dynamics/b2WorldCallbacks.h>
 #include <Box2D/Dynamics/Contacts/b2Contact.h>
 
+const int32 b2_initialContactCapacity = 1024;
+const int32 b2_initialTOIContactCapacity = 1024;
+
 b2ContactFilter b2_defaultFilter;
 b2ContactListener b2_defaultListener;
 
 b2ContactManager::b2ContactManager()
+: m_toiContacts(b2_initialTOIContactCapacity)
 {
 	m_contactList = NULL;
 	m_contactCount = 0;
@@ -60,6 +64,12 @@ void b2ContactManager::Destroy(b2Contact* c)
 	if (c == m_contactList)
 	{
 		m_contactList = c->m_next;
+	}
+
+	if (c->m_flags & b2Contact::e_toiCandidateFlag)
+	{
+		m_toiContacts.Peek()->m_managerIndex = c->m_managerIndex;
+		m_toiContacts.RemoveAndSwap(c->m_managerIndex);
 	}
 
 	// Remove from body 1
@@ -290,6 +300,25 @@ void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
 	{
 		bodyA->SetAwake(true);
 		bodyB->SetAwake(true);
+	}
+
+	// Mark for TOI if needed.
+	if (fixtureA->IsSensor() == false && fixtureB->IsSensor() == false)
+	{
+		bool aNeedsTOI = bodyA->IsBullet() || (bodyA->GetType() != b2_dynamicBody);
+		bool bNeedsTOI = bodyB->IsBullet() || (bodyB->GetType() != b2_dynamicBody);
+
+		if (aNeedsTOI || bNeedsTOI)
+		{
+			c->m_flags |= b2Contact::e_toiCandidateFlag;
+		}
+	}
+
+	if (c->m_flags & b2Contact::e_toiCandidateFlag)
+	{
+		// Add to TOI contacts.
+		c->m_managerIndex = m_toiContacts.GetCount();
+		m_toiContacts.Push(c);
 	}
 
 	++m_contactCount;

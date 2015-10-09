@@ -70,7 +70,7 @@
     <ClInclude Include="..\..\Box2D\Common\b2StackAllocator.h">
       <Filter>Common</Filter>
     </ClInclude>
-	<ClInclude Include="..\..\Box2D\Common\b2Threading.h">
+    <ClInclude Include="..\..\Box2D\Common\b2Threading.h">
       <Filter>Common</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Box2D\Common\b2Timer.h">
@@ -160,6 +160,9 @@
     <ClInclude Include="..\..\Box2D\Dynamics\Joints\b2MotorJoint.h">
       <Filter>Dynamics\Joints</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Box2D\Common\b2GrowableArray.h">
+      <Filter>Common</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Box2D\Collision\b2BroadPhase.cpp">
@@ -213,7 +216,7 @@
     <ClCompile Include="..\..\Box2D\Common\b2StackAllocator.cpp">
       <Filter>Common</Filter>
     </ClCompile>
-	<ClCompile Include="..\..\Box2D\Common\b2Threading.cpp">
+    <ClCompile Include="..\..\Box2D\Common\b2Threading.cpp">
       <Filter>Common</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Box2D\Common\b2Timer.cpp">

@@ -20,6 +20,7 @@
 #define B2_CONTACT_MANAGER_H
 
 #include <Box2D/Collision/b2BroadPhase.h>
+#include <Box2D/Common/b2GrowableArray.h>
 
 class b2Contact;
 class b2ContactFilter;
@@ -47,6 +48,8 @@ public:
 	b2ContactFilter* m_contactFilter;
 	b2ContactListener* m_contactListener;
 	b2BlockAllocator* m_allocator;
+
+	b2GrowableArray<b2Contact*> m_toiContacts;
 };
 
 #endif

@@ -214,11 +214,12 @@
     <ClInclude Include="..\..\Box2D\Collision\Shapes\b2Shape.h" />
     <ClInclude Include="..\..\Box2D\Common\b2BlockAllocator.h" />
     <ClInclude Include="..\..\Box2D\Common\b2Draw.h" />
+    <ClInclude Include="..\..\Box2D\Common\b2GrowableArray.h" />
     <ClInclude Include="..\..\Box2D\Common\b2GrowableStack.h" />
     <ClInclude Include="..\..\Box2D\Common\b2Math.h" />
     <ClInclude Include="..\..\Box2D\Common\b2Settings.h" />
     <ClInclude Include="..\..\Box2D\Common\b2StackAllocator.h" />
-	<ClInclude Include="..\..\Box2D\Common\b2Threading.h" />
+    <ClInclude Include="..\..\Box2D\Common\b2Threading.h" />
     <ClInclude Include="..\..\Box2D\Common\b2Timer.h" />
     <ClInclude Include="..\..\Box2D\Dynamics\b2Body.h" />
     <ClInclude Include="..\..\Box2D\Dynamics\b2ContactManager.h" />
@@ -284,7 +285,7 @@
     </ClCompile>
     <ClCompile Include="..\..\Box2D\Common\b2StackAllocator.cpp">
     </ClCompile>
-	<ClCompile Include="..\..\Box2D\Common\b2Threading.cpp">
+    <ClCompile Include="..\..\Box2D\Common\b2Threading.cpp">
     </ClCompile>
     <ClCompile Include="..\..\Box2D\Common\b2Timer.cpp">
     </ClCompile>
