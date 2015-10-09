@@ -48,6 +48,7 @@
 #include "Mobile.h"
 #include "MobileBalanced.h"
 #include "MotorJoint.h"
+#include "MultithreadDemo.h"
 #include "OneSidedPlatform.h"
 #include "Pinball.h"
 #include "PolyCollision.h"
@@ -73,6 +74,7 @@
 
 TestEntry g_testEntries[] =
 {
+	{"Multithread Demo", MultithreadDemo::Create },
 	{"Tiles", Tiles::Create},
 	{"Heavy on Light", HeavyOnLight::Create},
 	{"Heavy on Light Two", HeavyOnLightTwo::Create},

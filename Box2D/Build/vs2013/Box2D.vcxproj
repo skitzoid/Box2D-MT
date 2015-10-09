@@ -218,6 +218,7 @@
     <ClInclude Include="..\..\Box2D\Common\b2Math.h" />
     <ClInclude Include="..\..\Box2D\Common\b2Settings.h" />
     <ClInclude Include="..\..\Box2D\Common\b2StackAllocator.h" />
+	<ClInclude Include="..\..\Box2D\Common\b2Threading.h" />
     <ClInclude Include="..\..\Box2D\Common\b2Timer.h" />
     <ClInclude Include="..\..\Box2D\Dynamics\b2Body.h" />
     <ClInclude Include="..\..\Box2D\Dynamics\b2ContactManager.h" />
@@ -282,6 +283,8 @@
     <ClCompile Include="..\..\Box2D\Common\b2Settings.cpp">
     </ClCompile>
     <ClCompile Include="..\..\Box2D\Common\b2StackAllocator.cpp">
+    </ClCompile>
+	<ClCompile Include="..\..\Box2D\Common\b2Threading.cpp">
     </ClCompile>
     <ClCompile Include="..\..\Box2D\Common\b2Timer.cpp">
     </ClCompile>

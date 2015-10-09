@@ -70,6 +70,9 @@
     <ClInclude Include="..\..\Box2D\Common\b2StackAllocator.h">
       <Filter>Common</Filter>
     </ClInclude>
+	<ClInclude Include="..\..\Box2D\Common\b2Threading.h">
+      <Filter>Common</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\Box2D\Common\b2Timer.h">
       <Filter>Common</Filter>
     </ClInclude>
@@ -208,6 +211,9 @@
       <Filter>Common</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Box2D\Common\b2StackAllocator.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+	<ClCompile Include="..\..\Box2D\Common\b2Threading.cpp">
       <Filter>Common</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Box2D\Common\b2Timer.cpp">
