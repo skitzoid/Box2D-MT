@@ -5,7 +5,7 @@ It has no external dependencies and is no less deterministic than Box2D.
 
 It requires a somewhat modern compiler, since it relies on C++11's thread support library.
 
-Before using Box2D-MT, you should be familiar with Box2D.
+Before using Box2D-MT, you should be familiar with Box2D, and multi-threading.
 
 For help with Box2D, please visit http://www.box2d.org. There is a forum there where you may post your questions.
 
