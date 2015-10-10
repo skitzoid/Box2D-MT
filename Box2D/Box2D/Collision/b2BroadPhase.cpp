@@ -22,19 +22,15 @@ b2BroadPhase::b2BroadPhase()
 {
 	m_proxyCount = 0;
 
-	m_pairCapacity = 16;
-	m_pairCount = 0;
-	m_pairBuffer = (b2Pair*)b2Alloc(m_pairCapacity * sizeof(b2Pair));
-
-	m_moveCapacity = 16;
-	m_moveCount = 0;
-	m_moveBuffer = (int32*)b2Alloc(m_moveCapacity * sizeof(int32));
+	for (int32 i = 0; i < b2_maxThreads; ++i)
+	{
+		m_perThreadData[i].m_queryProxyId = -1;
+	}
 }
 
 b2BroadPhase::~b2BroadPhase()
 {
-	b2Free(m_moveBuffer);
-	b2Free(m_pairBuffer);
+
 }
 
 int32 b2BroadPhase::CreateProxy(const b2AABB& aabb, void* userData)
@@ -68,26 +64,20 @@ void b2BroadPhase::TouchProxy(int32 proxyId)
 
 void b2BroadPhase::BufferMove(int32 proxyId)
 {
-	if (m_moveCount == m_moveCapacity)
-	{
-		int32* oldBuffer = m_moveBuffer;
-		m_moveCapacity *= 2;
-		m_moveBuffer = (int32*)b2Alloc(m_moveCapacity * sizeof(int32));
-		memcpy(m_moveBuffer, oldBuffer, m_moveCount * sizeof(int32));
-		b2Free(oldBuffer);
-	}
+	int32 threadId = b2GetThreadId();
 
-	m_moveBuffer[m_moveCount] = proxyId;
-	++m_moveCount;
+	m_perThreadData[threadId].m_moveBuffer.Push(proxyId);
 }
 
 void b2BroadPhase::UnBufferMove(int32 proxyId)
 {
-	for (int32 i = 0; i < m_moveCount; ++i)
+	b2BroadPhasePerThreadData* td = m_perThreadData + b2GetThreadId();
+
+	for (int32 i = 0; i < td->m_moveBuffer.GetCount(); ++i)
 	{
-		if (m_moveBuffer[i] == proxyId)
+		if (td->m_moveBuffer.At(i) == proxyId)
 		{
-			m_moveBuffer[i] = e_nullProxy;
+			td->m_moveBuffer.At(i) = e_nullProxy;
 		}
 	}
 }
@@ -95,25 +85,19 @@ void b2BroadPhase::UnBufferMove(int32 proxyId)
 // This is called from b2DynamicTree::Query when we are gathering pairs.
 bool b2BroadPhase::QueryCallback(int32 proxyId)
 {
+	b2BroadPhasePerThreadData* td = m_perThreadData + b2GetThreadId();
+
 	// A proxy cannot form a pair with itself.
-	if (proxyId == m_queryProxyId)
+	if (proxyId == td->m_queryProxyId)
 	{
 		return true;
 	}
 
-	// Grow the pair buffer as needed.
-	if (m_pairCount == m_pairCapacity)
-	{
-		b2Pair* oldBuffer = m_pairBuffer;
-		m_pairCapacity *= 2;
-		m_pairBuffer = (b2Pair*)b2Alloc(m_pairCapacity * sizeof(b2Pair));
-		memcpy(m_pairBuffer, oldBuffer, m_pairCount * sizeof(b2Pair));
-		b2Free(oldBuffer);
-	}
+	b2Pair pair;
+	pair.proxyIdA = b2Min(proxyId, td->m_queryProxyId);
+	pair.proxyIdB = b2Max(proxyId, td->m_queryProxyId);
 
-	m_pairBuffer[m_pairCount].proxyIdA = b2Min(proxyId, m_queryProxyId);
-	m_pairBuffer[m_pairCount].proxyIdB = b2Max(proxyId, m_queryProxyId);
-	++m_pairCount;
+	td->m_pairBuffer.Push(pair);
 
 	return true;
 }

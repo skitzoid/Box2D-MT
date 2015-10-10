@@ -35,6 +35,7 @@
 #include <Box2D/Common/b2Threading.h>
 #include <new>
 
+const int32 b2_initialNonStaticBodiesCapacity = 1024;
 
 class b2SolveTask : public b2Task
 {
@@ -94,7 +95,31 @@ private:
 	}
 };
 
+class b2BroadphaseGenerateDefferedMovesTask : public b2RangedTask
+{
+public:
+	b2ContactManager* m_manager;
+	b2Body** m_bodies;
+private:
+	virtual void Execute(b2StackAllocator&) /* override */
+	{
+		m_manager->GenerateDeferredMoveProxies(m_bodies + m_beginIndex, m_endIndex - m_beginIndex);
+	}
+};
+
+class b2BroadphaseFindNewContactsTask : public b2RangedTask
+{
+public:
+	b2ContactManager* m_manager;
+private:
+	virtual void Execute(b2StackAllocator&) /* override */
+	{
+		m_manager->FindNewContacts(m_beginIndex, m_endIndex);
+	}
+};
+
 b2World::b2World(const b2Vec2& gravity, b2ThreadPool* threadPool)
+: m_nonStaticBodies(b2_initialNonStaticBodiesCapacity)
 {
 	m_destructionListener = NULL;
 	g_debugDraw = NULL;
@@ -190,6 +215,13 @@ b2Body* b2World::CreateBody(const b2BodyDef* def)
 	m_bodyList = b;
 	++m_bodyCount;
 
+	// Add to bodies array.
+	if (def->type != b2_staticBody)
+	{
+		b->m_worldIndex = m_nonStaticBodies.GetCount();
+		m_nonStaticBodies.Push(b);
+	}
+
 	return b;
 }
 
@@ -267,6 +299,14 @@ void b2World::DestroyBody(b2Body* b)
 	if (b == m_bodyList)
 	{
 		m_bodyList = b->m_next;
+	}
+
+	// Remove from bodies array.
+	int32 index = b->m_worldIndex;
+	if (b->m_type != b2_staticBody)
+	{
+		m_nonStaticBodies.Peek()->m_worldIndex = index;
+		m_nonStaticBodies.RemoveAndSwap(index);
 	}
 
 	--m_bodyCount;
@@ -456,7 +496,7 @@ void b2World::Solve(const b2TimeStep& step)
 
 	// Size the island for the worst case.
 	b2Island island(m_bodyCount,
-					m_contactManager.m_contactCount,
+					m_contactManager.GetContactCount(),
 					m_jointCount,
 					&m_stackAllocator,
 					m_contactManager.m_contactListener);
@@ -478,20 +518,16 @@ void b2World::Solve(const b2TimeStep& step)
 	// Build and simulate all awake islands.
 	int32 stackSize = m_bodyCount;
 	b2Body** stack = (b2Body**)m_stackAllocator.Allocate(stackSize * sizeof(b2Body*));
-	for (b2Body* seed = m_bodyList; seed; seed = seed->m_next)
+	for (int32 i = 0; i < m_nonStaticBodies.GetCount(); ++i)
 	{
+		b2Body* seed = m_nonStaticBodies.At(i);
+
 		if (seed->m_flags & b2Body::e_islandFlag)
 		{
 			continue;
 		}
 
 		if (seed->IsAwake() == false || seed->IsActive() == false)
-		{
-			continue;
-		}
-
-		// The seed can be dynamic or kinematic.
-		if (seed->GetType() == b2_staticBody)
 		{
 			continue;
 		}
@@ -615,15 +651,12 @@ void b2World::Solve(const b2TimeStep& step)
 	{
 		b2Timer timer;
 		// Synchronize fixtures, check for out of range bodies.
-		for (b2Body* b = m_bodyList; b; b = b->GetNext())
+		for (int32 i = 0; i < m_nonStaticBodies.GetCount(); ++i)
 		{
+			b2Body* b = m_nonStaticBodies.At(i);
+
 			// If a body was not in an island then it did not move.
 			if ((b->m_flags & b2Body::e_islandFlag) == 0)
-			{
-				continue;
-			}
-
-			if (b->GetType() == b2_staticBody)
 			{
 				continue;
 			}
@@ -633,7 +666,7 @@ void b2World::Solve(const b2TimeStep& step)
 		}
 
 		// Look for new contacts.
-		m_contactManager.FindNewContacts();
+		m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount());
 
 		float32 broadPhaseTime = timer.GetMilliseconds();
 		m_profile.broadphase += broadPhaseTime;
@@ -654,9 +687,9 @@ void b2World::SolveTOI(const b2TimeStep& step)
 			b->m_sweep.alpha0 = 0.0f;
 		}
 
-		for (int32 i = 0; i < m_contactManager.m_toiContacts.GetCount(); ++i)
+		for (int32 i = 0; i < m_contactManager.m_contactsTOI.GetCount(); ++i)
 		{
-			b2Contact* c = m_contactManager.m_toiContacts.At(i);
+			b2Contact* c = m_contactManager.m_contactsTOI.At(i);
 
 			// Invalidate TOI
 			c->m_flags &= ~(b2Contact::e_toiFlag | b2Contact::e_islandFlag);
@@ -672,9 +705,9 @@ void b2World::SolveTOI(const b2TimeStep& step)
 		b2Contact* minContact = NULL;
 		float32 minAlpha = 1.0f;
 
-		for (int32 i = 0; i < m_contactManager.m_toiContacts.GetCount(); ++i)
+		for (int32 i = 0; i < m_contactManager.m_contactsTOI.GetCount(); ++i)
 		{
-			b2Contact* c = m_contactManager.m_toiContacts.At(i);
+			b2Contact* c = m_contactManager.m_contactsTOI.At(i);
 
 			// Is this contact disabled?
 			if (c->IsEnabled() == false)
@@ -958,7 +991,7 @@ void b2World::SolveTOI(const b2TimeStep& step)
 
 			// Commit fixture proxy movements to the broad-phase so that new contacts are created.
 			// Also, some contacts can be destroyed.
-			m_contactManager.FindNewContacts();
+			m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount());
 
 			float32 broadPhaseTime = timer.GetMilliseconds();
 			m_profile.broadphase += broadPhaseTime;
@@ -971,6 +1004,62 @@ void b2World::SolveTOI(const b2TimeStep& step)
 			break;
 		}
 	}
+}
+
+void b2World::SynchronizeFixturesMT()
+{
+	b2TaskGroup group(*m_threadPool);
+
+	// TODO_JUSTIN: settings
+	static const int32 b2_SynchronizeFixturesMaxTasks = 4 * b2_maxThreads;
+
+	b2BroadphaseGenerateDefferedMovesTask moveTasks[b2_SynchronizeFixturesMaxTasks];
+
+	// Initialize tasks.
+	for (int32 i = 0; i < b2_SynchronizeFixturesMaxTasks; ++i)
+	{
+		moveTasks[i].m_manager = &m_contactManager;
+		moveTasks[i].m_bodies = m_nonStaticBodies.Data();
+	}
+
+	// Submit tasks.
+	group.SubmitRangedTasks(moveTasks, m_threadPool->GetThreadCount(), m_nonStaticBodies.GetCount(), m_stackAllocator);
+
+	// Wait for tasks to finish.
+	group.Wait(m_stackAllocator);
+
+	// Do work that couldn't be done in parallel.
+	m_contactManager.ConsumeDeferredMoveProxies();
+}
+
+void b2World::FindNewContactsMT()
+{
+	m_contactManager.m_deferCreates = true;
+
+	b2TaskGroup group(*m_threadPool);
+
+	// TODO_JUSTIN: settings
+	static const int32 b2_findNewContactsMaxTasks = b2_maxThreads;
+
+	b2BroadphaseFindNewContactsTask tasks[b2_findNewContactsMaxTasks];
+
+	// Initialize tasks.
+	for (int32 i = 0; i < b2_findNewContactsMaxTasks; ++i)
+	{
+		tasks[i].m_manager = &m_contactManager;
+	}
+
+	// Submit tasks.
+	group.SubmitRangedTasks(tasks, m_threadCount, m_contactManager.m_broadPhase.GetMoveCount(), m_stackAllocator);
+
+	// Wait for tasks to finish.
+	group.Wait(m_stackAllocator);
+
+	// Do work that couldn't be done in parallel.
+
+	m_contactManager.m_broadPhase.ResetMoveBuffer();
+
+	m_contactManager.ConsumeDeferredCreates();
 }
 
 void b2World::CollideMT()
@@ -995,17 +1084,17 @@ void b2World::CollideMT()
 	for (int32 i = 0; i < b2_CollideMaxTasks; ++i)
 	{
 		contactsTasks[i].m_manager = &m_contactManager;
-		contactsTasks[i].m_contacts = m_contactManager.m_contacts.Data();
+		contactsTasks[i].m_contacts = m_contactManager.m_contactsNonTOI.Data();
 
 		toiContactsTasks[i].m_manager = &m_contactManager;
-		toiContactsTasks[i].m_contacts = m_contactManager.m_toiContacts.Data();
+		toiContactsTasks[i].m_contacts = m_contactManager.m_contactsTOI.Data();
 	}
 
 	// Submit tasks for non-TOI contacts.
-	group.SubmitRangedTasks(contactsTasks, m_threadCount, m_contactManager.m_contacts.GetCount(), m_stackAllocator);
+	group.SubmitRangedTasks(contactsTasks, m_threadCount, m_contactManager.m_contactsNonTOI.GetCount(), m_stackAllocator);
 
 	// Submit tasks for TOI contacts.
-	group.SubmitRangedTasks(toiContactsTasks, m_threadCount, m_contactManager.m_toiContacts.GetCount(), m_stackAllocator);
+	group.SubmitRangedTasks(toiContactsTasks, m_threadCount, m_contactManager.m_contactsTOI.GetCount(), m_stackAllocator);
 
 	// Wait for tasks to finish.
 	group.Wait(m_stackAllocator);
@@ -1061,12 +1150,11 @@ void b2World::SolveMT(const b2TimeStep& step)
 	// Build and simulate all awake islands.
 	int32 stackSize = m_bodyCount;
 	b2Body** stack = (b2Body**)m_stackAllocator.Allocate(stackSize * sizeof(b2Body*));
-	for (b2Body* seed = m_bodyList; seed; seed = seed->GetNext())
+	for (int32 i = 0; i < m_nonStaticBodies.GetCount(); ++i)
 	{
-		if (seed->GetType() == b2_staticBody)
-		{
-			continue;
-		}
+		b2Body* seed = m_nonStaticBodies.At(i);
+
+		b2Assert(seed->GetType() != b2_staticBody);
 
 		if (seed->m_flags & b2Body::e_islandFlag)
 		{
@@ -1265,26 +1353,12 @@ void b2World::SolveMT(const b2TimeStep& step)
 
 	{
 		b2Timer timer;
+
 		// Synchronize fixtures, check for out of range bodies.
-		for (b2Body* b = m_bodyList; b; b = b->GetNext())
-		{
-			// If a body was not in an island then it did not move.
-			if ((b->m_flags & b2Body::e_islandFlag) == 0)
-			{
-				continue;
-			}
-
-			if (b->GetType() == b2_staticBody)
-			{
-				continue;
-			}
-
-			// Update fixtures (for broad-phase).
-			b->SynchronizeFixtures();
-		}
+		SynchronizeFixturesMT();
 
 		// Look for new contacts.
-		m_contactManager.FindNewContacts();
+		FindNewContactsMT();
 
 		float32 broadPhaseTime = timer.GetMilliseconds();
 		m_profile.broadphase += broadPhaseTime;
@@ -1302,7 +1376,14 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 	if (m_flags & e_newFixture)
 	{
 		b2Timer timer;
-		m_contactManager.FindNewContacts();
+		if (IsMultithreadedStepEnabled())
+		{
+			FindNewContactsMT();
+		}
+		else
+		{
+			m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount());
+		}
 		m_flags &= ~e_newFixture;
 		m_profile.broadphase += timer.GetMilliseconds();
 	}
@@ -1335,8 +1416,8 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 		}
 		else
 		{
-			m_contactManager.Collide(m_contactManager.m_contacts.Data(), m_contactManager.m_contacts.GetCount());
-			m_contactManager.Collide(m_contactManager.m_toiContacts.Data(), m_contactManager.m_toiContacts.GetCount());
+			m_contactManager.Collide(m_contactManager.m_contactsNonTOI.Data(), m_contactManager.m_contactsNonTOI.GetCount());
+			m_contactManager.Collide(m_contactManager.m_contactsTOI.Data(), m_contactManager.m_contactsTOI.GetCount());
 		}
 		m_profile.collide += timer.GetMilliseconds();
 	}

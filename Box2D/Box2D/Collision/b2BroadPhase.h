@@ -22,12 +22,22 @@
 #include <Box2D/Common/b2Settings.h>
 #include <Box2D/Collision/b2Collision.h>
 #include <Box2D/Collision/b2DynamicTree.h>
+#include <Box2D/Common/b2GrowableArray.h>
 #include <algorithm>
 
 struct b2Pair
 {
 	int32 proxyIdA;
 	int32 proxyIdB;
+};
+
+struct b2BroadPhasePerThreadData
+{
+	b2GrowableArray<b2Pair> m_pairBuffer;
+	b2GrowableArray<int32> m_moveBuffer;
+	int32 m_queryProxyId;
+
+	char m_padding[b2_cacheLineSize];
 };
 
 /// The broad-phase is used for computing pairs and performing volume queries and ray casts.
@@ -73,7 +83,7 @@ public:
 
 	/// Update the pairs. This results in pair callbacks. This can only add pairs.
 	template <typename T>
-	void UpdatePairs(T* callback);
+	void UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback);
 
 	/// Query an AABB for overlapping proxies. The callback class
 	/// is called for each proxy that overlaps the supplied AABB.
@@ -104,6 +114,12 @@ public:
 	/// @param newOrigin the new origin with respect to the old origin
 	void ShiftOrigin(const b2Vec2& newOrigin);
 
+	/// Reset the move buffer. Should only be called by the multi-threaded contact finder.
+	void ResetMoveBuffer();
+
+	/// Get the number of proxies in the move buffer.
+	int32 GetMoveCount() const;
+
 private:
 
 	friend class b2DynamicTree;
@@ -117,15 +133,7 @@ private:
 
 	int32 m_proxyCount;
 
-	int32* m_moveBuffer;
-	int32 m_moveCapacity;
-	int32 m_moveCount;
-
-	b2Pair* m_pairBuffer;
-	int32 m_pairCapacity;
-	int32 m_pairCount;
-
-	int32 m_queryProxyId;
+	b2BroadPhasePerThreadData m_perThreadData[b2_maxThreads];
 };
 
 /// This is used to sort pairs.
@@ -182,50 +190,61 @@ inline float32 b2BroadPhase::GetTreeQuality() const
 }
 
 template <typename T>
-void b2BroadPhase::UpdatePairs(T* callback)
+void b2BroadPhase::UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback)
 {
+	int32 threadId = b2GetThreadId();
+
+	b2BroadPhasePerThreadData* td = m_perThreadData + threadId;
+
 	// Reset pair buffer
-	m_pairCount = 0;
+	td->m_pairBuffer.Clear();
 
 	// Perform tree queries for all moving proxies.
-	for (int32 i = 0; i < m_moveCount; ++i)
+	for (int32 i = moveBegin; i < moveEnd; ++i)
 	{
-		m_queryProxyId = m_moveBuffer[i];
-		if (m_queryProxyId == e_nullProxy)
+		td->m_queryProxyId = m_perThreadData[0].m_moveBuffer.At(i);
+		if (td->m_queryProxyId == e_nullProxy)
 		{
 			continue;
 		}
 
+		b2AABB fatAABB;
+
 		// We have to query the tree with the fat AABB so that
 		// we don't fail to create a pair that may touch later.
-		const b2AABB& fatAABB = m_tree.GetFatAABB(m_queryProxyId);
+		fatAABB = m_tree.GetFatAABB(td->m_queryProxyId);
 
-		// Query tree, create pairs and add them pair buffer.
+		// Query the tree, create pairs and add them pair buffer.
 		m_tree.Query(this, fatAABB);
 	}
 
-	// Reset move buffer
-	m_moveCount = 0;
+	// Reset move buffer if we're processing the entire range.
+	if (moveBegin == 0 && moveEnd == m_perThreadData[0].m_moveBuffer.GetCount())
+	{
+		m_perThreadData[0].m_moveBuffer.Clear();
+	}
 
 	// Sort the pair buffer to expose duplicates.
-	std::sort(m_pairBuffer, m_pairBuffer + m_pairCount, b2PairLessThan);
+	std::sort(td->m_pairBuffer.Data(), td->m_pairBuffer.Data() + td->m_pairBuffer.GetCount(), b2PairLessThan);
 
 	// Send the pairs back to the client.
 	int32 i = 0;
-	while (i < m_pairCount)
+	while (i < td->m_pairBuffer.GetCount())
 	{
-		b2Pair* primaryPair = m_pairBuffer + i;
-		void* userDataA = m_tree.GetUserData(primaryPair->proxyIdA);
-		void* userDataB = m_tree.GetUserData(primaryPair->proxyIdB);
+		b2Pair& primaryPair = td->m_pairBuffer.At(i);
+
+		void* userDataA = m_tree.GetUserData(primaryPair.proxyIdA);
+		void* userDataB = m_tree.GetUserData(primaryPair.proxyIdB);
 
 		callback->AddPair(userDataA, userDataB);
+
 		++i;
 
 		// Skip any duplicate pairs.
-		while (i < m_pairCount)
+		while (i < td->m_pairBuffer.GetCount())
 		{
-			b2Pair* pair = m_pairBuffer + i;
-			if (pair->proxyIdA != primaryPair->proxyIdA || pair->proxyIdB != primaryPair->proxyIdB)
+			b2Pair& pair = td->m_pairBuffer.At(i);
+			if (pair.proxyIdA != primaryPair.proxyIdA || pair.proxyIdB != primaryPair.proxyIdB)
 			{
 				break;
 			}
@@ -252,6 +271,24 @@ inline void b2BroadPhase::RayCast(T* callback, const b2RayCastInput& input) cons
 inline void b2BroadPhase::ShiftOrigin(const b2Vec2& newOrigin)
 {
 	m_tree.ShiftOrigin(newOrigin);
+}
+
+inline void b2BroadPhase::ResetMoveBuffer()
+{
+	for (int32 i = 0; i < b2_maxThreads; ++i)
+	{
+		m_perThreadData[i].m_moveBuffer.Clear();
+	}
+}
+
+inline int32 b2BroadPhase::GetMoveCount() const
+{
+	int32 moveCount = 0;
+	for (int32 i = 0; i < b2_maxThreads; ++i)
+	{
+		moveCount += m_perThreadData[i].m_moveBuffer.GetCount();
+	}
+	return moveCount;
 }
 
 #endif

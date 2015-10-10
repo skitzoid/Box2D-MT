@@ -22,22 +22,25 @@
 #include <Box2D/Dynamics/b2WorldCallbacks.h>
 #include <Box2D/Dynamics/Contacts/b2Contact.h>
 
-
+// TODO_JUSTIN: Settings?
 const int32 b2_initialContactCapacity = 1024;
 const int32 b2_initialTOIContactCapacity = 1024;
 const int32 b2_initialDeferredAwakesCapacity = 1024;
 const int32 b2_initialDeferredDestroysCapacity = 1024;
+const int32 b2_initialDeferredCreatesCapacity = 1024;
+const int32 b2_initialDeferredMoveProxiesCapacity = 1024;
+const int32 b2_initialTempProxyIdsCapacity = 1024;
 
 b2ContactFilter b2_defaultFilter;
 b2ContactListener b2_defaultListener;
 
-/// This is used to sort contacts in a deterministic order .
-bool b2ContactPointerLessThan(const b2Contact* c1, const b2Contact* c2)
+/// This is used to sort contacts in a deterministic order.
+bool b2ContactPointerLessThan(const b2Contact* l, const b2Contact* r)
 {
-	int32 c1A = c1->GetFixtureA()->m_proxies[c1->GetChildIndexA()].proxyId;
-	int32 c1B = c1->GetFixtureB()->m_proxies[c1->GetChildIndexB()].proxyId;
-	int32 c2A = c2->GetFixtureA()->m_proxies[c2->GetChildIndexA()].proxyId;
-	int32 c2B = c2->GetFixtureB()->m_proxies[c2->GetChildIndexB()].proxyId;
+	int32 c1A = l->GetFixtureA()->m_proxies[l->GetChildIndexA()].proxyId;
+	int32 c1B = l->GetFixtureB()->m_proxies[l->GetChildIndexB()].proxyId;
+	int32 c2A = r->GetFixtureA()->m_proxies[r->GetChildIndexA()].proxyId;
+	int32 c2B = r->GetFixtureB()->m_proxies[r->GetChildIndexB()].proxyId;
 
 	if (c1A < c2A)
 	{
@@ -52,23 +55,48 @@ bool b2ContactPointerLessThan(const b2Contact* c1, const b2Contact* c2)
 	return false;
 }
 
+/// This is used to sort deferred contact creations in a deterministic order.
+bool b2DeferredContactCreateLessThan(const b2DeferredContactCreate& l, const b2DeferredContactCreate& r)
+{
+	if (l.proxyA->proxyId < r.proxyA->proxyId)
+	{
+		return true;
+	}
+
+	if (l.proxyA->proxyId == r.proxyA->proxyId)
+	{
+		return l.proxyB->proxyId < r.proxyB->proxyId;
+	}
+
+	return false;
+}
+
+bool b2DeferredMoveProxyLessThan(const b2DeferredMoveProxy& l, const b2DeferredMoveProxy& r)
+{
+	return l.proxy->proxyId < r.proxy->proxyId;
+}
+
 b2ContactManagerPerThreadData::b2ContactManagerPerThreadData()
 : m_deferredAwakes(b2_initialDeferredAwakesCapacity)
 , m_deferredDestroys(b2_initialDeferredDestroysCapacity)
+, m_deferredCreates(b2_initialDeferredCreatesCapacity)
+, m_deferredMoveProxies(b2_initialDeferredMoveProxiesCapacity)
+, m_tempProxyIds(b2_initialTempProxyIdsCapacity)
 {
 
 }
 
 b2ContactManager::b2ContactManager()
-: m_contacts(b2_initialContactCapacity)
-, m_toiContacts(b2_initialTOIContactCapacity)
+: m_contactsNonTOI(b2_initialContactCapacity)
+, m_contactsTOI(b2_initialTOIContactCapacity)
 {
 	m_contactList = NULL;
-	m_contactCount = 0;
 	m_contactFilter = &b2_defaultFilter;
 	m_contactListener = &b2_defaultListener;
 	m_allocator = NULL;
 	m_deferAwakenings = false;
+	m_deferDestroys = false;
+	m_deferCreates = false;
 }
 
 void b2ContactManager::Destroy(b2Contact* c)
@@ -107,13 +135,13 @@ void b2ContactManager::Destroy(b2Contact* c)
 
 	if (c->m_flags & b2Contact::e_toiCandidateFlag)
 	{
-		m_toiContacts.Peek()->m_managerIndex = c->m_managerIndex;
-		m_toiContacts.RemoveAndSwap(c->m_managerIndex);
+		m_contactsTOI.Peek()->m_managerIndex = c->m_managerIndex;
+		m_contactsTOI.RemoveAndSwap(c->m_managerIndex);
 	}
 	else
 	{
-		m_contacts.Peek()->m_managerIndex = c->m_managerIndex;
-		m_contacts.RemoveAndSwap(c->m_managerIndex);
+		m_contactsNonTOI.Peek()->m_managerIndex = c->m_managerIndex;
+		m_contactsNonTOI.RemoveAndSwap(c->m_managerIndex);
 	}
 
 	// Remove from body 1
@@ -150,7 +178,6 @@ void b2ContactManager::Destroy(b2Contact* c)
 
 	// Call the factory.
 	b2Contact::Destroy(c, m_allocator);
-	--m_contactCount;
 }
 
 // This is the top level collision call for the time step. Here
@@ -231,9 +258,9 @@ void b2ContactManager::Collide(b2Contact** contacts, int32 count)
 	}
 }
 
-void b2ContactManager::FindNewContacts()
+void b2ContactManager::FindNewContacts(int32 moveBegin, int32 moveEnd)
 {
-	m_broadPhase.UpdatePairs(this);
+	m_broadPhase.UpdatePairs(moveBegin, moveEnd, this);
 }
 
 void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
@@ -297,6 +324,16 @@ void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
 		return;
 	}
 
+	// Defer creation?
+	if (m_deferCreates)
+	{
+		b2DeferredContactCreate deferredCreate;
+		deferredCreate.proxyA = proxyA;
+		deferredCreate.proxyB = proxyB;
+		m_perThreadData[b2GetThreadId()].m_deferredCreates.Push(deferredCreate);
+		return;
+	}
+
 	// Call the factory.
 	b2Contact* c = b2Contact::Create(fixtureA, indexA, fixtureB, indexB, m_allocator);
 	if (c == NULL)
@@ -304,82 +341,55 @@ void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
 		return;
 	}
 
-	// Contact creation may swap fixtures.
-	fixtureA = c->GetFixtureA();
-	fixtureB = c->GetFixtureB();
-	indexA = c->GetChildIndexA();
-	indexB = c->GetChildIndexB();
-	bodyA = fixtureA->GetBody();
-	bodyB = fixtureB->GetBody();
+	// Finish creating.
+	OnContactCreate(c);
+}
 
-	// Insert into the world.
-	c->m_prev = NULL;
-	c->m_next = m_contactList;
-	if (m_contactList != NULL)
+// This allows proxy synchronization to be somewhat parallel.
+void b2ContactManager::GenerateDeferredMoveProxies(b2Body** bodies, int32 count)
+{
+	for (int32 i = 0; i < count; ++i)
 	{
-		m_contactList->m_prev = c;
-	}
-	m_contactList = c;
+		b2Body* b = bodies[i];
 
-	// Connect to island graph.
+		b2Assert(b->GetType() != b2_staticBody);
 
-	// Connect to body A
-	c->m_nodeA.contact = c;
-	c->m_nodeA.other = bodyB;
-
-	c->m_nodeA.prev = NULL;
-	c->m_nodeA.next = bodyA->m_contactList;
-	if (bodyA->m_contactList != NULL)
-	{
-		bodyA->m_contactList->prev = &c->m_nodeA;
-	}
-	bodyA->m_contactList = &c->m_nodeA;
-
-	// Connect to body B
-	c->m_nodeB.contact = c;
-	c->m_nodeB.other = bodyA;
-
-	c->m_nodeB.prev = NULL;
-	c->m_nodeB.next = bodyB->m_contactList;
-	if (bodyB->m_contactList != NULL)
-	{
-		bodyB->m_contactList->prev = &c->m_nodeB;
-	}
-	bodyB->m_contactList = &c->m_nodeB;
-
-	// Wake up the bodies
-	if (fixtureA->IsSensor() == false && fixtureB->IsSensor() == false)
-	{
-		bodyA->SetAwake(true);
-		bodyB->SetAwake(true);
-	}
-
-	// Mark for TOI if needed.
-	if (fixtureA->IsSensor() == false && fixtureB->IsSensor() == false)
-	{
-		bool aNeedsTOI = bodyA->IsBullet() || (bodyA->GetType() != b2_dynamicBody);
-		bool bNeedsTOI = bodyB->IsBullet() || (bodyB->GetType() != b2_dynamicBody);
-
-		if (aNeedsTOI || bNeedsTOI)
+		// If a body was not in an island then it did not move.
+		if ((b->m_flags & b2Body::e_islandFlag) == 0)
 		{
-			c->m_flags |= b2Contact::e_toiCandidateFlag;
+			continue;
+		}
+
+		b2Transform xf1;
+		xf1.q.Set(b->m_sweep.a0);
+		xf1.p = b->m_sweep.c0 - b2Mul(xf1.q, b->m_sweep.localCenter);
+
+		for (b2Fixture* f = b->m_fixtureList; f; f = f->m_next)
+		{
+			for (int32 j = 0; j < f->m_proxyCount; ++j)
+			{
+				b2FixtureProxy* proxy = f->m_proxies + j;
+
+				// Compute an AABB that covers the swept shape (may miss some rotation effect).
+				b2AABB aabb1, aabb2;
+				f->m_shape->ComputeAABB(&aabb1, xf1, proxy->childIndex);
+				f->m_shape->ComputeAABB(&aabb2, b->m_xf, proxy->childIndex);
+
+				proxy->aabb.Combine(aabb1, aabb2);
+
+				// A move is required if the new AABB isn't contained by the fat AABB.
+				bool requiresMove = m_broadPhase.GetFatAABB(proxy->proxyId).Contains(proxy->aabb) == false;
+
+				if (requiresMove)
+				{
+					b2DeferredMoveProxy moveProxy;
+					moveProxy.proxy = proxy;
+					moveProxy.displacement = b->m_xf.p - xf1.p;
+					m_perThreadData[b2GetThreadId()].m_deferredMoveProxies.Push(moveProxy);
+				}
+			}
 		}
 	}
-
-	if (c->m_flags & b2Contact::e_toiCandidateFlag)
-	{
-		// Add to TOI contacts.
-		c->m_managerIndex = m_toiContacts.GetCount();
-		m_toiContacts.Push(c);
-	}
-	else
-	{
-		// Add to non-TOI contacts.
-		c->m_managerIndex = m_contacts.GetCount();
-		m_contacts.Push(c);
-	}
-
-	++m_contactCount;
 }
 
 void b2ContactManager::ConsumeDeferredAwakes()
@@ -416,8 +426,10 @@ void b2ContactManager::ConsumeDeferredDestroys()
 		}
 	}
 
-	// Sort to maintain a deterministic order of m_contacts and m_toiContacts.
-	std::sort(td0->m_deferredDestroys.Data(), td0->m_deferredDestroys.Data() + td0->m_deferredDestroys.GetCount(), b2ContactPointerLessThan);
+	// Sort to ensure determinism.
+	b2Contact** deferredDestroysBegin = td0->m_deferredDestroys.Data();
+	int32 deferredDestroyCount = td0->m_deferredDestroys.GetCount();
+	std::sort(deferredDestroysBegin, deferredDestroysBegin + deferredDestroyCount, b2ContactPointerLessThan);
 
 	m_deferDestroys = false;
 
@@ -426,5 +438,169 @@ void b2ContactManager::ConsumeDeferredDestroys()
 	{
 		b2Contact* c = td0->m_deferredDestroys.Pop();
 		Destroy(c);
+	}
+}
+
+void b2ContactManager::ConsumeDeferredCreates()
+{
+	b2Assert(m_deferCreates);
+
+	b2ContactManagerPerThreadData* td = m_perThreadData;
+
+	// Put all contacts in a single array.
+	for (int32 i = 1; i < b2_maxThreads; ++i)
+	{
+		while (m_perThreadData[i].m_deferredCreates.GetCount())
+		{
+			b2DeferredContactCreate deferredCreate = m_perThreadData[i].m_deferredCreates.Pop();
+
+			td->m_deferredCreates.Push(deferredCreate);
+		}
+	}
+
+	// Sort to ensure determinism.
+	b2DeferredContactCreate* deferredCreatesBegin = td->m_deferredCreates.Data();
+	int32 deferredCreateCount = td->m_deferredCreates.GetCount();
+	std::sort(deferredCreatesBegin, deferredCreatesBegin + deferredCreateCount, b2DeferredContactCreateLessThan);
+
+	m_deferCreates = false;
+
+	b2Pair prevPair;
+	prevPair.proxyIdA = b2BroadPhase::e_nullProxy;
+	prevPair.proxyIdB = b2BroadPhase::e_nullProxy;
+
+	// Finish contact creation.
+	while (td->m_deferredCreates.GetCount())
+	{
+		b2DeferredContactCreate deferredCreate = td->m_deferredCreates.Pop();
+
+		// Store the pair for fast lookup.
+		b2Pair proxyPair;
+		proxyPair.proxyIdA = deferredCreate.proxyA->proxyId;
+		proxyPair.proxyIdB = deferredCreate.proxyB->proxyId;
+
+		// Already created?
+		if (proxyPair.proxyIdA == prevPair.proxyIdA && proxyPair.proxyIdB == prevPair.proxyIdB)
+		{
+			continue;
+		}
+
+		prevPair = proxyPair;
+
+		b2Fixture* fixtureA = deferredCreate.proxyA->fixture;
+		b2Fixture* fixtureB = deferredCreate.proxyB->fixture;
+
+		int32 indexA = deferredCreate.proxyA->childIndex;
+		int32 indexB = deferredCreate.proxyB->childIndex;
+
+		// Call the factory.
+		b2Contact* c = b2Contact::Create(fixtureA, indexA, fixtureB, indexB, m_allocator);
+		if (c == NULL)
+		{
+			return;
+		}
+
+		// Finish creating.
+		OnContactCreate(c);
+	}
+}
+
+void b2ContactManager::OnContactCreate(b2Contact* c)
+{
+	b2Fixture* fixtureA = c->GetFixtureA();
+	b2Fixture* fixtureB = c->GetFixtureB();
+	b2Body* bodyA = fixtureA->GetBody();
+	b2Body* bodyB = fixtureB->GetBody();
+
+	// Mark for TOI if needed.
+	if (fixtureA->IsSensor() == false && fixtureB->IsSensor() == false)
+	{
+		bool aNeedsTOI = bodyA->IsBullet() || (bodyA->GetType() != b2_dynamicBody);
+		bool bNeedsTOI = bodyB->IsBullet() || (bodyB->GetType() != b2_dynamicBody);
+
+		if (aNeedsTOI || bNeedsTOI)
+		{
+			c->m_flags |= b2Contact::e_toiCandidateFlag;
+		}
+	}
+
+	if (c->m_flags & b2Contact::e_toiCandidateFlag)
+	{
+		// Add to TOI contacts.
+		c->m_managerIndex = m_contactsTOI.GetCount();
+		m_contactsTOI.Push(c);
+	}
+	else
+	{
+		// Add to non-TOI contacts.
+		c->m_managerIndex = m_contactsNonTOI.GetCount();
+		m_contactsNonTOI.Push(c);
+	}
+
+	// Insert into the world.
+	c->m_prev = NULL;
+	c->m_next = m_contactList;
+	if (m_contactList != NULL)
+	{
+		m_contactList->m_prev = c;
+	}
+	m_contactList = c;
+
+	// Connect to island graph.
+
+	// Connect to body A
+	c->m_nodeA.contact = c;
+	c->m_nodeA.other = bodyB;
+	c->m_nodeA.next = bodyA->m_contactList;
+	if (bodyA->m_contactList != NULL)
+	{
+		bodyA->m_contactList->prev = &c->m_nodeA;
+	}
+	bodyA->m_contactList = &c->m_nodeA;
+
+	// Connect to body B
+	c->m_nodeB.contact = c;
+	c->m_nodeB.other = bodyA;
+	c->m_nodeB.next = bodyB->m_contactList;
+	if (bodyB->m_contactList != NULL)
+	{
+		bodyB->m_contactList->prev = &c->m_nodeB;
+	}
+	bodyB->m_contactList = &c->m_nodeB;
+
+	// Wake up the bodies
+	if (fixtureA->IsSensor() == false && fixtureB->IsSensor() == false)
+	{
+		bodyA->SetAwake(true);
+		bodyB->SetAwake(true);
+	}
+}
+
+void b2ContactManager::ConsumeDeferredMoveProxies()
+{
+	b2ContactManagerPerThreadData* td0 = m_perThreadData + 0;
+
+	// TODO_JUSTIN put deferred move in normal broadphase move buffers?
+
+	// Put all proxies in a single array.
+	for (int32 i = 1; i < b2_maxThreads; ++i)
+	{
+		while (m_perThreadData[i].m_deferredMoveProxies.GetCount())
+		{
+			b2DeferredMoveProxy moveProxy = m_perThreadData[i].m_deferredMoveProxies.Pop();
+			td0->m_deferredMoveProxies.Push(moveProxy);
+		}
+	}
+
+	// Sort to ensure determinism.
+	b2DeferredMoveProxy* deferredMovesBegin = td0->m_deferredMoveProxies.Data();
+	int32 deferredMoveCount = td0->m_deferredMoveProxies.GetCount();
+	std::sort(deferredMovesBegin, deferredMovesBegin + deferredMoveCount, b2DeferredMoveProxyLessThan);
+
+	// Move proxies.
+	while (td0->m_deferredMoveProxies.GetCount())
+	{
+		b2DeferredMoveProxy moveProxy = td0->m_deferredMoveProxies.Pop();
+		m_broadPhase.MoveProxy(moveProxy.proxy->proxyId, moveProxy.proxy->aabb, moveProxy.displacement);
 	}
 }

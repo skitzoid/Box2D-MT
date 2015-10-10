@@ -21,7 +21,7 @@
 #include <Box2D/Common/b2Settings.h>
 #include <string.h>
 
-/// This is a growable array, similar in purpose to std::vector.
+/// This is a growable array, meant for internal use only.
 template <typename T>
 class b2GrowableArray
 {
@@ -62,10 +62,15 @@ public:
 		return m_array[m_count];
 	}
 
-	T Peek() const
+	T& Peek() const
 	{
 		b2Assert(m_count > 0);
 		return m_array[m_count - 1];
+	}
+
+	void Clear()
+	{
+		m_count = 0;
 	}
 
 	int32 GetCount() const

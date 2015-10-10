@@ -26,6 +26,20 @@ class b2Contact;
 class b2ContactFilter;
 class b2ContactListener;
 class b2BlockAllocator;
+class b2Body;
+struct b2FixtureProxy;
+
+struct b2DeferredContactCreate
+{
+	b2FixtureProxy* proxyA;
+	b2FixtureProxy* proxyB;
+};
+
+struct b2DeferredMoveProxy
+{
+	b2FixtureProxy* proxy;
+	b2Vec2 displacement;
+};
 
 struct b2ContactManagerPerThreadData
 {
@@ -33,6 +47,9 @@ struct b2ContactManagerPerThreadData
 
 	b2GrowableArray<b2Contact*> m_deferredAwakes;
 	b2GrowableArray<b2Contact*> m_deferredDestroys;
+	b2GrowableArray<b2DeferredContactCreate> m_deferredCreates;
+	b2GrowableArray<b2DeferredMoveProxy> m_deferredMoveProxies;
+	b2GrowableArray<int32> m_tempProxyIds;
 
 	char m_padding[b2_cacheLineSize];
 };
@@ -46,36 +63,42 @@ public:
 	// Broad-phase callback.
 	void AddPair(void* proxyUserDataA, void* proxyUserDataB);
 
-	void FindNewContacts();
-
-	void Destroy(b2Contact* c);
+	void FindNewContacts(int32 moveBegin, int32 moveEnd);
 
 	void Collide(b2Contact** contacts, int32 count);
 
+	void Destroy(b2Contact* c);
+
+	void GenerateDeferredMoveProxies(b2Body** bodies, int32 count);
+
 	void ConsumeDeferredAwakes();
 	void ConsumeDeferredDestroys();
+	void ConsumeDeferredCreates();
+	void ConsumeDeferredMoveProxies();
+
+	void OnContactCreate(b2Contact* c);
 
 	int32 GetContactCount() const;
             
 	b2BroadPhase m_broadPhase;
 	b2Contact* m_contactList;
-	int32 m_contactCount;
 	b2ContactFilter* m_contactFilter;
 	b2ContactListener* m_contactListener;
 	b2BlockAllocator* m_allocator;
 
-	b2GrowableArray<b2Contact*> m_contacts;
-	b2GrowableArray<b2Contact*> m_toiContacts;
+	b2GrowableArray<b2Contact*> m_contactsNonTOI;
+	b2GrowableArray<b2Contact*> m_contactsTOI;
 
 	b2ContactManagerPerThreadData m_perThreadData[b2_maxThreads];
 
 	bool m_deferAwakenings;
 	bool m_deferDestroys;
+	bool m_deferCreates;
 };
 
 inline int32 b2ContactManager::GetContactCount() const
 {
-	return m_contacts.GetCount() + m_toiContacts.GetCount();
+	return m_contactsNonTOI.GetCount() + m_contactsTOI.GetCount();
 }
 
 #endif

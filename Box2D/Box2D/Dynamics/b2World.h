@@ -22,6 +22,7 @@
 #include <Box2D/Common/b2Math.h>
 #include <Box2D/Common/b2BlockAllocator.h>
 #include <Box2D/Common/b2StackAllocator.h>
+#include <Box2D/Common/b2GrowableArray.h>
 #include <Box2D/Dynamics/b2ContactManager.h>
 #include <Box2D/Dynamics/b2WorldCallbacks.h>
 #include <Box2D/Dynamics/b2TimeStep.h>
@@ -232,6 +233,8 @@ private:
 	void Solve(const b2TimeStep& step);
 	void SolveTOI(const b2TimeStep& step);
 
+	void SynchronizeFixturesMT();
+	void FindNewContactsMT();
 	void CollideMT();
 	void SolveMT(const b2TimeStep& step);
 
@@ -250,6 +253,8 @@ private:
 
 	int32 m_bodyCount;
 	int32 m_jointCount;
+
+	b2GrowableArray<b2Body*> m_nonStaticBodies;
 
 	b2Vec2 m_gravity;
 	bool m_allowSleep;
@@ -317,7 +322,7 @@ inline int32 b2World::GetJointCount() const
 
 inline int32 b2World::GetContactCount() const
 {
-	return m_contactManager.m_contactCount;
+	return m_contactManager.GetContactCount();
 }
 
 inline void b2World::SetGravity(const b2Vec2& gravity)

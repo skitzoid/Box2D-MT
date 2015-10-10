@@ -103,6 +103,10 @@ b2Body::b2Body(const b2BodyDef* bd, b2World* world)
 
 	m_fixtureList = NULL;
 	m_fixtureCount = 0;
+
+	memset(m_islandIndex, 0, sizeof(m_islandIndex));
+
+	m_worldIndex = -1;
 }
 
 b2Body::~b2Body()
@@ -123,6 +127,13 @@ void b2Body::SetType(b2BodyType type)
 		return;
 	}
 
+	if (m_type == b2_staticBody)
+	{
+		// Add to non static bodies.
+		m_worldIndex = m_world->m_nonStaticBodies.GetCount();
+		m_world->m_nonStaticBodies.Push(this);
+	}
+
 	m_type = type;
 
 	ResetMassData();
@@ -134,6 +145,13 @@ void b2Body::SetType(b2BodyType type)
 		m_sweep.a0 = m_sweep.a;
 		m_sweep.c0 = m_sweep.c;
 		SynchronizeFixtures();
+
+		// Remove from non static bodies.
+		m_world->m_nonStaticBodies.RemoveAndSwap(m_worldIndex);
+		if (m_world->m_nonStaticBodies.GetCount() > 0)
+		{
+			m_world->m_nonStaticBodies.At(m_worldIndex)->m_worldIndex = m_worldIndex;
+		}
 	}
 
 	SetAwake(true);

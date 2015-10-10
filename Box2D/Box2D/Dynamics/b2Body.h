@@ -469,6 +469,8 @@ private:
 
 	float32 m_sleepTime;
 
+	int32 m_worldIndex;
+
 	void* m_userData;
 };
 
