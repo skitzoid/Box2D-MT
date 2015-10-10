@@ -256,6 +256,7 @@ private:
 	int32 m_jointCount;
 
 	b2GrowableArray<b2Body*> m_nonStaticBodies;
+	b2GrowableArray<b2Body*> m_staticBodies;
 
 	b2Vec2 m_gravity;
 	bool m_allowSleep;

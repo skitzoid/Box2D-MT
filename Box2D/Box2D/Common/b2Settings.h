@@ -135,7 +135,7 @@ typedef double float64;
 #define b2_maxThreadPoolThreads		7
 
 /// The maximum number of threads.
-#define b2_maxThreads				b2_maxThreadPoolThreads + 1
+#define b2_maxThreads				(b2_maxThreadPoolThreads + 1)
 
 /// Set the calling thread's ID.
 void b2SetThreadId(int32 threadId);

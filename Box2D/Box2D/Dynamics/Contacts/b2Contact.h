@@ -150,6 +150,7 @@ protected:
 	friend class b2ContactSolver;
 	friend class b2Body;
 	friend class b2Fixture;
+	friend class b2ClearContactIslandFlagsTask;
 
 	// Flags stored in m_flags
 	enum

@@ -38,18 +38,6 @@ bool b2TaskLessThan(const b2Task* l, const b2Task* r)
 b2ThreadPool::b2ThreadPool(int32 threadCount)
 : m_pendingTasks(b2_initialPendingTaskCapacity)
 {
-	m_threadCount = 0;
-
-	Restart(threadCount);
-}
-
-b2ThreadPool::~b2ThreadPool()
-{
-	Destroy();
-}
-
-void b2ThreadPool::Restart(int32 threadCount)
-{
 	b2Assert(threadCount <= b2_maxThreadPoolThreads);
 	b2Assert(threadCount >= -1);
 
@@ -64,12 +52,6 @@ void b2ThreadPool::Restart(int32 threadCount)
 
 	// Account for invalid input or hardware_concurrency not being well defined.
 	threadCount = b2Max(threadCount, 0);
-
-	// Terminate currently running threads.
-	if (m_threadCount > 0)
-	{
-		Destroy();
-	}
 
 	// Mark the pool as running.
 	m_signalShutdown = false;
@@ -86,6 +68,11 @@ void b2ThreadPool::Restart(int32 threadCount)
 			new(&m_threads[i]) thread(&b2ThreadPool::WorkerMain, this, 1 + i);
 		}
 	}
+}
+
+b2ThreadPool::~b2ThreadPool()
+{
+	Destroy();
 }
 
 int32 b2ThreadPool::GetThreadCount() const

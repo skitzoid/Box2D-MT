@@ -121,8 +121,37 @@ private:
 	}
 };
 
+class b2ClearContactIslandFlagsTask : public b2RangedTask
+{
+public:
+	b2Contact** m_contacts;
+private:
+	virtual void Execute(b2StackAllocator&) /* override */
+	{
+		for (int32 i = m_beginIndex; i < m_endIndex; ++i)
+		{
+			m_contacts[i]->m_flags &= ~b2Contact::e_islandFlag;
+		}
+	}
+};
+
+class b2ClearBodyIslandFlagsTask : public b2RangedTask
+{
+public:
+	b2Body** m_bodies;
+private:
+	virtual void Execute(b2StackAllocator&) /* override */
+	{
+		for (int32 i = m_beginIndex; i < m_endIndex; ++i)
+		{
+			m_bodies[i]->m_flags &= ~b2Body::e_islandFlag;
+		}
+	}
+};
+
 b2World::b2World(const b2Vec2& gravity, b2ThreadPool* threadPool)
 : m_nonStaticBodies(b2_initialNonStaticBodiesCapacity)
+, m_staticBodies(b2_initialStaticBodiesCapacity)
 {
 	m_destructionListener = NULL;
 	g_debugDraw = NULL;
@@ -224,6 +253,11 @@ b2Body* b2World::CreateBody(const b2BodyDef* def)
 		b->m_worldIndex = m_nonStaticBodies.GetCount();
 		m_nonStaticBodies.Push(b);
 	}
+	else
+	{
+		b->m_worldIndex = m_staticBodies.GetCount();
+		m_staticBodies.Push(b);
+	}
 
 	return b;
 }
@@ -310,6 +344,11 @@ void b2World::DestroyBody(b2Body* b)
 	{
 		m_nonStaticBodies.Peek()->m_worldIndex = index;
 		m_nonStaticBodies.RemoveAndSwap(index);
+	}
+	else
+	{
+		m_staticBodies.Peek()->m_worldIndex = index;
+		m_staticBodies.RemoveAndSwap(index);
 	}
 
 	--m_bodyCount;
@@ -1013,20 +1052,17 @@ void b2World::SynchronizeFixturesMT()
 {
 	b2TaskGroup group(*m_threadPool);
 
-	// TODO_JUSTIN: settings
-	static const int32 b2_SynchronizeFixturesMaxTasks = 4 * b2_maxThreads;
-
-	b2BroadphaseGenerateDefferedMovesTask moveTasks[b2_SynchronizeFixturesMaxTasks];
+	b2BroadphaseGenerateDefferedMovesTask moveTasks[b2_maxThreads];
 
 	// Initialize tasks.
-	for (int32 i = 0; i < b2_SynchronizeFixturesMaxTasks; ++i)
+	for (int32 i = 0; i < m_threadCount; ++i)
 	{
 		moveTasks[i].m_manager = &m_contactManager;
 		moveTasks[i].m_bodies = m_nonStaticBodies.Data();
 	}
 
 	// Submit tasks.
-	group.SubmitRangedTasks(moveTasks, m_threadPool->GetThreadCount(), m_nonStaticBodies.GetCount(), m_stackAllocator);
+	group.SubmitRangedTasks(moveTasks, m_threadCount, m_nonStaticBodies.GetCount(), m_stackAllocator);
 
 	// Wait for tasks to finish.
 	group.Wait(m_stackAllocator);
@@ -1041,13 +1077,10 @@ void b2World::FindNewContactsMT()
 
 	b2TaskGroup group(*m_threadPool);
 
-	// TODO_JUSTIN: settings
-	static const int32 b2_findNewContactsMaxTasks = b2_maxThreads;
-
-	b2BroadphaseFindNewContactsTask tasks[b2_findNewContactsMaxTasks];
+	b2BroadphaseFindNewContactsTask tasks[b2_maxThreads];
 
 	// Initialize tasks.
-	for (int32 i = 0; i < b2_findNewContactsMaxTasks; ++i)
+	for (int32 i = 0; i < m_threadCount; ++i)
 	{
 		tasks[i].m_manager = &m_contactManager;
 	}
@@ -1077,14 +1110,11 @@ void b2World::CollideMT()
 
 	b2TaskGroup group(*m_threadPool);
 
-	// TODO_JUSTIN: settings
-	const int32 b2_CollideMaxTasks = b2_maxThreads;
-
-	b2CollideTask contactsTasks[b2_CollideMaxTasks];
-	b2CollideTask toiContactsTasks[b2_CollideMaxTasks];
+	b2CollideTask contactsTasks[b2_maxThreads];
+	b2CollideTask toiContactsTasks[b2_maxThreads];
 
 	// Initialize tasks.
-	for (int32 i = 0; i < b2_CollideMaxTasks; ++i)
+	for (int32 i = 0; i < m_threadCount; ++i)
 	{
 		contactsTasks[i].m_manager = &m_contactManager;
 		contactsTasks[i].m_contacts = m_contactManager.m_contactsNonTOI.Data();
@@ -1137,18 +1167,7 @@ void b2World::SolveMT(const b2TimeStep& step)
 	int32 jointCount = 0;
 
 	// Clear all the island flags.
-	for (b2Body* b = m_bodyList; b; b = b->m_next)
-	{
-		b->m_flags &= ~b2Body::e_islandFlag;
-	}
-	for (b2Contact* c = m_contactManager.m_contactList; c; c = c->m_next)
-	{
-		c->m_flags &= ~b2Contact::e_islandFlag;
-	}
-	for (b2Joint* j = m_jointList; j; j = j->m_next)
-	{
-		j->m_islandFlag = false;
-	}
+	ClearIslandFlagsMT();
 
 	// Build and simulate all awake islands.
 	int32 stackSize = m_bodyCount;
@@ -1367,6 +1386,52 @@ void b2World::SolveMT(const b2TimeStep& step)
 		m_profile.broadphase += broadPhaseTime;
 		m_profile.solve -= broadPhaseTime;
 	}
+}
+
+void b2World::ClearIslandFlagsMT()
+{
+	b2TaskGroup group(*m_threadPool);
+
+	// TODO_JUSTIN: settings
+	static const int32 b2_clearIslandFlagsMaxTasks = b2_maxThreads;
+
+	b2ClearContactIslandFlagsTask contactsTasks[b2_clearIslandFlagsMaxTasks];
+	b2ClearContactIslandFlagsTask toiContactsTasks[b2_clearIslandFlagsMaxTasks];
+
+	b2ClearBodyIslandFlagsTask bodyTasks[b2_clearIslandFlagsMaxTasks];
+	b2ClearBodyIslandFlagsTask staticBodyTasks[b2_clearIslandFlagsMaxTasks];
+
+	// Initialize tasks.
+	for (int32 i = 0; i < b2_clearIslandFlagsMaxTasks; ++i)
+	{
+		contactsTasks[i].m_contacts = m_contactManager.m_contactsNonTOI.Data();
+
+		toiContactsTasks[i].m_contacts = m_contactManager.m_contactsTOI.Data();
+
+		bodyTasks[i].m_bodies = m_nonStaticBodies.Data();
+
+		staticBodyTasks[i].m_bodies = m_staticBodies.Data();
+	}
+
+	// Submit tasks for non-TOI contacts.
+	group.SubmitRangedTasks(contactsTasks, m_threadCount, m_contactManager.m_contactsNonTOI.GetCount(), m_stackAllocator);
+
+	// Submit tasks for TOI contacts.
+	group.SubmitRangedTasks(toiContactsTasks, m_threadCount, m_contactManager.m_contactsTOI.GetCount(), m_stackAllocator);
+
+	// Submit tasks for non-static bodies.
+	group.SubmitRangedTasks(bodyTasks, m_threadCount, m_nonStaticBodies.GetCount(), m_stackAllocator);
+
+	// Submit tasks for static bodies.
+	group.SubmitRangedTasks(staticBodyTasks, m_threadCount, m_staticBodies.GetCount(), m_stackAllocator);
+
+	for (b2Joint* j = m_jointList; j; j = j->m_next)
+	{
+		j->m_islandFlag = false;
+	}
+
+	// Wait for tasks to finish.
+	group.Wait(m_stackAllocator);
 }
 
 void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIterations)

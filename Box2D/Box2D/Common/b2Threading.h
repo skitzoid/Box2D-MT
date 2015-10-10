@@ -117,10 +117,6 @@ public:
 
 	~b2ThreadPool();
 
-	/// Terminate any currently running threads and start the specified number of threads.
-	/// @param threadCount the number of threads to use. If -1, defaults to the number of logical cores.
-	void Restart(int32 threadCount);
-
 	/// Get the number of threads in the pool.
 	int32 GetThreadCount() const;
 
@@ -182,6 +178,8 @@ inline b2RangedTask::b2RangedTask()
 template <typename RangedTaskType>
 void b2TaskGroup::SubmitRangedTasks(RangedTaskType* tasks, int32 taskCount, int32 elementCount, b2StackAllocator& allocator)
 {
+	b2Assert(taskCount > 0);
+
 	if (elementCount == 0)
 	{
 		return;

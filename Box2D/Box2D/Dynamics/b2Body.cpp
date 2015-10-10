@@ -129,6 +129,10 @@ void b2Body::SetType(b2BodyType type)
 
 	if (m_type == b2_staticBody)
 	{
+		// Remove from static bodies.
+		m_world->m_staticBodies.Peek()->m_worldIndex = m_worldIndex;
+		m_world->m_staticBodies.RemoveAndSwap(m_worldIndex);
+
 		// Add to non static bodies.
 		m_worldIndex = m_world->m_nonStaticBodies.GetCount();
 		m_world->m_nonStaticBodies.Push(this);
@@ -149,6 +153,10 @@ void b2Body::SetType(b2BodyType type)
 		// Remove from non static bodies.
 		m_world->m_nonStaticBodies.Peek()->m_worldIndex = m_worldIndex;
 		m_world->m_nonStaticBodies.RemoveAndSwap(m_worldIndex);
+
+		// Add to static bodies.
+		m_worldIndex = m_world->m_staticBodies.GetCount();
+		m_world->m_staticBodies.Push(this);
 	}
 
 	SetAwake(true);
