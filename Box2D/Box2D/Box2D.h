@@ -1,5 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
+* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -34,6 +35,7 @@ For discussion please visit http://box2d.org/forum
 #include <Box2D/Common/b2Settings.h>
 #include <Box2D/Common/b2Draw.h>
 #include <Box2D/Common/b2Timer.h>
+#include <Box2D/Common/b2Threading.h>
 
 #include <Box2D/Collision/Shapes/b2CircleShape.h>
 #include <Box2D/Collision/Shapes/b2EdgeShape.h>

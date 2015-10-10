@@ -19,7 +19,6 @@
 #ifndef B2_THREADING_H
 #define B2_THREADING_H
 
-
 #include <Box2D/Common/b2Settings.h>
 #include <Box2D/Common/b2GrowableArray.h>
 #include <thread>
@@ -38,11 +37,11 @@ public:
 	/// Construct a task.
 	b2Task();
 
-	// Set the estimated cost of executing the task.
-	// Higher cost tasks can start execution before lower cost tasks.
+	/// Set the estimated cost of executing the task.
+	/// Higher cost tasks can start execution before lower cost tasks.
 	void SetCost(int32 costEstimate);
 
-	// Get the estimated cost of executing the task.
+	/// Get the estimated cost of executing the task.
 	int32 GetCost() const;
 
 	/// Get the task group that submitted the task to the thread pool.
@@ -67,7 +66,7 @@ private:
 class b2RangedTask : public b2Task
 {
 public:
-	// Construct a ranged task.
+	/// Construct a ranged task.
 	b2RangedTask();
 
 protected:

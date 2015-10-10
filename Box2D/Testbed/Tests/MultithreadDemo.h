@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2011 Erin Catto http://www.box2d.org
+* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -31,58 +31,56 @@ public:
 	{
 		m_count = 0;
 
-		m_freezeBody = NULL;
-
 		// Ground
 		{
-			b2BodyDef bd;
-			b2Body* body = m_world->CreateBody(&bd);
-
-			body->SetPreferNoCCD(true);
+			// This world has been designed with large overlapping static bodies so tunneling is not an issue.
+			// We can disable automatic TOI checks between the static ground body and the other dynamic bodies.
+			// This provides a decent little speedup.
+			m_groundBody->SetPreferNoCCD(true);
 
 			b2PolygonShape shape;
 
 			shape.SetAsBox(25.0f, 2.5f, b2Vec2(0.0f, -2.5f), 0.0f);
-			body->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&shape, 0.0f);
 
 			shape.SetAsBox(2.5f, 47.5f, b2Vec2(-22.5f, 42.5f), 0.0f);
-			body->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&shape, 0.0f);
 
 			shape.SetAsBox(2.5f, 47.5f, b2Vec2(22.5f, 42.5f), 0.0f);
-			body->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&shape, 0.0f);
 
 			shape.SetAsBox(2.5f, 2.0f, b2Vec2(-7.5f, 5.0f), 0.0f);
-			body->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&shape, 0.0f);
 
 			shape.SetAsBox(2.5f, 2.0f, b2Vec2(7.5f, 5.0f), 0.0f);
-			body->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&shape, 0.0f);
 
 			shape.SetAsBox(5.0f, 2.0f, b2Vec2(0.0f, 12.0f), 0.0f);
-			body->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&shape, 0.0f);
 
 			shape.SetAsBox(3.5f, 2.0f, b2Vec2(-7.5f, 45.0f), 0.0f);
-			body->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&shape, 0.0f);
 
 			shape.SetAsBox(3.5f, 2.0f, b2Vec2(7.5f, 45.0f), 0.0f);
-			body->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&shape, 0.0f);
 
 			shape.SetAsBox(2.5f, 2.0f, b2Vec2(-6.5f, 63.0f), 0.0f);
-			body->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&shape, 0.0f);
 
 			shape.SetAsBox(2.5f, 2.0f, b2Vec2(6.5f, 63.0f), 0.0f);
-			body->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&shape, 0.0f);
 
 			shape.SetAsBox(5.0f, 2.0f, b2Vec2(0.0f, 72.0f), 0.0f);
-			body->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&shape, 0.0f);
 
 			shape.SetAsBox(25.0f, 2.5f, b2Vec2(0.0f, 87.5f), 0.0f);
-			body->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&shape, 0.0f);
 
 			shape.SetAsBox(4.0f, 2.5f, b2Vec2(-20.0f, 85.0f), b2_pi / 4);
-			body->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&shape, 0.0f);
 
 			shape.SetAsBox(4.0f, 2.5f, b2Vec2(20.0f, 85.0f), -b2_pi / 4);
-			body->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&shape, 0.0f);
 		}
 
 		CreateUppers();
@@ -215,8 +213,6 @@ public:
 	b2PrismaticJoint* m_slider;
 
 	int32 m_count;
-
-	b2Body* m_freezeBody;
 };
 
 #endif

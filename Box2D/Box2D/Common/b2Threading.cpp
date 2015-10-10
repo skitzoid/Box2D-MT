@@ -25,8 +25,6 @@ using std::thread;
 using std::unique_lock;
 using std::mutex;
 
-static_assert(b2_maxThreads > 1, "b2_maxThreads must be at least 2 for b2ThreadPool to work.");
-
 const int32 b2_initialPendingTaskCapacity = 256;
 
 // Compare the cost of two tasks.

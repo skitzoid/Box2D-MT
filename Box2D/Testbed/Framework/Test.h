@@ -1,5 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
+* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -20,7 +21,6 @@
 #define TEST_H
 
 #include <Box2D/Box2D.h>
-#include <Box2D/Common/b2Threading.h>
 #include "DebugDraw.h"
 
 #if defined(__APPLE__)
