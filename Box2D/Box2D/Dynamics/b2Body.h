@@ -305,6 +305,15 @@ public:
 	/// Get the type of this body.
 	b2BodyType GetType() const;
 
+	/// Should this body only use continuous collision detection when colliding 
+	/// with bullet bodies? This only affects static bodies. Other bodies always
+	/// behave as if this were true.
+	void SetPreferNoCCD(bool flag);
+
+	/// Does this body only use continuous collision detection when colliding 
+	/// with bullet bodies?
+	bool GetPreferNoCCD() const;
+
 	/// Should this body be treated like a bullet for continuous collision detection?
 	void SetBullet(bool flag);
 
@@ -418,7 +427,7 @@ private:
 		e_bulletFlag		= 0x0008,
 		e_fixedRotationFlag	= 0x0010,
 		e_activeFlag		= 0x0020,
-		e_toiFlag			= 0x0040
+		e_preferNoCCDFlag	= 0x0040
 	};
 
 	b2Body(const b2BodyDef* bd, b2World* world);
@@ -619,6 +628,23 @@ inline float32 b2Body::GetGravityScale() const
 inline void b2Body::SetGravityScale(float32 scale)
 {
 	m_gravityScale = scale;
+}
+
+inline void b2Body::SetPreferNoCCD(bool flag)
+{
+	if (flag)
+	{
+		m_flags |= e_preferNoCCDFlag;
+	}
+	else
+	{
+		m_flags &= ~e_preferNoCCDFlag;
+	}
+}
+
+inline bool b2Body::GetPreferNoCCD() const
+{
+	return (m_flags & e_preferNoCCDFlag) == e_preferNoCCDFlag;
 }
 
 inline void b2Body::SetBullet(bool flag)

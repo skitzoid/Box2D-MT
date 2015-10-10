@@ -515,8 +515,8 @@ void b2ContactManager::OnContactCreate(b2Contact* c)
 	// Mark for TOI if needed.
 	if (fixtureA->IsSensor() == false && fixtureB->IsSensor() == false)
 	{
-		bool aNeedsTOI = bodyA->IsBullet() || (bodyA->GetType() != b2_dynamicBody);
-		bool bNeedsTOI = bodyB->IsBullet() || (bodyB->GetType() != b2_dynamicBody);
+		bool aNeedsTOI = bodyA->IsBullet() || (bodyA->GetType() != b2_dynamicBody && !bodyA->GetPreferNoCCD());
+		bool bNeedsTOI = bodyB->IsBullet() || (bodyB->GetType() != b2_dynamicBody && !bodyB->GetPreferNoCCD());
 
 		if (aNeedsTOI || bNeedsTOI)
 		{

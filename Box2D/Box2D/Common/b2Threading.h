@@ -21,7 +21,7 @@
 
 
 #include <Box2D/Common/b2Settings.h>
-#include <Box2D/Common/b2GrowableStack.h>
+#include <Box2D/Common/b2GrowableArray.h>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -38,6 +38,13 @@ public:
 	/// Construct a task.
 	b2Task();
 
+	// Set the estimated cost of executing the task.
+	// Higher cost tasks can start execution before lower cost tasks.
+	void SetCost(int32 costEstimate);
+
+	// Get the estimated cost of executing the task.
+	int32 GetCost() const;
+
 	/// Get the task group that submitted the task to the thread pool.
 	/// NULL if the task hasn't been submitted.
 	b2TaskGroup* GetTaskGroup() const;
@@ -48,6 +55,9 @@ public:
 
 private:
 	friend class b2TaskGroup;
+
+	// How long will this task take to execute?
+	int32 m_costEstimate;
 
 	/// The task group that submitted the task to the thread pool.
 	b2TaskGroup* m_taskGroup;
@@ -135,7 +145,7 @@ private:
 	std::condition_variable m_taskAddedCond;
 	std::mutex m_taskGroupMut;
 	std::condition_variable m_taskGroupFinishedCond;
-	b2GrowableStack<b2Task*, 256> m_pendingTasks;
+	b2GrowableArray<b2Task*> m_pendingTasks;
 
 	std::thread* m_threads;
 	int32 m_threadCount;
@@ -146,6 +156,16 @@ private:
 inline b2Task::b2Task()
 {
 	m_taskGroup = NULL;
+}
+
+inline void b2Task::SetCost(int32 costEstimate)
+{
+	m_costEstimate = costEstimate;
+}
+
+inline int32 b2Task::GetCost() const
+{
+	return m_costEstimate;
 }
 
 inline b2TaskGroup* b2Task::GetTaskGroup() const

@@ -27,7 +27,16 @@ using std::mutex;
 
 static_assert(b2_maxThreads > 1, "b2_maxThreads must be at least 2 for b2ThreadPool to work.");
 
+const int32 b2_initialPendingTaskCapacity = 256;
+
+// Compare the cost of two tasks.
+bool b2TaskLessThan(const b2Task* l, const b2Task* r)
+{
+	return l->GetCost() < r->GetCost();
+}
+
 b2ThreadPool::b2ThreadPool(int32 threadCount)
+: m_pendingTasks(b2_initialPendingTaskCapacity)
 {
 	m_threadCount = 0;
 
@@ -91,6 +100,7 @@ void b2ThreadPool::AddTasks(b2Task** tasks, int32 count)
 		for (int32 i = 0; i < count; ++i)
 		{
 			m_pendingTasks.Push(tasks[i]);
+			std::push_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskLessThan);
 		}
 	}
 
@@ -102,6 +112,7 @@ void b2ThreadPool::AddTask(b2Task* task)
 	{
 		unique_lock<mutex> lk(m_taskMut);
 		m_pendingTasks.Push(task);
+		std::push_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskLessThan);
 	}
 
 	m_taskAddedCond.notify_one();
@@ -128,6 +139,7 @@ void b2ThreadPool::Wait(const b2TaskGroup& taskGroup, b2StackAllocator& allocato
 			// Consume a task.
 			if (m_pendingTasks.GetCount() > 0)
 			{
+				std::pop_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskLessThan);
 				task = m_pendingTasks.Pop();
 			}
 		}
@@ -201,6 +213,7 @@ void b2ThreadPool::WorkerMain(int32 threadId)
 			}
 
 			// Consume a task.
+			std::pop_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskLessThan);
 			task = m_pendingTasks.Pop();
 		}
 

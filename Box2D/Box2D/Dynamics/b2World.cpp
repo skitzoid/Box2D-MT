@@ -36,6 +36,7 @@
 #include <new>
 
 const int32 b2_initialNonStaticBodiesCapacity = 1024;
+const int32 b2_initialStaticBodiesCapacity = 16;
 
 class b2SolveTask : public b2Task
 {
@@ -53,6 +54,8 @@ public:
 		m_gravity = gravity;
 		m_allowSleep = allowSleep;
 		m_next = next;
+		// TODO_JUSTIN: settings
+		SetCost(bodyCount + 10 * contactCount + 10 * jointCount);
 	}
 
 	b2SolveTask* GetNext() { return m_next; }
@@ -754,8 +757,8 @@ void b2World::SolveTOI(const b2TimeStep& step)
 					continue;
 				}
 
-				bool collideA = bA->IsBullet() || typeA != b2_dynamicBody;
-				bool collideB = bB->IsBullet() || typeB != b2_dynamicBody;
+				bool collideA = bA->IsBullet() || (typeA != b2_dynamicBody && !bA->GetPreferNoCCD());
+				bool collideB = bB->IsBullet() || (typeB != b2_dynamicBody && !bB->GetPreferNoCCD());
 
 				// Are these two non-bullet dynamic bodies?
 				if (collideA == false && collideB == false)

@@ -147,11 +147,8 @@ void b2Body::SetType(b2BodyType type)
 		SynchronizeFixtures();
 
 		// Remove from non static bodies.
+		m_world->m_nonStaticBodies.Peek()->m_worldIndex = m_worldIndex;
 		m_world->m_nonStaticBodies.RemoveAndSwap(m_worldIndex);
-		if (m_world->m_nonStaticBodies.GetCount() > 0)
-		{
-			m_world->m_nonStaticBodies.At(m_worldIndex)->m_worldIndex = m_worldIndex;
-		}
 	}
 
 	SetAwake(true);

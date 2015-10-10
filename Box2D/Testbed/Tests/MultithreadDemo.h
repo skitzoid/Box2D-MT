@@ -38,6 +38,8 @@ public:
 			b2BodyDef bd;
 			b2Body* body = m_world->CreateBody(&bd);
 
+			body->SetPreferNoCCD(true);
+
 			b2PolygonShape shape;
 
 			shape.SetAsBox(25.0f, 2.5f, b2Vec2(0.0f, -2.5f), 0.0f);
