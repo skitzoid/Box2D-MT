@@ -380,6 +380,12 @@ public:
 	b2World* GetWorld();
 	const b2World* GetWorld() const;
 
+	/// Get the island index for the current thread.
+	int32 GetIslandIndex() const;
+
+	/// Set the island index for the current thread.
+	void SetIslandIndex(int32 islandIndex);
+
 	/// Dump this body to a log file
 	void Dump();
 
@@ -431,7 +437,7 @@ private:
 
 	uint16 m_flags;
 
-	int32 m_islandIndex;
+	int32 m_islandIndex[b2_maxThreads];
 
 	b2Transform m_xf;		// the body origin transform
 	b2Sweep m_sweep;		// the swept motion for CCD
@@ -855,6 +861,18 @@ inline b2World* b2Body::GetWorld()
 inline const b2World* b2Body::GetWorld() const
 {
 	return m_world;
+}
+
+inline int32 b2Body::GetIslandIndex() const
+{
+	int32 threadId = b2GetThreadId();
+	return m_islandIndex[threadId];
+}
+
+inline void b2Body::SetIslandIndex(int32 islandIndex)
+{
+	int32 threadId = b2GetThreadId();
+	m_islandIndex[threadId] = islandIndex;
 }
 
 #endif

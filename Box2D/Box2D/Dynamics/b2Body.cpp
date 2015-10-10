@@ -520,7 +520,7 @@ void b2Body::SetFixedRotation(bool flag)
 
 void b2Body::Dump()
 {
-	int32 bodyIndex = m_islandIndex;
+	int32 bodyIndex = GetIslandIndex();
 
 	b2Log("{\n");
 	b2Log("  b2BodyDef bd;\n");

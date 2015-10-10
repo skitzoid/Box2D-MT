@@ -60,8 +60,8 @@ b2MotorJoint::b2MotorJoint(const b2MotorJointDef* def)
 
 void b2MotorJoint::InitVelocityConstraints(const b2SolverData& data)
 {
-	m_indexA = m_bodyA->m_islandIndex;
-	m_indexB = m_bodyB->m_islandIndex;
+	m_indexA = m_bodyA->GetIslandIndex();
+	m_indexB = m_bodyB->GetIslandIndex();
 	m_localCenterA = m_bodyA->m_sweep.localCenter;
 	m_localCenterB = m_bodyB->m_sweep.localCenter;
 	m_invMassA = m_bodyA->m_invMass;
@@ -288,8 +288,8 @@ float32 b2MotorJoint::GetAngularOffset() const
 
 void b2MotorJoint::Dump()
 {
-	int32 indexA = m_bodyA->m_islandIndex;
-	int32 indexB = m_bodyB->m_islandIndex;
+	int32 indexA = m_bodyA->GetIslandIndex();
+	int32 indexB = m_bodyB->GetIslandIndex();
 
 	b2Log("  b2MotorJointDef jd;\n");
 	b2Log("  jd.bodyA = bodies[%d];\n", indexA);

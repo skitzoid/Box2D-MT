@@ -76,8 +76,8 @@ b2ContactSolver::b2ContactSolver(b2ContactSolverDef* def)
 		vc->friction = contact->m_friction;
 		vc->restitution = contact->m_restitution;
 		vc->tangentSpeed = contact->m_tangentSpeed;
-		vc->indexA = bodyA->m_islandIndex;
-		vc->indexB = bodyB->m_islandIndex;
+		vc->indexA = bodyA->GetIslandIndex();
+		vc->indexB = bodyB->GetIslandIndex();
 		vc->invMassA = bodyA->m_invMass;
 		vc->invMassB = bodyB->m_invMass;
 		vc->invIA = bodyA->m_invI;
@@ -88,8 +88,8 @@ b2ContactSolver::b2ContactSolver(b2ContactSolverDef* def)
 		vc->normalMass.SetZero();
 
 		b2ContactPositionConstraint* pc = m_positionConstraints + i;
-		pc->indexA = bodyA->m_islandIndex;
-		pc->indexB = bodyB->m_islandIndex;
+		pc->indexA = bodyA->GetIslandIndex();
+		pc->indexB = bodyB->GetIslandIndex();
 		pc->invMassA = bodyA->m_invMass;
 		pc->invMassB = bodyB->m_invMass;
 		pc->localCenterA = bodyA->m_sweep.localCenter;

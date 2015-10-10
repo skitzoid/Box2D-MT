@@ -233,6 +233,7 @@ private:
 	void SolveTOI(const b2TimeStep& step);
 
 	void CollideMT();
+	void SolveMT(const b2TimeStep& step);
 
 	void DrawJoint(b2Joint* joint);
 	void DrawShape(b2Fixture* shape, const b2Transform& xf, const b2Color& color);
