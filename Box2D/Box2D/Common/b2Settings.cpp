@@ -21,7 +21,26 @@
 #include <stdarg.h>
 #include <stdlib.h>
 
-b2Version b2_version = {2, 3, 2};
+/// TODO_JUSTIN: Check version numbers and more platforms.
+#if defined(_MSC_VER)
+#define b2ThreadLocal __declspec(thread)
+#else
+#define b2ThreadLocal __thread
+#endif
+
+b2Version b2_version = { 2, 3, 2 };
+
+b2ThreadLocal int32 b2_threadId = 0;
+
+void b2SetThreadId(int32 threadId)
+{
+	b2_threadId = threadId;
+}
+
+int32 b2GetThreadId()
+{
+	return b2_threadId;
+}
 
 // Memory allocators. Modify these to use your own allocator.
 void* b2Alloc(int32 size)

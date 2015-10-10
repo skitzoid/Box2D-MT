@@ -125,6 +125,24 @@ typedef double float64;
 /// A body cannot sleep if its angular velocity is above this tolerance.
 #define b2_angularSleepTolerance	(2.0f / 180.0f * b2_pi)
 
+
+// Threading
+
+/// The size of a cache line.
+#define b2_cacheLineSize			64
+
+/// The maximum number of thread pool threads.
+#define b2_maxThreadPoolThreads		7
+
+/// The maximum number of threads.
+#define b2_maxThreads				b2_maxThreadPoolThreads + 1
+
+/// Set the calling thread's ID.
+void b2SetThreadId(int32 threadId);
+
+/// Get the calling thread's ID.
+int32 b2GetThreadId();
+
 // Memory Allocation
 
 /// Implement this function to use your own memory allocator.

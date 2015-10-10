@@ -27,6 +27,16 @@ class b2ContactFilter;
 class b2ContactListener;
 class b2BlockAllocator;
 
+struct b2ContactManagerPerThreadData
+{
+	b2ContactManagerPerThreadData();
+
+	b2GrowableArray<b2Contact*> m_deferredAwakes;
+	b2GrowableArray<b2Contact*> m_deferredDestroys;
+
+	char m_padding[b2_cacheLineSize];
+};
+
 // Delegate of b2World.
 class b2ContactManager
 {
@@ -40,7 +50,12 @@ public:
 
 	void Destroy(b2Contact* c);
 
-	void Collide();
+	void Collide(b2Contact** contacts, int32 count);
+
+	void ConsumeDeferredAwakes();
+	void ConsumeDeferredDestroys();
+
+	int32 GetContactCount() const;
             
 	b2BroadPhase m_broadPhase;
 	b2Contact* m_contactList;
@@ -49,7 +64,18 @@ public:
 	b2ContactListener* m_contactListener;
 	b2BlockAllocator* m_allocator;
 
+	b2GrowableArray<b2Contact*> m_contacts;
 	b2GrowableArray<b2Contact*> m_toiContacts;
+
+	b2ContactManagerPerThreadData m_perThreadData[b2_maxThreads];
+
+	bool m_deferAwakenings;
+	bool m_deferDestroys;
 };
+
+inline int32 b2ContactManager::GetContactCount() const
+{
+	return m_contacts.GetCount() + m_toiContacts.GetCount();
+}
 
 #endif

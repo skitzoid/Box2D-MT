@@ -32,9 +32,22 @@
 #include <Box2D/Collision/b2TimeOfImpact.h>
 #include <Box2D/Common/b2Draw.h>
 #include <Box2D/Common/b2Timer.h>
+#include <Box2D/Common/b2Threading.h>
 #include <new>
 
-b2World::b2World(const b2Vec2& gravity)
+class b2CollideTask : public b2RangedTask
+{
+public:
+	b2ContactManager* m_manager;
+	b2Contact** m_contacts;
+private:
+	virtual void Execute(b2StackAllocator&) /* override */
+	{
+		m_manager->Collide(m_contacts + m_beginIndex, m_endIndex - m_beginIndex);
+	}
+};
+
+b2World::b2World(const b2Vec2& gravity, b2ThreadPool* threadPool)
 {
 	m_destructionListener = NULL;
 	g_debugDraw = NULL;
@@ -61,6 +74,11 @@ b2World::b2World(const b2Vec2& gravity)
 	m_contactManager.m_allocator = &m_blockAllocator;
 
 	memset(&m_profile, 0, sizeof(b2Profile));
+
+	m_threadPool = threadPool;
+
+	// Thread count is the number of thread pool threads plus 1 for the user thread.
+	m_threadCount = threadPool ? threadPool->GetThreadCount() + 1 : 1;
 }
 
 b2World::~b2World()
@@ -569,7 +587,10 @@ void b2World::Solve(const b2TimeStep& step)
 
 		// Look for new contacts.
 		m_contactManager.FindNewContacts();
-		m_profile.broadphase = timer.GetMilliseconds();
+
+		float32 broadPhaseTime = timer.GetMilliseconds();
+		m_profile.broadphase += broadPhaseTime;
+		m_profile.solve -= broadPhaseTime;
 	}
 }
 
@@ -736,7 +757,7 @@ void b2World::SolveTOI(const b2TimeStep& step)
 		bB->Advance(minAlpha);
 
 		// The TOI contact likely has some new contact points.
-		minContact->Update(m_contactManager.m_contactListener);
+		minContact->Update(m_contactManager.m_contactListener, true);
 		minContact->m_flags &= ~b2Contact::e_toiFlag;
 		++minContact->m_toiCount;
 
@@ -816,7 +837,7 @@ void b2World::SolveTOI(const b2TimeStep& step)
 					}
 
 					// Update the contact points
-					contact->Update(m_contactManager.m_contactListener);
+					contact->Update(m_contactManager.m_contactListener, true);
 
 					// Was the contact disabled by the user?
 					if (contact->IsEnabled() == false)
@@ -866,29 +887,36 @@ void b2World::SolveTOI(const b2TimeStep& step)
 		subStep.warmStarting = false;
 		island.SolveTOI(subStep, bA->m_islandIndex, bB->m_islandIndex);
 
-		// Reset island flags and synchronize broad-phase proxies.
-		for (int32 i = 0; i < island.m_bodyCount; ++i)
 		{
-			b2Body* body = island.m_bodies[i];
-			body->m_flags &= ~b2Body::e_islandFlag;
-
-			if (body->m_type != b2_dynamicBody)
+			b2Timer timer;
+			// Reset island flags and synchronize broad-phase proxies.
+			for (int32 i = 0; i < island.m_bodyCount; ++i)
 			{
-				continue;
+				b2Body* body = island.m_bodies[i];
+				body->m_flags &= ~b2Body::e_islandFlag;
+
+				if (body->m_type != b2_dynamicBody)
+				{
+					continue;
+				}
+
+				body->SynchronizeFixtures();
+
+				// Invalidate all contact TOIs on this displaced body.
+				for (b2ContactEdge* ce = body->m_contactList; ce; ce = ce->next)
+				{
+					ce->contact->m_flags &= ~(b2Contact::e_toiFlag | b2Contact::e_islandFlag);
+				}
 			}
 
-			body->SynchronizeFixtures();
+			// Commit fixture proxy movements to the broad-phase so that new contacts are created.
+			// Also, some contacts can be destroyed.
+			m_contactManager.FindNewContacts();
 
-			// Invalidate all contact TOIs on this displaced body.
-			for (b2ContactEdge* ce = body->m_contactList; ce; ce = ce->next)
-			{
-				ce->contact->m_flags &= ~(b2Contact::e_toiFlag | b2Contact::e_islandFlag);
-			}
+			float32 broadPhaseTime = timer.GetMilliseconds();
+			m_profile.broadphase += broadPhaseTime;
+			m_profile.solveTOI -= broadPhaseTime;
 		}
-
-		// Commit fixture proxy movements to the broad-phase so that new contacts are created.
-		// Also, some contacts can be destroyed.
-		m_contactManager.FindNewContacts();
 
 		if (m_subStepping)
 		{
@@ -898,15 +926,63 @@ void b2World::SolveTOI(const b2TimeStep& step)
 	}
 }
 
+void b2World::CollideMT()
+{
+	if (m_contactManager.GetContactCount() == 0)
+	{
+		return;
+	}
+
+	m_contactManager.m_deferDestroys = true;
+	m_contactManager.m_deferAwakenings = true;
+
+	b2TaskGroup group(*m_threadPool);
+
+	// TODO_JUSTIN: settings
+	const int32 b2_CollideMaxTasks = b2_maxThreads;
+
+	b2CollideTask contactsTasks[b2_CollideMaxTasks];
+	b2CollideTask toiContactsTasks[b2_CollideMaxTasks];
+
+	// Initialize tasks.
+	for (int32 i = 0; i < b2_CollideMaxTasks; ++i)
+	{
+		contactsTasks[i].m_manager = &m_contactManager;
+		contactsTasks[i].m_contacts = m_contactManager.m_contacts.Data();
+
+		toiContactsTasks[i].m_manager = &m_contactManager;
+		toiContactsTasks[i].m_contacts = m_contactManager.m_toiContacts.Data();
+	}
+
+	// Submit tasks for non-TOI contacts.
+	group.SubmitRangedTasks(contactsTasks, m_threadCount, m_contactManager.m_contacts.GetCount(), m_stackAllocator);
+
+	// Submit tasks for TOI contacts.
+	group.SubmitRangedTasks(toiContactsTasks, m_threadCount, m_contactManager.m_toiContacts.GetCount(), m_stackAllocator);
+
+	// Wait for tasks to finish.
+	group.Wait(m_stackAllocator);
+
+	// Do work that couldn't be done in parallel.
+
+	m_contactManager.ConsumeDeferredAwakes();
+
+	m_contactManager.ConsumeDeferredDestroys();
+}
+
 void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIterations)
 {
 	b2Timer stepTimer;
 
+	memset(&m_profile, 0, sizeof(m_profile));
+
 	// If new fixtures were added, we need to find the new contacts.
 	if (m_flags & e_newFixture)
 	{
+		b2Timer timer;
 		m_contactManager.FindNewContacts();
 		m_flags &= ~e_newFixture;
+		m_profile.broadphase += timer.GetMilliseconds();
 	}
 
 	m_flags |= e_locked;
@@ -931,8 +1007,16 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 	// Update contacts. This is where some contacts are destroyed.
 	{
 		b2Timer timer;
-		m_contactManager.Collide();
-		m_profile.collide = timer.GetMilliseconds();
+		if (IsMultithreadedStepEnabled())
+		{
+			CollideMT();
+		}
+		else
+		{
+			m_contactManager.Collide(m_contactManager.m_contacts.Data(), m_contactManager.m_contacts.GetCount());
+			m_contactManager.Collide(m_contactManager.m_toiContacts.Data(), m_contactManager.m_toiContacts.GetCount());
+		}
+		m_profile.collide += timer.GetMilliseconds();
 	}
 
 	// Integrate velocities, solve velocity constraints, and integrate positions.
@@ -940,7 +1024,7 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 	{
 		b2Timer timer;
 		Solve(step);
-		m_profile.solve = timer.GetMilliseconds();
+		m_profile.solve += timer.GetMilliseconds();
 	}
 
 	// Handle TOI events.
@@ -948,7 +1032,7 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 	{
 		b2Timer timer;
 		SolveTOI(step);
-		m_profile.solveTOI = timer.GetMilliseconds();
+		m_profile.solveTOI += timer.GetMilliseconds();
 	}
 
 	if (step.dt > 0.0f)

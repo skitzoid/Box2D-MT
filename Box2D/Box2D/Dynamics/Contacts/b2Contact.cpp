@@ -158,8 +158,10 @@ b2Contact::b2Contact(b2Fixture* fA, int32 indexA, b2Fixture* fB, int32 indexB)
 
 // Update the contact manifold and touching status.
 // Note: do not assume the fixture AABBs are overlapping or are valid.
-void b2Contact::Update(b2ContactListener* listener)
+bool b2Contact::Update(b2ContactListener* listener, bool canWakeBodies)
 {
+	bool needsAwake = false;
+
 	b2Manifold oldManifold = m_manifold;
 
 	// Re-enable this contact.
@@ -216,8 +218,15 @@ void b2Contact::Update(b2ContactListener* listener)
 
 		if (touching != wasTouching)
 		{
-			bodyA->SetAwake(true);
-			bodyB->SetAwake(true);
+			if (canWakeBodies)
+			{
+				bodyA->SetAwake(true);
+				bodyB->SetAwake(true);
+			}
+			else
+			{
+				needsAwake = true;
+			}
 		}
 	}
 
@@ -244,4 +253,6 @@ void b2Contact::Update(b2ContactListener* listener)
 	{
 		listener->PreSolve(this, &oldManifold);
 	}
+
+	return needsAwake;
 }

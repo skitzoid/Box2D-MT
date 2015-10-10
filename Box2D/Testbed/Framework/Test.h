@@ -20,6 +20,7 @@
 #define TEST_H
 
 #include <Box2D/Box2D.h>
+#include <Box2D/Common/b2Threading.h>
 #include "DebugDraw.h"
 
 #if defined(__APPLE__)
@@ -194,6 +195,8 @@ protected:
 
 	b2Profile m_maxProfile;
 	b2Profile m_totalProfile;
+
+	b2ThreadPool m_threadPool;
 };
 
 #endif

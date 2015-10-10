@@ -190,7 +190,7 @@ protected:
 	b2Contact(b2Fixture* fixtureA, int32 indexA, b2Fixture* fixtureB, int32 indexB);
 	virtual ~b2Contact() {}
 
-	void Update(b2ContactListener* listener);
+	bool Update(b2ContactListener* listener, bool canWakeBodies);
 
 	static b2ContactRegister s_registers[b2Shape::e_typeCount][b2Shape::e_typeCount];
 	static bool s_initialized;

@@ -201,6 +201,7 @@ protected:
 	friend class b2World;
 	friend class b2Contact;
 	friend class b2ContactManager;
+	friend bool b2ContactPointerLessThan(const b2Contact* c1, const b2Contact* c2);
 
 	b2Fixture();
 

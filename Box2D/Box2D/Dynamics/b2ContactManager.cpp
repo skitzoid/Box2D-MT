@@ -22,24 +22,63 @@
 #include <Box2D/Dynamics/b2WorldCallbacks.h>
 #include <Box2D/Dynamics/Contacts/b2Contact.h>
 
+
 const int32 b2_initialContactCapacity = 1024;
 const int32 b2_initialTOIContactCapacity = 1024;
+const int32 b2_initialDeferredAwakesCapacity = 1024;
+const int32 b2_initialDeferredDestroysCapacity = 1024;
 
 b2ContactFilter b2_defaultFilter;
 b2ContactListener b2_defaultListener;
 
+/// This is used to sort contacts in a deterministic order .
+bool b2ContactPointerLessThan(const b2Contact* c1, const b2Contact* c2)
+{
+	int32 c1A = c1->GetFixtureA()->m_proxies[c1->GetChildIndexA()].proxyId;
+	int32 c1B = c1->GetFixtureB()->m_proxies[c1->GetChildIndexB()].proxyId;
+	int32 c2A = c2->GetFixtureA()->m_proxies[c2->GetChildIndexA()].proxyId;
+	int32 c2B = c2->GetFixtureB()->m_proxies[c2->GetChildIndexB()].proxyId;
+
+	if (c1A < c2A)
+	{
+		return true;
+	}
+
+	if (c1A == c2A)
+	{
+		return c1B < c2B;
+	}
+
+	return false;
+}
+
+b2ContactManagerPerThreadData::b2ContactManagerPerThreadData()
+: m_deferredAwakes(b2_initialDeferredAwakesCapacity)
+, m_deferredDestroys(b2_initialDeferredDestroysCapacity)
+{
+
+}
+
 b2ContactManager::b2ContactManager()
-: m_toiContacts(b2_initialTOIContactCapacity)
+: m_contacts(b2_initialContactCapacity)
+, m_toiContacts(b2_initialTOIContactCapacity)
 {
 	m_contactList = NULL;
 	m_contactCount = 0;
 	m_contactFilter = &b2_defaultFilter;
 	m_contactListener = &b2_defaultListener;
 	m_allocator = NULL;
+	m_deferAwakenings = false;
 }
 
 void b2ContactManager::Destroy(b2Contact* c)
 {
+	if (m_deferDestroys)
+	{
+		m_perThreadData[b2GetThreadId()].m_deferredDestroys.Push(c);
+		return;
+	}
+
 	b2Fixture* fixtureA = c->GetFixtureA();
 	b2Fixture* fixtureB = c->GetFixtureB();
 	b2Body* bodyA = fixtureA->GetBody();
@@ -70,6 +109,11 @@ void b2ContactManager::Destroy(b2Contact* c)
 	{
 		m_toiContacts.Peek()->m_managerIndex = c->m_managerIndex;
 		m_toiContacts.RemoveAndSwap(c->m_managerIndex);
+	}
+	else
+	{
+		m_contacts.Peek()->m_managerIndex = c->m_managerIndex;
+		m_contacts.RemoveAndSwap(c->m_managerIndex);
 	}
 
 	// Remove from body 1
@@ -112,19 +156,20 @@ void b2ContactManager::Destroy(b2Contact* c)
 // This is the top level collision call for the time step. Here
 // all the narrow phase collision is processed for the world
 // contact list.
-void b2ContactManager::Collide()
+void b2ContactManager::Collide(b2Contact** contacts, int32 count)
 {
 	// Update awake contacts.
-	b2Contact* c = m_contactList;
-	while (c)
+	for (int32 i = 0; i < count; ++i)
 	{
+		b2Contact* c = contacts[i];
+
 		b2Fixture* fixtureA = c->GetFixtureA();
 		b2Fixture* fixtureB = c->GetFixtureB();
 		int32 indexA = c->GetChildIndexA();
 		int32 indexB = c->GetChildIndexB();
 		b2Body* bodyA = fixtureA->GetBody();
 		b2Body* bodyB = fixtureB->GetBody();
-		 
+
 		// Is this contact flagged for filtering?
 		if (c->m_flags & b2Contact::e_filterFlag)
 		{
@@ -173,8 +218,15 @@ void b2ContactManager::Collide()
 			continue;
 		}
 
+		// Awakening might be deferred to avoid a data race on body flags.
+		bool canWakeBodies = m_deferAwakenings == false;
+
 		// The contact persists.
-		c->Update(m_contactListener);
+		bool needsAwake = c->Update(m_contactListener, canWakeBodies);
+		if (needsAwake)
+		{
+			m_perThreadData[b2GetThreadId()].m_deferredAwakes.Push(c);
+		}
 		c = c->GetNext();
 	}
 }
@@ -320,6 +372,59 @@ void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
 		c->m_managerIndex = m_toiContacts.GetCount();
 		m_toiContacts.Push(c);
 	}
+	else
+	{
+		// Add to non-TOI contacts.
+		c->m_managerIndex = m_contacts.GetCount();
+		m_contacts.Push(c);
+	}
 
 	++m_contactCount;
+}
+
+void b2ContactManager::ConsumeDeferredAwakes()
+{
+	b2Assert(m_deferAwakenings);
+
+	// Awake bodies. Order doesn't affect determinism.
+	for (int32 i = 0; i < b2_maxThreads; ++i)
+	{
+		while (m_perThreadData[i].m_deferredAwakes.GetCount())
+		{
+			b2Contact* c = m_perThreadData[i].m_deferredAwakes.Pop();
+			c->m_nodeA.other->SetAwake(true);
+			c->m_nodeB.other->SetAwake(true);
+		}
+	}
+
+	m_deferAwakenings = false;
+}
+
+void b2ContactManager::ConsumeDeferredDestroys()
+{
+	b2Assert(m_deferDestroys);
+
+	b2ContactManagerPerThreadData* td0 = m_perThreadData + 0;
+
+	// Put all contacts in a single array.
+	for (int32 i = 1; i < b2_maxThreads; ++i)
+	{
+		while (m_perThreadData[i].m_deferredDestroys.GetCount())
+		{
+			b2Contact* c = m_perThreadData[i].m_deferredDestroys.Pop();
+			td0->m_deferredDestroys.Push(c);
+		}
+	}
+
+	// Sort to maintain a deterministic order of m_contacts and m_toiContacts.
+	std::sort(td0->m_deferredDestroys.Data(), td0->m_deferredDestroys.Data() + td0->m_deferredDestroys.GetCount(), b2ContactPointerLessThan);
+
+	m_deferDestroys = false;
+
+	// Destroy contacts.
+	while (td0->m_deferredDestroys.GetCount())
+	{
+		b2Contact* c = td0->m_deferredDestroys.Pop();
+		Destroy(c);
+	}
 }

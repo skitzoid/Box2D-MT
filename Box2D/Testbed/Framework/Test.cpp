@@ -32,10 +32,11 @@ void DestructionListener::SayGoodbye(b2Joint* joint)
 }
 
 Test::Test()
+: m_threadPool(/*thread count*/)
 {
 	b2Vec2 gravity;
 	gravity.Set(0.0f, -10.0f);
-	m_world = new b2World(gravity);
+	m_world = new b2World(gravity, &m_threadPool);
 	m_bomb = NULL;
 	m_textLine = 30;
 	m_mouseJoint = NULL;

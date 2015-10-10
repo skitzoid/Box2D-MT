@@ -26,19 +26,12 @@ template <typename T>
 class b2GrowableArray
 {
 public:
-	b2GrowableArray(int32 startCapacity = 0)
+	b2GrowableArray(int32 startCapacityHint = 16)
 	{
-		m_capacity = startCapacity;
+		m_capacity = startCapacityHint > 0 ? startCapacityHint : 1;
 		m_count = 0;
 
-		if (startCapacity > 0)
-		{
-			m_array = (T*)b2Alloc(startCapacity * sizeof(T));
-		}
-		else
-		{
-			m_array = NULL;
-		}
+		m_array = (T*)b2Alloc(m_capacity * sizeof(T));
 	}
 
 	~b2GrowableArray()
@@ -69,13 +62,13 @@ public:
 		return m_array[m_count];
 	}
 
-	T Peek()
+	T Peek() const
 	{
 		b2Assert(m_count > 0);
 		return m_array[m_count - 1];
 	}
 
-	int32 GetCount()
+	int32 GetCount() const
 	{
 		return m_count;
 	}
@@ -95,12 +88,12 @@ public:
 		return m_array[i];
 	}
 
-	T* Data(size_t i)
+	T* Data()
 	{
 		return m_array;
 	}
 
-	const T* Data(size_t i) const
+	const T* Data() const
 	{
 		return m_array;
 	}

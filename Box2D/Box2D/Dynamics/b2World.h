@@ -34,6 +34,7 @@ class b2Body;
 class b2Draw;
 class b2Fixture;
 class b2Joint;
+class b2ThreadPool;
 
 /// The world class manages all physics entities, dynamic simulation,
 /// and asynchronous queries. The world also contains efficient memory
@@ -43,7 +44,8 @@ class b2World
 public:
 	/// Construct a world object.
 	/// @param gravity the world gravity vector.
-	b2World(const b2Vec2& gravity);
+	/// @param threadPool a thread pool that will enable multi-threaded stepping if provided.
+	b2World(const b2Vec2& gravity, b2ThreadPool* threadPool = NULL);
 
 	/// Destruct the world. All physics entities are destroyed and all heap memory is released.
 	~b2World();
@@ -188,6 +190,9 @@ public:
 	/// Is the world locked (in the middle of a time step).
 	bool IsLocked() const;
 
+	/// Is multi-threaded stepping enabled?
+	bool IsMultithreadedStepEnabled() const;
+
 	/// Set flag to control automatic clearing of forces after each time step.
 	void SetAutoClearForces(bool flag);
 
@@ -227,6 +232,8 @@ private:
 	void Solve(const b2TimeStep& step);
 	void SolveTOI(const b2TimeStep& step);
 
+	void CollideMT();
+
 	void DrawJoint(b2Joint* joint);
 	void DrawShape(b2Fixture* shape, const b2Transform& xf, const b2Color& color);
 
@@ -261,6 +268,10 @@ private:
 	bool m_stepComplete;
 
 	b2Profile m_profile;
+
+	b2ThreadPool* m_threadPool;
+
+	int32 m_threadCount;
 };
 
 inline b2Body* b2World::GetBodyList()
@@ -321,6 +332,11 @@ inline b2Vec2 b2World::GetGravity() const
 inline bool b2World::IsLocked() const
 {
 	return (m_flags & e_locked) == e_locked;
+}
+
+inline bool b2World::IsMultithreadedStepEnabled() const
+{
+	return m_threadPool != NULL;
 }
 
 inline void b2World::SetAutoClearForces(bool flag)
