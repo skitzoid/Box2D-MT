@@ -713,9 +713,14 @@ void b2World::Solve(const b2TimeStep& step)
 			// Update fixtures (for broad-phase).
 			b->SynchronizeFixtures();
 		}
+		m_profile.broadphaseSyncFixtures += timer.GetMilliseconds();
 
-		// Look for new contacts.
-		m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount());
+		{
+			b2Timer timer;
+			// Look for new contacts.
+			m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount());
+			m_profile.broadphaseFindContacts += timer.GetMilliseconds();
+		}
 
 		float32 broadPhaseTime = timer.GetMilliseconds();
 		m_profile.broadphase += broadPhaseTime;

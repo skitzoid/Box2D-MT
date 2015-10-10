@@ -51,7 +51,7 @@ struct b2ContactManagerPerThreadData
 	b2GrowableArray<b2DeferredMoveProxy> m_deferredMoveProxies;
 	b2GrowableArray<int32> m_tempProxyIds;
 
-	char m_padding[b2_cacheLineSize];
+	uint8 m_padding[b2_cacheLineSize];
 };
 
 // Delegate of b2World.

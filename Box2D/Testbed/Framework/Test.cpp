@@ -380,25 +380,26 @@ void Test::Step(Settings* settings)
 		m_textLine += DRAW_STRING_NEW_LINE;
 		g_debugDraw.DrawString(5, m_textLine, "|-broad-phase [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.broadphase, aveProfile.broadphase, m_maxProfile.broadphase);
 		m_textLine += DRAW_STRING_NEW_LINE;
-		g_debugDraw.DrawString(5, m_textLine, "|-|-sync fixtures [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.broadphaseSyncFixtures, aveProfile.broadphaseSyncFixtures, m_maxProfile.broadphaseSyncFixtures);
+		g_debugDraw.DrawString(5, m_textLine, "| |-sync fixtures [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.broadphaseSyncFixtures, aveProfile.broadphaseSyncFixtures, m_maxProfile.broadphaseSyncFixtures);
 		m_textLine += DRAW_STRING_NEW_LINE;
-		g_debugDraw.DrawString(5, m_textLine, "|-|-find contacts [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.broadphaseFindContacts, aveProfile.broadphaseFindContacts, m_maxProfile.broadphaseFindContacts);
+		g_debugDraw.DrawString(5, m_textLine, "| |-find contacts [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.broadphaseFindContacts, aveProfile.broadphaseFindContacts, m_maxProfile.broadphaseFindContacts);
 		m_textLine += DRAW_STRING_NEW_LINE;
 		g_debugDraw.DrawString(5, m_textLine, "|-collide [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.collide, aveProfile.collide, m_maxProfile.collide);
 		m_textLine += DRAW_STRING_NEW_LINE;
 		g_debugDraw.DrawString(5, m_textLine, "|-solve [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.solve, aveProfile.solve, m_maxProfile.solve);
 		m_textLine += DRAW_STRING_NEW_LINE;
-		g_debugDraw.DrawString(5, m_textLine, "|-|-island traversal [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.solveTraversal, aveProfile.solveTraversal, m_maxProfile.solveTraversal);
+		g_debugDraw.DrawString(5, m_textLine, "| |-island traversal [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.solveTraversal, aveProfile.solveTraversal, m_maxProfile.solveTraversal);
 		m_textLine += DRAW_STRING_NEW_LINE;
-		g_debugDraw.DrawString(5, m_textLine, "|-|-init (per thread sum) [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.solveInit, aveProfile.solveInit, m_maxProfile.solveInit);
+		g_debugDraw.DrawString(5, m_textLine, "| |-solve init * [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.solveInit, aveProfile.solveInit, m_maxProfile.solveInit);
 		m_textLine += DRAW_STRING_NEW_LINE;
-		g_debugDraw.DrawString(5, m_textLine, "|-|-velocity (per thread sum) [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.solveVelocity, aveProfile.solveVelocity, m_maxProfile.solveVelocity);
+		g_debugDraw.DrawString(5, m_textLine, "| |-solve velocity * [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.solveVelocity, aveProfile.solveVelocity, m_maxProfile.solveVelocity);
 		m_textLine += DRAW_STRING_NEW_LINE;
-		g_debugDraw.DrawString(5, m_textLine, "|-|-position (per thread sum) [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.solvePosition, aveProfile.solvePosition, m_maxProfile.solvePosition);
+		g_debugDraw.DrawString(5, m_textLine, "| |-solve position * [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.solvePosition, aveProfile.solvePosition, m_maxProfile.solvePosition);
 		m_textLine += DRAW_STRING_NEW_LINE;
 		g_debugDraw.DrawString(5, m_textLine, "|-solveTOI [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.solveTOI, aveProfile.solveTOI, m_maxProfile.solveTOI);
 		m_textLine += DRAW_STRING_NEW_LINE;
-
+		g_debugDraw.DrawString(5, m_textLine, "* sum of per-thread times");
+		m_textLine += DRAW_STRING_NEW_LINE;
 	}
 
 	if (m_mouseJoint)

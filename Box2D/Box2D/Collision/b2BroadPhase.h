@@ -37,7 +37,7 @@ struct b2BroadPhasePerThreadData
 	b2GrowableArray<int32> m_moveBuffer;
 	int32 m_queryProxyId;
 
-	char m_padding[b2_cacheLineSize];
+	uint8 m_padding[b2_cacheLineSize];
 };
 
 /// The broad-phase is used for computing pairs and performing volume queries and ray casts.
