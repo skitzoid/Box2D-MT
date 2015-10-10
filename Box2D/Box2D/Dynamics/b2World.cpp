@@ -179,10 +179,18 @@ b2World::b2World(const b2Vec2& gravity, b2ThreadPool* threadPool)
 
 	memset(&m_profile, 0, sizeof(b2Profile));
 
-	m_threadPool = threadPool;
+	if (threadPool && threadPool->GetThreadCount() > 0)
+	{
+		m_threadPool = threadPool;
+		
+		m_threadCount = threadPool->GetThreadCount() + 1;
+	}
+	else
+	{
+		m_threadPool = NULL;
 
-	// Thread count is the number of thread pool threads plus 1 for the user thread.
-	m_threadCount = threadPool ? threadPool->GetThreadCount() + 1 : 1;
+		m_threadCount = 1;
+	}
 }
 
 b2World::~b2World()
@@ -1011,33 +1019,36 @@ void b2World::SolveTOI(const b2TimeStep& step)
 
 		{
 			b2Timer timer;
-			// Reset island flags and synchronize broad-phase proxies.
-			for (int32 i = 0; i < island.m_bodyCount; ++i)
-			{
-				b2Body* body = island.m_bodies[i];
-				body->m_flags &= ~b2Body::e_islandFlag;
 
-				if (body->m_type != b2_dynamicBody)
+			// Synchronize fixtures, check for out of range bodies.
+			for (int32 i = 0; i < m_nonStaticBodies.GetCount(); ++i)
+			{
+				b2Body* b = m_nonStaticBodies.At(i);
+
+				// If a body was not in an island then it did not move.
+				if ((b->m_flags & b2Body::e_islandFlag) == 0)
 				{
 					continue;
 				}
 
-				body->SynchronizeFixtures();
-
-				// Invalidate all contact TOIs on this displaced body.
-				for (b2ContactEdge* ce = body->m_contactList; ce; ce = ce->next)
-				{
-					ce->contact->m_flags &= ~(b2Contact::e_toiFlag | b2Contact::e_islandFlag);
-				}
+				// Update fixtures (for broad-phase).
+				b->SynchronizeFixtures();
 			}
 
-			// Commit fixture proxy movements to the broad-phase so that new contacts are created.
-			// Also, some contacts can be destroyed.
-			m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount());
+			m_profile.broadphaseSyncFixtures += timer.GetMilliseconds();
+
+			{
+				b2Timer timer;
+
+				// Look for new contacts.
+				m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount());
+
+				m_profile.broadphaseFindContacts += timer.GetMilliseconds();
+			}
 
 			float32 broadPhaseTime = timer.GetMilliseconds();
 			m_profile.broadphase += broadPhaseTime;
-			m_profile.solveTOI -= broadPhaseTime;
+			m_profile.solve -= broadPhaseTime;
 		}
 
 		if (m_subStepping)
@@ -1168,6 +1179,8 @@ void b2World::SolveMT(const b2TimeStep& step)
 
 	// Clear all the island flags.
 	ClearIslandFlagsMT();
+
+	b2Timer traversalTimer;
 
 	// Build and simulate all awake islands.
 	int32 stackSize = m_bodyCount;
@@ -1346,6 +1359,8 @@ void b2World::SolveMT(const b2TimeStep& step)
 		solveGroup.SubmitTask(task);
 	}
 
+	m_profile.solveTraversal += traversalTimer.GetMilliseconds();
+
 	// Wait for tasks to finish.
 	solveGroup.Wait(m_stackAllocator);
 
@@ -1379,8 +1394,16 @@ void b2World::SolveMT(const b2TimeStep& step)
 		// Synchronize fixtures, check for out of range bodies.
 		SynchronizeFixturesMT();
 
-		// Look for new contacts.
-		FindNewContactsMT();
+		m_profile.broadphaseSyncFixtures += timer.GetMilliseconds();
+
+		{
+			b2Timer timer;
+
+			// Look for new contacts.
+			FindNewContactsMT();
+
+			m_profile.broadphaseFindContacts += timer.GetMilliseconds();
+		}
 
 		float32 broadPhaseTime = timer.GetMilliseconds();
 		m_profile.broadphase += broadPhaseTime;
@@ -1453,7 +1476,9 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 			m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount());
 		}
 		m_flags &= ~e_newFixture;
-		m_profile.broadphase += timer.GetMilliseconds();
+		float32 elapsed = timer.GetMilliseconds();
+		m_profile.broadphase += elapsed;
+		m_profile.broadphaseFindContacts += elapsed;
 	}
 
 	m_flags |= e_locked;

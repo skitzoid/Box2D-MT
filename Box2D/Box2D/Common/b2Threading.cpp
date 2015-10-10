@@ -50,7 +50,7 @@ b2ThreadPool::b2ThreadPool(int32 threadCount)
 	// Don't exceed the max.
 	threadCount = b2Min(threadCount, b2_maxThreadPoolThreads);
 
-	// Account for invalid input or hardware_concurrency not being well defined.
+	// Account for invalid input, single core processors, or hardware_concurrency not being well defined.
 	threadCount = b2Max(threadCount, 0);
 
 	// Mark the pool as running.

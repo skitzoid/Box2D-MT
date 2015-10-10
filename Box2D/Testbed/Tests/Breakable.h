@@ -149,7 +149,7 @@ public:
 	b2Fixture* m_piece2;
 
 	bool m_broke;
-	bool m_break;
+	std::atomic<bool> m_break;
 };
 
 #endif

@@ -132,9 +132,9 @@ public:
 
 		// Traverse the contact results. Destroy bodies that
 		// are touching heavier bodies.
-		for (int32 i = 0; i < m_pointCount; ++i)
+		for (int32 i = 0; i < m_pointCount[0]; ++i)
 		{
-			ContactPoint* point = m_points + i;
+			ContactPoint* point = m_points[0] + i;
 
 			b2Body* body1 = point->fixtureA->GetBody();
 			b2Body* body2 = point->fixtureB->GetBody();

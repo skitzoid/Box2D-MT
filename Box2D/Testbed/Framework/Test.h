@@ -124,7 +124,7 @@ public:
 	Test* test;
 };
 
-const int32 k_maxContactPoints = 2048;
+const int32 k_maxContactPoints = 16384;
 
 struct ContactPoint
 {
@@ -181,8 +181,8 @@ protected:
 
 	b2Body* m_groundBody;
 	b2AABB m_worldAABB;
-	ContactPoint m_points[k_maxContactPoints];
-	int32 m_pointCount;
+	ContactPoint m_points[b2_maxThreads][k_maxContactPoints];
+	int32 m_pointCount[b2_maxThreads];
 	DestructionListener m_destructionListener;
 	int32 m_textLine;
 	b2World* m_world;
