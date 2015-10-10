@@ -54,8 +54,7 @@ public:
 		m_gravity = gravity;
 		m_allowSleep = allowSleep;
 		m_next = next;
-		// TODO_JUSTIN: settings
-		SetCost(bodyCount + 10 * contactCount + 10 * jointCount);
+		SetCost(b2GetIslandCost(bodyCount, contactCount, jointCount));
 	}
 
 	b2SolveTask* GetNext() { return m_next; }
@@ -1307,7 +1306,7 @@ void b2World::SolveMT(const b2TimeStep& step)
 			}
 		}
 
-		if (bodyCount + contactCount * 10 + jointCount * 10 > 100)
+		if (b2GetIslandCost(bodyCount, contactCount, jointCount) >= b2_minIslandCost)
 		{
 			b2SolveTask* task = (b2SolveTask*)m_blockAllocator.Allocate(sizeof(b2SolveTask));
 			new(task)b2SolveTask(bodyCount, contactCount, jointCount,
@@ -1415,17 +1414,14 @@ void b2World::ClearIslandFlagsMT()
 {
 	b2TaskGroup group(*m_threadPool);
 
-	// TODO_JUSTIN: settings
-	static const int32 b2_clearIslandFlagsMaxTasks = b2_maxThreads;
+	b2ClearContactIslandFlagsTask contactsTasks[b2_maxThreads];
+	b2ClearContactIslandFlagsTask toiContactsTasks[b2_maxThreads];
 
-	b2ClearContactIslandFlagsTask contactsTasks[b2_clearIslandFlagsMaxTasks];
-	b2ClearContactIslandFlagsTask toiContactsTasks[b2_clearIslandFlagsMaxTasks];
-
-	b2ClearBodyIslandFlagsTask bodyTasks[b2_clearIslandFlagsMaxTasks];
-	b2ClearBodyIslandFlagsTask staticBodyTasks[b2_clearIslandFlagsMaxTasks];
+	b2ClearBodyIslandFlagsTask bodyTasks[b2_maxThreads];
+	b2ClearBodyIslandFlagsTask staticBodyTasks[b2_maxThreads];
 
 	// Initialize tasks.
-	for (int32 i = 0; i < b2_clearIslandFlagsMaxTasks; ++i)
+	for (int32 i = 0; i < m_threadCount; ++i)
 	{
 		contactsTasks[i].m_contacts = m_contactManager.m_contactsNonTOI.Data();
 

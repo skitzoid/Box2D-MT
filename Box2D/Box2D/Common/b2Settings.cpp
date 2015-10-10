@@ -21,16 +21,14 @@
 #include <stdarg.h>
 #include <stdlib.h>
 
-/// TODO_JUSTIN: Check version numbers and more platforms.
-#if defined(_MSC_VER)
-#define b2ThreadLocal __declspec(thread)
-#else
-#define b2ThreadLocal __thread
-#endif
-
 b2Version b2_version = { 2, 3, 2 };
 
 b2ThreadLocal int32 b2_threadId = 0;
+
+int32 b2GetIslandCost(int32 bodyCount, int32 contactCount, int32 jointCount)
+{
+	return bodyCount + contactCount * 10 + jointCount * 10;
+}
 
 void b2SetThreadId(int32 threadId)
 {

@@ -580,8 +580,6 @@ void b2ContactManager::ConsumeDeferredMoveProxies()
 {
 	b2ContactManagerPerThreadData* td0 = m_perThreadData + 0;
 
-	// TODO_JUSTIN put deferred move in normal broadphase move buffers?
-
 	// Put all proxies in a single array.
 	for (int32 i = 1; i < b2_maxThreads; ++i)
 	{

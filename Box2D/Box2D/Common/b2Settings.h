@@ -128,6 +128,14 @@ typedef double float64;
 
 // Threading
 
+/// Thread local storage (thread_local isn't supported by some otherwise compatible compilers).
+// TODO: Check version numbers and other platforms. Adjust as needed.
+#if defined(_MSC_VER)
+#define b2ThreadLocal __declspec(thread)
+#else
+#define b2ThreadLocal __thread
+#endif
+
 /// The size of a cache line.
 #define b2_cacheLineSize			64
 
@@ -137,11 +145,18 @@ typedef double float64;
 /// The maximum number of threads.
 #define b2_maxThreads				(b2_maxThreadPoolThreads + 1)
 
+/// How much does an island need to cost before the world stops adding bodies to it?
+#define b2_minIslandCost			100
+
+/// Get the estimated cost of solving an island with the specified attributes
+int32 b2GetIslandCost(int32 bodyCount, int32 contactCount, int32 jointCount);
+
 /// Set the calling thread's ID.
 void b2SetThreadId(int32 threadId);
 
 /// Get the calling thread's ID.
 int32 b2GetThreadId();
+
 
 // Memory Allocation
 
