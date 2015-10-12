@@ -76,6 +76,9 @@ private:
 		}
 
 		m_island.Solve(&m_profile, *m_timestep, m_gravity, m_allowSleep);
+
+		// Unset the allocator.
+		m_island.m_allocator = NULL;
 	}
 
 	b2Island m_island;
@@ -1380,6 +1383,9 @@ void b2World::SolveMT(const b2TimeStep& step)
 		m_profile.solvePosition += task->GetProfile().solvePosition;
 
 		solveTaskList = solveTaskList->GetNext();
+
+		// Free the task
+		task->~b2SolveTask();
 		m_blockAllocator.Free(task, sizeof(b2SolveTask));
 	}
 
