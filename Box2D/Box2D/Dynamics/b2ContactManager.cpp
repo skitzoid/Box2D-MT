@@ -204,18 +204,14 @@ void b2ContactManager::Collide(b2Contact** contacts, int32 count)
 			// Should these bodies collide?
 			if (bodyB->ShouldCollide(bodyA) == false)
 			{
-				b2Contact* cNuke = c;
-				c = cNuke->GetNext();
-				Destroy(cNuke);
+				Destroy(c);
 				continue;
 			}
 
 			// Check user filtering.
 			if (m_contactFilter && m_contactFilter->ShouldCollide(fixtureA, fixtureB) == false)
 			{
-				b2Contact* cNuke = c;
-				c = cNuke->GetNext();
-				Destroy(cNuke);
+				Destroy(c);
 				continue;
 			}
 
@@ -229,7 +225,6 @@ void b2ContactManager::Collide(b2Contact** contacts, int32 count)
 		// At least one body must be awake and it must be dynamic or kinematic.
 		if (activeA == false && activeB == false)
 		{
-			c = c->GetNext();
 			continue;
 		}
 
@@ -240,9 +235,7 @@ void b2ContactManager::Collide(b2Contact** contacts, int32 count)
 		// Here we destroy contacts that cease to overlap in the broad-phase.
 		if (overlap == false)
 		{
-			b2Contact* cNuke = c;
-			c = cNuke->GetNext();
-			Destroy(cNuke);
+			Destroy(c);
 			continue;
 		}
 
@@ -255,7 +248,6 @@ void b2ContactManager::Collide(b2Contact** contacts, int32 count)
 		{
 			m_perThreadData[b2GetThreadId()].m_deferredAwakes.Push(c);
 		}
-		c = c->GetNext();
 	}
 }
 
