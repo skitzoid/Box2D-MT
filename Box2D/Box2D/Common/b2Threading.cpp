@@ -151,6 +151,8 @@ void b2ThreadPool::Wait(const b2TaskGroup& taskGroup, b2StackAllocator& allocato
 		if (groupRemainingTasks == 1)
 		{
 			// Sync with the waiting thread to ensure it reads '0' from the group's remaining tasks count.
+			// This shouldn't be necessary with the current usage since only this one thread is waiting,
+			// but just in case that changes...
 			{
 				unique_lock<mutex> lk(m_taskGroupMut);
 			}
@@ -206,7 +208,7 @@ void b2ThreadPool::WorkerMain(int32 threadId)
 		task->Execute(allocator);
 
 		// Reduce the count of tasks remaining in the group.
-		int32 groupRemainingTasks = task->GetTaskGroup()->m_remainingTasks.fetch_sub(1, std::memory_order_release);
+		int32 groupRemainingTasks = task->GetTaskGroup()->m_remainingTasks.fetch_sub(1, std::memory_order_acq_rel);
 
 		// If this was the last task in the group.
 		if (groupRemainingTasks == 1)
