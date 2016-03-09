@@ -553,6 +553,9 @@ int main(int argc, char** argv)
 		glfwPollEvents();
 	}
 
+	delete test;
+	test = NULL;
+
 	g_debugDraw.Destroy();
 	RenderGLDestroy();
 	glfwTerminate();
