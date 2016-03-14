@@ -37,6 +37,8 @@ public:
 	/// Construct a task.
 	b2Task();
 
+	virtual ~b2Task() {}
+
 	/// Set the estimated cost of executing the task.
 	/// Higher cost tasks can start execution before lower cost tasks.
 	void SetCost(int32 costEstimate);
