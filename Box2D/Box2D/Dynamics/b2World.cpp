@@ -688,10 +688,10 @@ void b2World::Solve(const b2TimeStep& step)
 		m_profile.solvePosition += profile.solvePosition;
 
 		// Post solve cleanup.
-		for (int32 i = 0; i < island.m_bodyCount; ++i)
+		for (int32 j = 0; j < island.m_bodyCount; ++j)
 		{
 			// Allow static bodies to participate in other islands.
-			b2Body* b = island.m_bodies[i];
+			b2Body* b = island.m_bodies[j];
 			if (b->GetType() == b2_staticBody)
 			{
 				b->m_flags &= ~b2Body::e_islandFlag;
@@ -720,10 +720,10 @@ void b2World::Solve(const b2TimeStep& step)
 		m_profile.broadphaseSyncFixtures += timer.GetMilliseconds();
 
 		{
-			b2Timer timer;
+			b2Timer timer2;
 			// Look for new contacts.
 			m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount());
-			m_profile.broadphaseFindContacts += timer.GetMilliseconds();
+			m_profile.broadphaseFindContacts += timer2.GetMilliseconds();
 		}
 
 		float32 broadPhaseTime = timer.GetMilliseconds();
@@ -1046,12 +1046,12 @@ void b2World::SolveTOI(const b2TimeStep& step)
 			m_profile.broadphaseSyncFixtures += timer.GetMilliseconds();
 
 			{
-				b2Timer timer;
+				b2Timer timer2;
 
 				// Look for new contacts.
 				m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount());
 
-				m_profile.broadphaseFindContacts += timer.GetMilliseconds();
+				m_profile.broadphaseFindContacts += timer2.GetMilliseconds();
 			}
 
 			float32 broadPhaseTime = timer.GetMilliseconds();
@@ -1305,10 +1305,10 @@ void b2World::SolveMT(const b2TimeStep& step)
 		}
 
 		// Post island traversal cleanup.
-		for (int32 i = 0; i < bodyCount; ++i)
+		for (int32 j = 0; j < bodyCount; ++j)
 		{
 			// Allow static bodies to participate in other islands.
-			b2Body* b = bodies[i];
+			b2Body* b = bodies[j];
 			if (b->GetType() == b2_staticBody)
 			{
 				b->m_flags &= ~b2Body::e_islandFlag;
@@ -1408,12 +1408,12 @@ void b2World::SolveMT(const b2TimeStep& step)
 		m_profile.broadphaseSyncFixtures += timer.GetMilliseconds();
 
 		{
-			b2Timer timer;
+			b2Timer timer2;
 
 			// Look for new contacts.
 			FindNewContactsMT();
 
-			m_profile.broadphaseFindContacts += timer.GetMilliseconds();
+			m_profile.broadphaseFindContacts += timer2.GetMilliseconds();
 		}
 
 		float32 broadPhaseTime = timer.GetMilliseconds();

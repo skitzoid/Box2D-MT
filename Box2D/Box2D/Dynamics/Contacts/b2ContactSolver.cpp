@@ -345,9 +345,9 @@ void b2ContactSolver::SolveVelocityConstraints()
 		// Solve normal constraints
 		if (pointCount == 1 || g_blockSolve == false)
 		{
-			for (int32 i = 0; i < pointCount; ++i)
+			for (int32 k = 0; k < pointCount; ++k)
 			{
-				b2VelocityConstraintPoint* vcp = vc->points + i;
+				b2VelocityConstraintPoint* vcp = vc->points + k;
 
 				// Relative velocity at contact
 				b2Vec2 dv = vB + b2Cross(wB, vcp->rB) - vA - b2Cross(wA, vcp->rA);
