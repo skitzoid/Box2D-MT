@@ -21,13 +21,13 @@
 
 #include <Box2D/Common/b2Settings.h>
 #include <Box2D/Common/b2GrowableArray.h>
+#include <Box2D/Common/b2StackAllocator.h>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
 
 class b2TaskGroup;
-class b2StackAllocator;
 class b2ThreadPool;
 
 /// The base class for all tasks that are run by the thread pool.
