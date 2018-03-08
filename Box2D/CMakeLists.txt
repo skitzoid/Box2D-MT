@@ -20,6 +20,9 @@ set(LIB_INSTALL_DIR lib${LIB_SUFFIX})
 # The Box2D library.
 add_subdirectory(Box2D)
 
+set_property(TARGET Box2D PROPERTY CXX_STANDARD 14)
+target_compile_options(Box2D PUBLIC -Wall -std=c++14)
+
 if(BOX2D_BUILD_EXAMPLES)
   # HelloWorld console example.
   add_subdirectory(HelloWorld)
