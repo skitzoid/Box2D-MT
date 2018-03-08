@@ -1,7 +1,5 @@
 ##About
 
-[This fork aims to provide a more optimized version of Box2D-MT]
-
 Box2D-MT adds multi-threading to Erin Catto's 2D physics engine, Box2D.
 
 It has no external dependencies and is no less deterministic than Box2D.
