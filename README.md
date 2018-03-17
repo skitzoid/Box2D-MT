@@ -37,7 +37,7 @@ or contacts.
 
 A simple way of avoiding these dangers is to queue up events and process them on a single thread when the world
 is done stepping. There's no need for thread-safe data-structures or mutexes (aqcuiring a mutex in a callback can
-kill performance). You can use an array of per thread data of size b2_maxThreads, and use b2GetThreadId() to index
+kill performance <sup>[*citation needed*]</sup>). You can use an array of per thread data of size b2_maxThreads, and use b2GetThreadId() to index
 the array.
 
 A later version of Box2D-MT should provide an option to automatically defer callbacks.
