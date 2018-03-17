@@ -20,15 +20,15 @@
 #ifndef TEST_H
 #define TEST_H
 
-#include <Box2D/Box2D.h>
+#include "Box2D/Box2D.h"
 #include "DebugDraw.h"
 
 #if defined(__APPLE__)
 #include <OpenGL/gl3.h>
 #else
-#include <glew/glew.h>
+#include "glew/glew.h"
 #endif
-#include <glfw/glfw3.h>
+#include "glfw/glfw3.h"
 
 #include <stdlib.h>
 
@@ -43,7 +43,7 @@ typedef Test* TestCreateFcn();
 /// Random number in range [-1,1]
 inline float32 RandomFloat()
 {
-	float32 r = (float32)(std::rand() & (RAND_LIMIT));
+	float32 r = (float32)(rand() & (RAND_LIMIT));
 	r /= RAND_LIMIT;
 	r = 2.0f * r - 1.0f;
 	return r;
@@ -52,7 +52,7 @@ inline float32 RandomFloat()
 /// Random floating point number in range [lo, hi]
 inline float32 RandomFloat(float32 lo, float32 hi)
 {
-	float32 r = (float32)(std::rand() & (RAND_LIMIT));
+	float32 r = (float32)(rand() & (RAND_LIMIT));
 	r /= RAND_LIMIT;
 	r = (hi - lo) * r + lo;
 	return r;
@@ -118,8 +118,8 @@ extern TestEntry g_testEntries[];
 class DestructionListener : public b2DestructionListener
 {
 public:
-	void SayGoodbye(b2Fixture* fixture) { B2_NOT_USED(fixture); }
-	void SayGoodbye(b2Joint* joint);
+	void SayGoodbye(b2Fixture* fixture) override { B2_NOT_USED(fixture); }
+	void SayGoodbye(b2Joint* joint) override;
 
 	Test* test;
 };
@@ -163,10 +163,10 @@ public:
 	virtual void JointDestroyed(b2Joint* joint) { B2_NOT_USED(joint); }
 
 	// Callbacks for derived classes.
-	virtual void BeginContact(b2Contact* contact) { B2_NOT_USED(contact); }
-	virtual void EndContact(b2Contact* contact) { B2_NOT_USED(contact); }
-	virtual void PreSolve(b2Contact* contact, const b2Manifold* oldManifold);
-	virtual void PostSolve(b2Contact* contact, const b2ContactImpulse* impulse)
+	virtual void BeginContact(b2Contact* contact)  override { B2_NOT_USED(contact); }
+	virtual void EndContact(b2Contact* contact)  override { B2_NOT_USED(contact); }
+	virtual void PreSolve(b2Contact* contact, const b2Manifold* oldManifold) override;
+	virtual void PostSolve(b2Contact* contact, const b2ContactImpulse* impulse) override
 	{
 		B2_NOT_USED(contact);
 		B2_NOT_USED(impulse);

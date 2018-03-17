@@ -17,11 +17,11 @@
 * 3. This notice may not be removed or altered from any source distribution.
 */
 
-#include <Box2D/Dynamics/b2ContactManager.h>
-#include <Box2D/Dynamics/b2Body.h>
-#include <Box2D/Dynamics/b2Fixture.h>
-#include <Box2D/Dynamics/b2WorldCallbacks.h>
-#include <Box2D/Dynamics/Contacts/b2Contact.h>
+#include "Box2D/Dynamics/b2ContactManager.h"
+#include "Box2D/Dynamics/b2Body.h"
+#include "Box2D/Dynamics/b2Fixture.h"
+#include "Box2D/Dynamics/b2WorldCallbacks.h"
+#include "Box2D/Dynamics/Contacts/b2Contact.h"
 
 // TODO_JUSTIN: Settings?
 const int32 b2_initialContactCapacity = 1024;
@@ -91,10 +91,10 @@ b2ContactManager::b2ContactManager()
 : m_contactsNonTOI(b2_initialContactCapacity)
 , m_contactsTOI(b2_initialTOIContactCapacity)
 {
-	m_contactList = NULL;
+	m_contactList = nullptr;
 	m_contactFilter = &b2_defaultFilter;
 	m_contactListener = &b2_defaultListener;
-	m_allocator = NULL;
+	m_allocator = nullptr;
 	m_deferAwakenings = false;
 	m_deferDestroys = false;
 	m_deferCreates = false;
@@ -329,7 +329,7 @@ void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
 
 	// Call the factory.
 	b2Contact* c = b2Contact::Create(fixtureA, indexA, fixtureB, indexB, m_allocator);
-	if (c == NULL)
+	if (c == nullptr)
 	{
 		return;
 	}
@@ -531,9 +531,9 @@ void b2ContactManager::OnContactCreate(b2Contact* c)
 	}
 
 	// Insert into the world.
-	c->m_prev = NULL;
+	c->m_prev = nullptr;
 	c->m_next = m_contactList;
-	if (m_contactList != NULL)
+	if (m_contactList != nullptr)
 	{
 		m_contactList->m_prev = c;
 	}
@@ -544,8 +544,10 @@ void b2ContactManager::OnContactCreate(b2Contact* c)
 	// Connect to body A
 	c->m_nodeA.contact = c;
 	c->m_nodeA.other = bodyB;
+
+	c->m_nodeA.prev = nullptr;
 	c->m_nodeA.next = bodyA->m_contactList;
-	if (bodyA->m_contactList != NULL)
+	if (bodyA->m_contactList != nullptr)
 	{
 		bodyA->m_contactList->prev = &c->m_nodeA;
 	}
@@ -554,8 +556,10 @@ void b2ContactManager::OnContactCreate(b2Contact* c)
 	// Connect to body B
 	c->m_nodeB.contact = c;
 	c->m_nodeB.other = bodyA;
+
+	c->m_nodeB.prev = nullptr;
 	c->m_nodeB.next = bodyB->m_contactList;
-	if (bodyB->m_contactList != NULL)
+	if (bodyB->m_contactList != nullptr)
 	{
 		bodyB->m_contactList->prev = &c->m_nodeB;
 	}

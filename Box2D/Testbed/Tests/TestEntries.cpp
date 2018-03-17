@@ -75,6 +75,7 @@
 TestEntry g_testEntries[] =
 {
 	{"Multithread Demo", MultithreadDemo::Create },
+	{"Character Collision", CharacterCollision::Create},
 	{"Tiles", Tiles::Create},
 	{"Heavy on Light", HeavyOnLight::Create},
 	{"Heavy on Light Two", HeavyOnLightTwo::Create},
@@ -97,7 +98,6 @@ TestEntry g_testEntries[] =
 	{"Gears", Gears::Create},
 	{"Varying Restitution", VaryingRestitution::Create},
 	{"Cantilever", Cantilever::Create},
-	{"Character Collision", CharacterCollision::Create},
 	{"Edge Test", EdgeTest::Create},
 	{"Body Types", BodyTypes::Create},
 	{"Shape Editing", ShapeEditing::Create},

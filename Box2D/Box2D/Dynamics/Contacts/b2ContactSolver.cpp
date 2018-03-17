@@ -16,14 +16,15 @@
 * 3. This notice may not be removed or altered from any source distribution.
 */
 
-#include <Box2D/Dynamics/Contacts/b2ContactSolver.h>
+#include "Box2D/Dynamics/Contacts/b2ContactSolver.h"
 
-#include <Box2D/Dynamics/Contacts/b2Contact.h>
-#include <Box2D/Dynamics/b2Body.h>
-#include <Box2D/Dynamics/b2Fixture.h>
-#include <Box2D/Dynamics/b2World.h>
-#include <Box2D/Common/b2StackAllocator.h>
+#include "Box2D/Dynamics/Contacts/b2Contact.h"
+#include "Box2D/Dynamics/b2Body.h"
+#include "Box2D/Dynamics/b2Fixture.h"
+#include "Box2D/Dynamics/b2World.h"
+#include "Box2D/Common/b2StackAllocator.h"
 
+// Solver debugging is normally disabled because the block solver sometimes has to deal with a poorly conditioned effective mass matrix.
 #define B2_DEBUG_SOLVER 0
 
 bool g_blockSolve = true;
@@ -345,9 +346,9 @@ void b2ContactSolver::SolveVelocityConstraints()
 		// Solve normal constraints
 		if (pointCount == 1 || g_blockSolve == false)
 		{
-			for (int32 k = 0; k < pointCount; ++k)
+			for (int32 j = 0; j < pointCount; ++j)
 			{
-				b2VelocityConstraintPoint* vcp = vc->points + k;
+				b2VelocityConstraintPoint* vcp = vc->points + j;
 
 				// Relative velocity at contact
 				b2Vec2 dv = vB + b2Cross(wB, vcp->rB) - vA - b2Cross(wA, vcp->rA);
@@ -375,7 +376,7 @@ void b2ContactSolver::SolveVelocityConstraints()
 			// Block solver developed in collaboration with Dirk Gregorius (back in 01/07 on Box2D_Lite).
 			// Build the mini LCP for this contact patch
 			//
-			// vn = A * x + b, vn >= 0, , vn >= 0, x >= 0 and vn_i * x_i = 0 with i = 1..2
+			// vn = A * x + b, vn >= 0, x >= 0 and vn_i * x_i = 0 with i = 1..2
 			//
 			// A = J * W * JT and J = ( -n, -r1 x n, n, r2 x n )
 			// b = vn0 - velocityBias
@@ -485,7 +486,6 @@ void b2ContactSolver::SolveVelocityConstraints()
 				x.y = 0.0f;
 				vn1 = 0.0f;
 				vn2 = vc->K.ex.y * x.x + b.y;
-
 				if (x.x >= 0.0f && vn2 >= 0.0f)
 				{
 					// Get the incremental impulse

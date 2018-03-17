@@ -17,9 +17,9 @@
 * 3. This notice may not be removed or altered from any source distribution.
 */
 
-#include <Box2D/Dynamics/Joints/b2PrismaticJoint.h>
-#include <Box2D/Dynamics/b2Body.h>
-#include <Box2D/Dynamics/b2TimeStep.h>
+#include "Box2D/Dynamics/Joints/b2PrismaticJoint.h"
+#include "Box2D/Dynamics/b2Body.h"
+#include "Box2D/Dynamics/b2TimeStep.h"
 
 // Linear constraint (point-to-line)
 // d = p2 - p1 = x2 + r2 - x1 - r1
@@ -174,9 +174,6 @@ void b2PrismaticJoint::InitVelocityConstraints(const b2SolverData& data)
 
 		m_s1 = b2Cross(d + rA, m_perp);
 		m_s2 = b2Cross(rB, m_perp);
-
-        float32 s1test;
-        s1test = b2Cross(rA, m_perp);
 
 		float32 k11 = mA + mB + iA * m_s1 * m_s1 + iB * m_s2 * m_s2;
 		float32 k12 = iA * m_s1 + iB * m_s2;
@@ -361,6 +358,13 @@ void b2PrismaticJoint::SolveVelocityConstraints(const b2SolverData& data)
 	data.velocities[m_indexB].w = wB;
 }
 
+// A velocity based solver computes reaction forces(impulses) using the velocity constraint solver.Under this context,
+// the position solver is not there to resolve forces.It is only there to cope with integration error.
+//
+// Therefore, the pseudo impulses in the position solver do not have any physical meaning.Thus it is okay if they suck.
+//
+// We could take the active state from the velocity solver.However, the joint might push past the limit when the velocity
+// solver indicates the limit is inactive.
 bool b2PrismaticJoint::SolvePositionConstraints(const b2SolverData& data)
 {
 	b2Vec2 cA = data.positions[m_indexA].c;
@@ -583,23 +587,32 @@ bool b2PrismaticJoint::IsMotorEnabled() const
 
 void b2PrismaticJoint::EnableMotor(bool flag)
 {
-	m_bodyA->SetAwake(true);
-	m_bodyB->SetAwake(true);
-	m_enableMotor = flag;
+	if (flag != m_enableMotor)
+	{
+		m_bodyA->SetAwake(true);
+		m_bodyB->SetAwake(true);
+		m_enableMotor = flag;
+	}
 }
 
 void b2PrismaticJoint::SetMotorSpeed(float32 speed)
 {
-	m_bodyA->SetAwake(true);
-	m_bodyB->SetAwake(true);
-	m_motorSpeed = speed;
+	if (speed != m_motorSpeed)
+	{
+		m_bodyA->SetAwake(true);
+		m_bodyB->SetAwake(true);
+		m_motorSpeed = speed;
+	}
 }
 
 void b2PrismaticJoint::SetMaxMotorForce(float32 force)
 {
-	m_bodyA->SetAwake(true);
-	m_bodyB->SetAwake(true);
-	m_maxMotorForce = force;
+	if (force != m_maxMotorForce)
+	{
+		m_bodyA->SetAwake(true);
+		m_bodyB->SetAwake(true);
+		m_maxMotorForce = force;
+	}
 }
 
 float32 b2PrismaticJoint::GetMotorForce(float32 inv_dt) const

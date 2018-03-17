@@ -17,22 +17,22 @@
 * 3. This notice may not be removed or altered from any source distribution.
 */
 
-#include <Box2D/Dynamics/b2World.h>
-#include <Box2D/Dynamics/b2Body.h>
-#include <Box2D/Dynamics/b2Fixture.h>
-#include <Box2D/Dynamics/b2Island.h>
-#include <Box2D/Dynamics/Joints/b2PulleyJoint.h>
-#include <Box2D/Dynamics/Contacts/b2Contact.h>
-#include <Box2D/Dynamics/Contacts/b2ContactSolver.h>
-#include <Box2D/Collision/b2Collision.h>
-#include <Box2D/Collision/b2BroadPhase.h>
-#include <Box2D/Collision/Shapes/b2CircleShape.h>
-#include <Box2D/Collision/Shapes/b2EdgeShape.h>
-#include <Box2D/Collision/Shapes/b2ChainShape.h>
-#include <Box2D/Collision/Shapes/b2PolygonShape.h>
-#include <Box2D/Collision/b2TimeOfImpact.h>
-#include <Box2D/Common/b2Draw.h>
-#include <Box2D/Common/b2Timer.h>
+#include "Box2D/Dynamics/b2World.h"
+#include "Box2D/Dynamics/b2Body.h"
+#include "Box2D/Dynamics/b2Fixture.h"
+#include "Box2D/Dynamics/b2Island.h"
+#include "Box2D/Dynamics/Joints/b2PulleyJoint.h"
+#include "Box2D/Dynamics/Contacts/b2Contact.h"
+#include "Box2D/Dynamics/Contacts/b2ContactSolver.h"
+#include "Box2D/Collision/b2Collision.h"
+#include "Box2D/Collision/b2BroadPhase.h"
+#include "Box2D/Collision/Shapes/b2CircleShape.h"
+#include "Box2D/Collision/Shapes/b2EdgeShape.h"
+#include "Box2D/Collision/Shapes/b2ChainShape.h"
+#include "Box2D/Collision/Shapes/b2PolygonShape.h"
+#include "Box2D/Collision/b2TimeOfImpact.h"
+#include "Box2D/Common/b2Draw.h"
+#include "Box2D/Common/b2Timer.h"
 #include <Box2D/Common/b2Threading.h>
 #include <new>
 
@@ -156,11 +156,11 @@ b2World::b2World(const b2Vec2& gravity, b2ThreadPool* threadPool)
 : m_nonStaticBodies(b2_initialNonStaticBodiesCapacity)
 , m_staticBodies(b2_initialStaticBodiesCapacity)
 {
-	m_destructionListener = NULL;
-	g_debugDraw = NULL;
+	m_destructionListener = nullptr;
+	g_debugDraw = nullptr;
 
-	m_bodyList = NULL;
-	m_jointList = NULL;
+	m_bodyList = nullptr;
+	m_jointList = nullptr;
 
 	m_bodyCount = 0;
 	m_jointCount = 0;
@@ -242,14 +242,14 @@ b2Body* b2World::CreateBody(const b2BodyDef* def)
 	b2Assert(IsLocked() == false);
 	if (IsLocked())
 	{
-		return NULL;
+		return nullptr;
 	}
 
 	void* mem = m_blockAllocator.Allocate(sizeof(b2Body));
 	b2Body* b = new (mem) b2Body(def, this);
 
 	// Add to world doubly linked list.
-	b->m_prev = NULL;
+	b->m_prev = nullptr;
 	b->m_next = m_bodyList;
 	if (m_bodyList)
 	{
@@ -298,7 +298,7 @@ void b2World::DestroyBody(b2Body* b)
 
 		b->m_jointList = je;
 	}
-	b->m_jointList = NULL;
+	b->m_jointList = nullptr;
 
 	// Delete the attached contacts.
 	b2ContactEdge* ce = b->m_contactList;
@@ -308,7 +308,7 @@ void b2World::DestroyBody(b2Body* b)
 		ce = ce->next;
 		m_contactManager.Destroy(ce0->contact);
 	}
-	b->m_contactList = NULL;
+	b->m_contactList = nullptr;
 
 	// Delete the attached fixtures. This destroys broad-phase proxies.
 	b2Fixture* f = b->m_fixtureList;
@@ -330,7 +330,7 @@ void b2World::DestroyBody(b2Body* b)
 		b->m_fixtureList = f;
 		b->m_fixtureCount -= 1;
 	}
-	b->m_fixtureList = NULL;
+	b->m_fixtureList = nullptr;
 	b->m_fixtureCount = 0;
 
 	// Remove world body list.
@@ -372,13 +372,13 @@ b2Joint* b2World::CreateJoint(const b2JointDef* def)
 	b2Assert(IsLocked() == false);
 	if (IsLocked())
 	{
-		return NULL;
+		return nullptr;
 	}
 
 	b2Joint* j = b2Joint::Create(def, &m_blockAllocator);
 
 	// Connect to the world list.
-	j->m_prev = NULL;
+	j->m_prev = nullptr;
 	j->m_next = m_jointList;
 	if (m_jointList)
 	{
@@ -390,14 +390,14 @@ b2Joint* b2World::CreateJoint(const b2JointDef* def)
 	// Connect to the bodies' doubly linked lists.
 	j->m_edgeA.joint = j;
 	j->m_edgeA.other = j->m_bodyB;
-	j->m_edgeA.prev = NULL;
+	j->m_edgeA.prev = nullptr;
 	j->m_edgeA.next = j->m_bodyA->m_jointList;
 	if (j->m_bodyA->m_jointList) j->m_bodyA->m_jointList->prev = &j->m_edgeA;
 	j->m_bodyA->m_jointList = &j->m_edgeA;
 
 	j->m_edgeB.joint = j;
 	j->m_edgeB.other = j->m_bodyA;
-	j->m_edgeB.prev = NULL;
+	j->m_edgeB.prev = nullptr;
 	j->m_edgeB.next = j->m_bodyB->m_jointList;
 	if (j->m_bodyB->m_jointList) j->m_bodyB->m_jointList->prev = &j->m_edgeB;
 	j->m_bodyB->m_jointList = &j->m_edgeB;
@@ -477,8 +477,8 @@ void b2World::DestroyJoint(b2Joint* j)
 		bodyA->m_jointList = j->m_edgeA.next;
 	}
 
-	j->m_edgeA.prev = NULL;
-	j->m_edgeA.next = NULL;
+	j->m_edgeA.prev = nullptr;
+	j->m_edgeA.next = nullptr;
 
 	// Remove from body 2
 	if (j->m_edgeB.prev)
@@ -496,8 +496,8 @@ void b2World::DestroyJoint(b2Joint* j)
 		bodyB->m_jointList = j->m_edgeB.next;
 	}
 
-	j->m_edgeB.prev = NULL;
-	j->m_edgeB.next = NULL;
+	j->m_edgeB.prev = nullptr;
+	j->m_edgeB.next = nullptr;
 
 	b2Joint::Destroy(j, &m_blockAllocator);
 
@@ -599,8 +599,8 @@ void b2World::Solve(const b2TimeStep& step)
 			b2Assert(b->IsActive() == true);
 			island.Add(b);
 
-			// Make sure the body is awake.
-			b->SetAwake(true);
+			// Make sure the body is awake (without resetting sleep timer).
+			b->m_flags |= b2Body::e_awakeFlag;
 
 			// To keep islands as small as possible, we don't
 			// propagate islands across static bodies.
@@ -760,7 +760,7 @@ void b2World::SolveTOI(const b2TimeStep& step)
 	for (;;)
 	{
 		// Find the first TOI.
-		b2Contact* minContact = NULL;
+		b2Contact* minContact = nullptr;
 		float32 minAlpha = 1.0f;
 
 		for (int32 i = 0; i < m_contactManager.m_contactsTOI.GetCount(); ++i)
@@ -875,7 +875,7 @@ void b2World::SolveTOI(const b2TimeStep& step)
 			}
 		}
 
-		if (minContact == NULL || 1.0f - 10.0f * b2_epsilon < minAlpha)
+		if (minContact == nullptr || 1.0f - 10.0f * b2_epsilon < minAlpha)
 		{
 			// No more TOI events. Done!
 			m_stepComplete = true;
@@ -1658,13 +1658,31 @@ void b2World::DrawShape(b2Fixture* fixture, const b2Transform& xf, const b2Color
 			int32 count = chain->m_count;
 			const b2Vec2* vertices = chain->m_vertices;
 
+			b2Color ghostColor(0.75f * color.r, 0.75f * color.g, 0.75f * color.b, color.a);
+
 			b2Vec2 v1 = b2Mul(xf, vertices[0]);
+			g_debugDraw->DrawPoint(v1, 4.0f, color);
+
+			if (chain->m_hasPrevVertex)
+			{
+				b2Vec2 vp = b2Mul(xf, chain->m_prevVertex);
+				g_debugDraw->DrawSegment(vp, v1, ghostColor);
+				g_debugDraw->DrawCircle(vp, 0.1f, ghostColor);
+			}
+
 			for (int32 i = 1; i < count; ++i)
 			{
 				b2Vec2 v2 = b2Mul(xf, vertices[i]);
 				g_debugDraw->DrawSegment(v1, v2, color);
-				g_debugDraw->DrawCircle(v1, 0.05f, color);
+				g_debugDraw->DrawPoint(v2, 4.0f, color);
 				v1 = v2;
+			}
+
+			if (chain->m_hasNextVertex)
+			{
+				b2Vec2 vn = b2Mul(xf, chain->m_nextVertex);
+				g_debugDraw->DrawSegment(v1, vn, ghostColor);
+				g_debugDraw->DrawCircle(vn, 0.1f, ghostColor);
 			}
 		}
 		break;
@@ -1733,7 +1751,7 @@ void b2World::DrawJoint(b2Joint* joint)
 
 void b2World::DrawDebugData()
 {
-	if (g_debugDraw == NULL)
+	if (g_debugDraw == nullptr)
 	{
 		return;
 	}
@@ -1933,6 +1951,6 @@ void b2World::Dump()
 
 	b2Log("b2Free(joints);\n");
 	b2Log("b2Free(bodies);\n");
-	b2Log("joints = NULL;\n");
-	b2Log("bodies = NULL;\n");
+	b2Log("joints = nullptr;\n");
+	b2Log("bodies = nullptr;\n");
 }

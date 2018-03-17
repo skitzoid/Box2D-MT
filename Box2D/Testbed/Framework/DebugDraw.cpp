@@ -21,14 +21,14 @@
 #if defined(__APPLE_CC__)
 #include <OpenGL/gl3.h>
 #else
-#include <glew/glew.h>
+#include "glew/glew.h"
 #endif
 
-#include <glfw/glfw3.h>
+#include "glfw/glfw3.h"
 #include <stdio.h>
 #include <stdarg.h>
 
-#include "RenderGL3.h"
+#include "imgui/imgui.h"
 
 #define BUFFER_OFFSET(x)  ((const void*) (x))
 
@@ -197,7 +197,7 @@ struct GLRenderPoints
 	void Create()
 	{
 		const char* vs = \
-        "#version 400\n"
+        "#version 330\n"
         "uniform mat4 projectionMatrix;\n"
         "layout(location = 0) in vec2 v_position;\n"
         "layout(location = 1) in vec4 v_color;\n"
@@ -211,7 +211,7 @@ struct GLRenderPoints
         "}\n";
         
 		const char* fs = \
-        "#version 400\n"
+        "#version 330\n"
         "in vec4 f_color;\n"
         "out vec4 color;\n"
         "void main(void)\n"
@@ -341,7 +341,7 @@ struct GLRenderLines
 	void Create()
 	{
 		const char* vs = \
-        "#version 400\n"
+        "#version 330\n"
         "uniform mat4 projectionMatrix;\n"
         "layout(location = 0) in vec2 v_position;\n"
         "layout(location = 1) in vec4 v_color;\n"
@@ -353,7 +353,7 @@ struct GLRenderLines
         "}\n";
         
 		const char* fs = \
-        "#version 400\n"
+        "#version 330\n"
         "in vec4 f_color;\n"
         "out vec4 color;\n"
         "void main(void)\n"
@@ -469,7 +469,7 @@ struct GLRenderTriangles
 	void Create()
 	{
 		const char* vs = \
-			"#version 400\n"
+			"#version 330\n"
 			"uniform mat4 projectionMatrix;\n"
 			"layout(location = 0) in vec2 v_position;\n"
 			"layout(location = 1) in vec4 v_color;\n"
@@ -481,7 +481,7 @@ struct GLRenderTriangles
 			"}\n";
 
 		const char* fs = \
-			"#version 400\n"
+			"#version 330\n"
 			"in vec4 f_color;\n"
             "out vec4 color;\n"
 			"void main(void)\n"
@@ -764,40 +764,39 @@ void DebugDraw::DrawTransform(const b2Transform& xf)
 	m_lines->Vertex(p2, green);
 }
 
+//
 void DebugDraw::DrawPoint(const b2Vec2& p, float32 size, const b2Color& color)
 {
     m_points->Vertex(p, color, size);
 }
 
+//
 void DebugDraw::DrawString(int x, int y, const char *string, ...)
 {
-	float32 h = float32(g_camera.m_height);
-
-	char buffer[128];
-
 	va_list arg;
 	va_start(arg, string);
-	vsprintf(buffer, string, arg);
+	ImGui::Begin("Overlay", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar);
+	ImGui::SetCursorPos(b2Vec2(float(x), float(y)));
+	ImGui::TextColoredV(ImColor(230, 153, 153, 255), string, arg);
+	ImGui::End();
 	va_end(arg);
-
-	AddGfxCmdText(float(x), h - float(y), TEXT_ALIGN_LEFT, buffer, SetRGBA(230, 153, 153, 255));
 }
 
+//
 void DebugDraw::DrawString(const b2Vec2& pw, const char *string, ...)
 {
 	b2Vec2 ps = g_camera.ConvertWorldToScreen(pw);
-	float32 h = float32(g_camera.m_height);
-
-	char buffer[128];
 
 	va_list arg;
 	va_start(arg, string);
-	vsprintf(buffer, string, arg);
+	ImGui::Begin("Overlay", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar);
+	ImGui::SetCursorPos(ps);
+	ImGui::TextColoredV(ImColor(230, 153, 153, 255), string, arg);
+	ImGui::End();
 	va_end(arg);
-
-	AddGfxCmdText(ps.x, h - ps.y, TEXT_ALIGN_LEFT, buffer, SetRGBA(230, 153, 153, 255));
 }
 
+//
 void DebugDraw::DrawAABB(b2AABB* aabb, const b2Color& c)
 {
     b2Vec2 p1 = aabb->lowerBound;

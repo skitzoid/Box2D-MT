@@ -20,7 +20,7 @@
 #ifndef B2_CONTACT_MANAGER_H
 #define B2_CONTACT_MANAGER_H
 
-#include <Box2D/Collision/b2BroadPhase.h>
+#include "Box2D/Collision/b2BroadPhase.h"
 #include <Box2D/Common/b2GrowableArray.h>
 
 class b2Contact;

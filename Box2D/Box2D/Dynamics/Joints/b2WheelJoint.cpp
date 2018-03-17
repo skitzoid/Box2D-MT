@@ -17,9 +17,9 @@
 * 3. This notice may not be removed or altered from any source distribution.
 */
 
-#include <Box2D/Dynamics/Joints/b2WheelJoint.h>
-#include <Box2D/Dynamics/b2Body.h>
-#include <Box2D/Dynamics/b2TimeStep.h>
+#include "Box2D/Dynamics/Joints/b2WheelJoint.h"
+#include "Box2D/Dynamics/b2Body.h"
+#include "Box2D/Dynamics/b2TimeStep.h"
 
 // Linear constraint (point-to-line)
 // d = pB - pA = xB + rB - xA - rA
@@ -142,14 +142,14 @@ void b2WheelJoint::InitVelocityConstraints(const b2SolverData& data)
 			float32 omega = 2.0f * b2_pi * m_frequencyHz;
 
 			// Damping coefficient
-			float32 dc = 2.0f * m_springMass * m_dampingRatio * omega;
+			float32 damp = 2.0f * m_springMass * m_dampingRatio * omega;
 
 			// Spring stiffness
 			float32 k = m_springMass * omega * omega;
 
 			// magic formulas
 			float32 h = data.step.dt;
-			m_gamma = h * (dc + h * k);
+			m_gamma = h * (damp + h * k);
 			if (m_gamma > 0.0f)
 			{
 				m_gamma = 1.0f / m_gamma;
@@ -361,7 +361,35 @@ float32 b2WheelJoint::GetJointTranslation() const
 	return translation;
 }
 
-float32 b2WheelJoint::GetJointSpeed() const
+float32 b2WheelJoint::GetJointLinearSpeed() const
+{
+	b2Body* bA = m_bodyA;
+	b2Body* bB = m_bodyB;
+
+	b2Vec2 rA = b2Mul(bA->m_xf.q, m_localAnchorA - bA->m_sweep.localCenter);
+	b2Vec2 rB = b2Mul(bB->m_xf.q, m_localAnchorB - bB->m_sweep.localCenter);
+	b2Vec2 p1 = bA->m_sweep.c + rA;
+	b2Vec2 p2 = bB->m_sweep.c + rB;
+	b2Vec2 d = p2 - p1;
+	b2Vec2 axis = b2Mul(bA->m_xf.q, m_localXAxisA);
+
+	b2Vec2 vA = bA->m_linearVelocity;
+	b2Vec2 vB = bB->m_linearVelocity;
+	float32 wA = bA->m_angularVelocity;
+	float32 wB = bB->m_angularVelocity;
+
+	float32 speed = b2Dot(d, b2Cross(wA, axis)) + b2Dot(axis, vB + b2Cross(wB, rB) - vA - b2Cross(wA, rA));
+	return speed;
+}
+
+float32 b2WheelJoint::GetJointAngle() const
+{
+	b2Body* bA = m_bodyA;
+	b2Body* bB = m_bodyB;
+	return bB->m_sweep.a - bA->m_sweep.a;
+}
+
+float32 b2WheelJoint::GetJointAngularSpeed() const
 {
 	float32 wA = m_bodyA->m_angularVelocity;
 	float32 wB = m_bodyB->m_angularVelocity;
@@ -375,23 +403,32 @@ bool b2WheelJoint::IsMotorEnabled() const
 
 void b2WheelJoint::EnableMotor(bool flag)
 {
-	m_bodyA->SetAwake(true);
-	m_bodyB->SetAwake(true);
-	m_enableMotor = flag;
+	if (flag != m_enableMotor)
+	{
+		m_bodyA->SetAwake(true);
+		m_bodyB->SetAwake(true);
+		m_enableMotor = flag;
+	}
 }
 
 void b2WheelJoint::SetMotorSpeed(float32 speed)
 {
-	m_bodyA->SetAwake(true);
-	m_bodyB->SetAwake(true);
-	m_motorSpeed = speed;
+	if (speed != m_motorSpeed)
+	{
+		m_bodyA->SetAwake(true);
+		m_bodyB->SetAwake(true);
+		m_motorSpeed = speed;
+	}
 }
 
 void b2WheelJoint::SetMaxMotorTorque(float32 torque)
 {
-	m_bodyA->SetAwake(true);
-	m_bodyB->SetAwake(true);
-	m_maxMotorTorque = torque;
+	if (torque != m_maxMotorTorque)
+	{
+		m_bodyA->SetAwake(true);
+		m_bodyB->SetAwake(true);
+		m_maxMotorTorque = torque;
+	}
 }
 
 float32 b2WheelJoint::GetMotorTorque(float32 inv_dt) const
