@@ -17,7 +17,7 @@ b2World world(gravity, &tp);
 Now when you step the world, the work will be split among all of your cpu's cores.
 The thread pool must remain in scope until the world is destroyed.
 
-Now if you were doing anything interesting in your callbacks, things probably got a little crashy. This is discussed below.
+If you were doing anything interesting in your callbacks, things probably got a little crashy. This is discussed below.
 
 # Callback Thread-Safety
 Box2D uses various callback functions to let the user respond to events. In Box2D-MT, some of these functions
