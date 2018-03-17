@@ -25,13 +25,13 @@ are called from multiple threads at the same time, so your callback implementati
 
 Here are some guidelines for relevant callbacks (these are a work in progress and probably not 100% accurate):
 
-b2ContactFilter::ShouldCollide: Treat all bodies and joints as read-only. Don't access any contacts.
+**b2ContactFilter::ShouldCollide**: Treat all bodies and joints as read-only. Don't access any contacts.
 
-b2ContactListener::BeginContact, b2ContactListener::EndContact, b2ContactListener::Presolve:
+**b2ContactListener::BeginContact, b2ContactListener::EndContact, b2ContactListener::Presolve**:
 Treat all bodies and joints as read-only. The provided contact is safe for reads and writes. Don't access any
 other contacts.
 
-b2ContactListener::PostSolve: The provided contact is safe for reads and writes. A dynamic body that is part of
+**b2ContactListener::PostSolve**: The provided contact is safe for reads and writes. A dynamic body that is part of
 the provided contact is safe for reads and writes, except for the body's flags, which are read-only. Joints
 attached to the dynamic body are safe for reads and writes. A static body that is part of the provided contact
 is read-only, except for it's flags, which must not be accessed at all. Don't access any other bodies, joints,
