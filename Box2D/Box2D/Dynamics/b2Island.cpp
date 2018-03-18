@@ -146,6 +146,11 @@ This might be faster than computing sin+cos.
 However, we can compute sin+cos of the same angle fast.
 */
 
+b2Island::b2Island()
+{
+    m_allocator = nullptr;
+}
+
 b2Island::b2Island(
 	int32 bodyCapacity,
 	int32 contactCapacity,
@@ -189,7 +194,7 @@ b2Island::b2Island(
 	m_contactCount = contactCount;
 	m_jointCount = jointCount;
 
-	m_allocator = NULL;
+	m_allocator = nullptr;
 	m_listener = listener;
 
 	m_bodies = bodies;

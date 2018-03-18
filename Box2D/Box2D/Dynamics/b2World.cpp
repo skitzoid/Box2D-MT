@@ -42,21 +42,37 @@ const int32 b2_initialStaticBodiesCapacity = 16;
 class b2SolveTask : public b2Task
 {
 public:
-	b2SolveTask(int32 bodyCount, int32 contactCount, int32 jointCount,
-		b2Body** bodies, b2Contact** contacts, b2Joint** joints,
-		b2Velocity* velocities, b2Position* positions, b2ContactListener* listener,
-		const b2TimeStep& timestep, b2Vec2 gravity, bool allowSleep,
-		b2SolveTask* next)
-		: m_island(bodyCount, contactCount, jointCount,
-		bodies, contacts, joints,
-		velocities, positions, listener)
-	{
-		m_timestep = &timestep;
-		m_gravity = gravity;
-		m_allowSleep = allowSleep;
-		m_next = next;
-		SetCost(b2GetIslandCost(bodyCount, contactCount, jointCount));
-	}
+    b2SolveTask(b2ContactListener* listener, const b2TimeStep& timestep,
+        b2Vec2 gravity, bool allowSleep, b2SolveTask* next)
+    {
+        m_contactListener = listener;
+        m_timestep = &timestep;
+        m_gravity = gravity;
+        m_allowSleep = allowSleep;
+        m_next = next;
+        m_islandCount = 0;
+        m_bodyCount = 0;
+        m_contactCount = 0;
+        m_jointCount = 0;
+    }
+
+    void AddIsland(int32 bodyCount, int32 contactCount, int32 jointCount,
+        b2Body** bodies, b2Contact** contacts, b2Joint** joints,
+        b2Velocity* velocities, b2Position* positions)
+    {
+        m_islands[m_islandCount++] = b2Island(
+            bodyCount, contactCount, jointCount,
+            bodies, contacts, joints,
+            velocities, positions, m_contactListener);
+
+        m_bodyCount += bodyCount;
+        m_contactCount += contactCount;
+        m_jointCount += jointCount;
+
+        SetCost(b2GetIslandCost(m_bodyCount, m_contactCount, m_jointCount));
+    }
+
+    int32 GetBodyCount() const { return m_bodyCount; }
 
 	b2SolveTask* GetNext() { return m_next; }
 
@@ -66,22 +82,32 @@ private:
 
 	virtual void Execute(b2StackAllocator& allocator) /* override */
 	{
-		// Set the allocator.
-		m_island.m_allocator = &allocator;
+        for (int32 islandIndex = 0; islandIndex < m_islandCount; ++islandIndex)
+        {
+            b2Island& island = m_islands[islandIndex];
 
-		// Set the per-thread island indices.
-		for (int32 i = 0; i < m_island.m_bodyCount; ++i)
-		{
-			m_island.m_bodies[i]->SetIslandIndex(i);
-		}
+            // Set the allocator.
+            island.m_allocator = &allocator;
 
-		m_island.Solve(&m_profile, *m_timestep, m_gravity, m_allowSleep);
+            // Set the per-thread island indices.
+            for (int32 i = 0; i < island.m_bodyCount; ++i)
+            {
+                island.m_bodies[i]->SetIslandIndex(i);
+            }
 
-		// Unset the allocator.
-		m_island.m_allocator = NULL;
+            island.Solve(&m_profile, *m_timestep, m_gravity, m_allowSleep);
+
+            // Unset the allocator.
+            island.m_allocator = NULL;
+        }
 	}
 
-	b2Island m_island;
+	b2Island m_islands[b2_solveBatchTargetBodyCount];
+    int32 m_islandCount;
+    int32 m_bodyCount;
+    int32 m_contactCount;
+    int32 m_jointCount;
+    b2ContactListener* m_contactListener;
 	const b2TimeStep* m_timestep;
 	b2Vec2 m_gravity;
 	bool m_allowSleep;
@@ -1193,6 +1219,7 @@ void b2World::SolveMT(const b2TimeStep& step)
 	// Build and simulate all awake islands.
 	int32 stackSize = m_bodyCount;
 	b2Body** stack = (b2Body**)m_stackAllocator.Allocate(stackSize * sizeof(b2Body*));
+    b2SolveTask* currSolveTask = nullptr;
 	for (int32 i = 0; i < m_nonStaticBodies.GetCount(); ++i)
 	{
 		b2Body* seed = m_nonStaticBodies.At(i);
@@ -1221,9 +1248,6 @@ void b2World::SolveMT(const b2TimeStep& step)
 			b2Body* b = stack[--stackCount];
 			b2Assert(b->IsActive() == true);
 			bodies[bodyCount++] = b;
-
-			// Make sure the body is awake.
-			b->SetAwake(true);
 
 			// To keep islands as small as possible, we don't
 			// propagate islands across static bodies.
@@ -1315,56 +1339,49 @@ void b2World::SolveMT(const b2TimeStep& step)
 			}
 		}
 
-		if (b2GetIslandCost(bodyCount, contactCount, jointCount) >= b2_minIslandCost)
+        if (currSolveTask == nullptr)
+        {
+            currSolveTask = (b2SolveTask*)m_blockAllocator.Allocate(sizeof(b2SolveTask));
+            new(currSolveTask)b2SolveTask(m_contactManager.m_contactListener,
+                step, m_gravity, m_allowSleep, solveTaskList);
+
+            solveTaskList = currSolveTask;
+        }
+
+        currSolveTask->AddIsland(bodyCount, contactCount, jointCount,
+            bodies, contacts, joints, velocities, positions);
+
+        bodies += bodyCount;
+        contacts += contactCount;
+        joints += jointCount;
+        velocities += bodyCount;
+        positions += bodyCount;
+
+        allBodiesCount += bodyCount;
+        allContactsCount += contactCount;
+        allJointsCount += jointCount;
+
+        bodyCount = 0;
+        contactCount = 0;
+        jointCount = 0;
+
+        b2Assert(allBodiesCount <= allBodiesCapacity);
+        b2Assert(allContactsCount <= allContactsCapacity);
+        b2Assert(allJointsCount <= allJointsCapacity);
+
+		if (currSolveTask->GetCost() >= b2_solveBatchTargetCost ||
+            currSolveTask->GetBodyCount() >= b2_solveBatchTargetBodyCount)
 		{
-			b2SolveTask* task = (b2SolveTask*)m_blockAllocator.Allocate(sizeof(b2SolveTask));
-			new(task)b2SolveTask(bodyCount, contactCount, jointCount,
-				bodies, contacts, joints, velocities, positions,
-				m_contactManager.m_contactListener,
-				step, m_gravity, m_allowSleep, solveTaskList);
-			solveTaskList = task;
-
-			bodies += bodyCount;
-			contacts += contactCount;
-			joints += jointCount;
-			velocities += bodyCount;
-			positions += bodyCount;
-
-			allBodiesCount += bodyCount;
-			allContactsCount += contactCount;
-			allJointsCount += jointCount;
-
-			bodyCount = 0;
-			contactCount = 0;
-			jointCount = 0;
-
-			b2Assert(allBodiesCount <= allBodiesCapacity);
-			b2Assert(allContactsCount <= allContactsCapacity);
-			b2Assert(allJointsCount <= allJointsCapacity);
-
-			solveGroup.SubmitTask(task);
+			solveGroup.SubmitTask(currSolveTask);
+            currSolveTask = nullptr;
 		}
 	}
 
 	// Pick up stragglers.
-	if (bodyCount > 0)
+	if (currSolveTask != nullptr)
 	{
-		b2SolveTask* task = (b2SolveTask*)m_blockAllocator.Allocate(sizeof(b2SolveTask));
-		new(task)b2SolveTask(bodyCount, contactCount, jointCount,
-			bodies, contacts, joints, velocities, positions,
-			m_contactManager.m_contactListener,
-			step, m_gravity, m_allowSleep, solveTaskList);
-		solveTaskList = task;
-
-		allBodiesCount += bodyCount;
-		allContactsCount += contactCount;
-		allJointsCount += jointCount;
-
-		b2Assert(allBodiesCount <= allBodiesCapacity);
-		b2Assert(allContactsCount <= allContactsCapacity);
-		b2Assert(allJointsCount <= allJointsCapacity);
-
-		solveGroup.SubmitTask(task);
+        solveGroup.SubmitTask(currSolveTask);
+        currSolveTask = nullptr;
 	}
 
 	m_profile.solveTraversal += traversalTimer.GetMilliseconds();
