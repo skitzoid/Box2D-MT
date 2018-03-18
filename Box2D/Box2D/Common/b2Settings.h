@@ -150,8 +150,11 @@ typedef double float64;
 /// The maximum number of threads.
 #define b2_maxThreads				(b2_maxThreadPoolThreads + 1)
 
-/// How much does an island need to cost before the world stops adding bodies to it?
-#define b2_minIslandCost			100
+/// The world may continue gathering bodies for solving until this estimated cost is reached.
+#define b2_solveBatchTargetCost         100
+
+/// The world may continue gathering bodies for solving until it gathers this many.
+#define b2_solveBatchTargetBodyCount    16
 
 /// Get the estimated cost of solving an island with the specified attributes
 int32 b2GetIslandCost(int32 bodyCount, int32 contactCount, int32 jointCount);
