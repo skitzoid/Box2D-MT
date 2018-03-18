@@ -114,7 +114,7 @@ class b2ThreadPool
 public:
 	/// Construct a thread pool.
 	/// @param threadCount the number of threads to use. If -1, defaults to the number of logical cores - 1.
-	b2ThreadPool(int32 threadCount = -1);
+	explicit b2ThreadPool(int32 threadCount = -1);
 
 	~b2ThreadPool();
 
