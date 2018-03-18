@@ -1222,9 +1222,6 @@ void b2World::SolveMT(const b2TimeStep& step)
 			b2Assert(b->IsActive() == true);
 			bodies[bodyCount++] = b;
 
-			// Make sure the body is awake.
-			b->SetAwake(true);
-
 			// To keep islands as small as possible, we don't
 			// propagate islands across static bodies.
 			if (b->GetType() == b2_staticBody)
