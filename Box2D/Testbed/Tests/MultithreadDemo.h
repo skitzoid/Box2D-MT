@@ -119,8 +119,8 @@ public:
 			++m_count;
 		}
 
-		if (m_slider->GetJointSpeed() > 0 && m_slider->GetJointTranslation() >= m_slider->GetUpperLimit() - b2_epsilon ||
-			m_slider->GetJointSpeed() < 0 && m_slider->GetJointTranslation() <= m_slider->GetLowerLimit() + b2_epsilon)
+		if ((m_slider->GetJointSpeed() > 0 && m_slider->GetJointTranslation() >= m_slider->GetUpperLimit() - b2_epsilon) ||
+			(m_slider->GetJointSpeed() < 0 && m_slider->GetJointTranslation() <= m_slider->GetLowerLimit() + b2_epsilon))
 		{
 			m_slider->SetMotorSpeed(-m_slider->GetMotorSpeed());
 		}
