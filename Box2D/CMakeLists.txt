@@ -12,8 +12,9 @@ set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR}/dist/lib)
 # The following folder will be included
 include_directories("${PROJECT_SOURCE_DIR}")
 
-file(GLOB_RECURSE sources	Box2D/*.h)
+file(GLOB_RECURSE headers	Box2D/*.h)
 file(GLOB_RECURSE sources 	Box2D/*.cpp)
+list(APPEND sources ${headers})
 
 add_library(Box2D ${sources})
 
@@ -27,4 +28,8 @@ ADD_CUSTOM_COMMAND(
     POST_BUILD
     COMMAND rsync -qalW --del --include '*.h' --exclude '*.a' --exclude '*.cpp' --exclude '*.c' ${CMAKE_SOURCE_DIR}/Box2D/ ${CMAKE_BINARY_DIR}/dist/include/
 )
+
+install (TARGETS Box2D DESTINATION lib)
+install (FILES ${headers} DESTINATION include/Box2D)
+
 
