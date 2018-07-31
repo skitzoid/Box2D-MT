@@ -29,7 +29,8 @@ ADD_CUSTOM_COMMAND(
     COMMAND rsync -qalW --del --include '*.h' --exclude '*.a' --exclude '*.cpp' --exclude '*.c' ${CMAKE_SOURCE_DIR}/Box2D/ ${CMAKE_BINARY_DIR}/dist/include/
 )
 
-install (TARGETS Box2D DESTINATION lib)
-install (FILES ${headers} DESTINATION include/Box2D)
-
+install ( TARGETS Box2D DESTINATION lib )
+install ( DIRECTORY ${CMAKE_BINARY_DIR}/dist/include/
+	  DESTINATION include/Box2D
+	  FILES_MATCHING PATTERN "*.h*" )
 

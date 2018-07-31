@@ -19,6 +19,8 @@ cd ..
 
 if [ $RESULT -eq 0 ]; then
 	printf "\n Success. Your files are in ./build/dist\n\n"
+	printf "\n Installing... \n\n"
+	make -C build install
 	exit 0
 else
 	printf "\n Errors encountered. \n\n"
