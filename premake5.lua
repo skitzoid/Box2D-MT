@@ -37,6 +37,8 @@ project 'HelloWorld'
 	files { 'HelloWorld/HelloWorld.cpp' }
 	includedirs { '.' }
 	links { 'Box2D' }
+    filter { 'system:linux' }
+	links { 'pthread' }
 
 project 'Testbed'
 	kind 'ConsoleApp'
