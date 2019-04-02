@@ -2,7 +2,7 @@
 # Box2D-MT
 **Box2D-MT is an experimental library that adds multi-threading to Box2D.**
 
-It has no external dependencies and aims to be no less deterministic than Box2D.
+It has no additional dependencies beyond the C++ thread support library and should be no less deterministic than Box2D.
 
 Before using Box2D-MT you should be familiar with Box2D and multi-threading.
 
