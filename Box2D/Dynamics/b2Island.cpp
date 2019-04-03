@@ -420,7 +420,10 @@ void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& g
 			for (int32 i = 0; i < m_bodyCount; ++i)
 			{
 				b2Body* b = m_bodies[i];
-				b->SetAwake(false);
+				if (b->GetType() != b2_staticBody)
+				{
+					b->SetAwake(false);
+				}
 			}
 		}
 	}
