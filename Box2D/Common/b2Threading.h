@@ -152,6 +152,7 @@ private:
 
 inline b2Task::b2Task()
 {
+	m_costEstimate = 0;
 	m_taskGroup = NULL;
 }
 
