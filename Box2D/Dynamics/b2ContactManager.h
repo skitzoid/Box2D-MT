@@ -21,7 +21,8 @@
 #define B2_CONTACT_MANAGER_H
 
 #include "Box2D/Collision/b2BroadPhase.h"
-#include <Box2D/Common/b2GrowableArray.h>
+#include "Box2D/Common/b2GrowableArray.h"
+#include "Box2D/Dynamics/b2WorldCallbacks.h"
 
 class b2Contact;
 class b2ContactFilter;
@@ -42,10 +43,24 @@ struct b2DeferredMoveProxy
 	b2Vec2 displacement;
 };
 
+struct b2DeferredPreSolve
+{
+	b2Contact* contact;
+	b2Manifold oldManifold;
+};
+
+struct b2DeferredPostSolve
+{
+	b2Contact* contact;
+	b2ContactImpulse impulse;
+};
+
 struct b2ContactManagerPerThreadData
 {
-	b2ContactManagerPerThreadData();
-
+	b2GrowableArray<b2Contact*> m_deferredBeginContacts;
+	b2GrowableArray<b2Contact*> m_deferredEndContacts;
+	b2GrowableArray<b2DeferredPreSolve> m_deferredPreSolves;
+	b2GrowableArray<b2DeferredPostSolve> m_deferredPostSolves;
 	b2GrowableArray<b2Contact*> m_deferredAwakes;
 	b2GrowableArray<b2Contact*> m_deferredDestroys;
 	b2GrowableArray<b2DeferredContactCreate> m_deferredCreates;
@@ -72,6 +87,11 @@ public:
 
 	void GenerateDeferredMoveProxies(b2Body** bodies, int32 count);
 
+	void ConsumeDeferredBeginContacts();
+	void ConsumeDeferredEndContacts();
+	void ConsumeDeferredPreSolves();
+	void ConsumeDeferredPostSolves();
+
 	void ConsumeDeferredAwakes();
 	void ConsumeDeferredDestroys();
 	void ConsumeDeferredCreates();
@@ -80,7 +100,7 @@ public:
 	void OnContactCreate(b2Contact* c);
 
 	int32 GetContactCount() const;
-            
+
 	b2BroadPhase m_broadPhase;
 	b2Contact* m_contactList;
 	b2ContactFilter* m_contactFilter;

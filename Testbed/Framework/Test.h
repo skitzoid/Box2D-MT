@@ -156,7 +156,7 @@ public:
 	void MouseMove(const b2Vec2& p);
 	void LaunchBomb();
 	void LaunchBomb(const b2Vec2& position, const b2Vec2& velocity);
-	
+
 	void SpawnBomb(const b2Vec2& worldPt);
 	void CompleteBombSpawn(const b2Vec2& p);
 
@@ -164,6 +164,28 @@ public:
 	virtual void JointDestroyed(b2Joint* joint) { B2_NOT_USED(joint); }
 
 	// Callbacks for derived classes.
+	b2ImmediateCallbackResult BeginContactImmediate(b2Contact* contact) override
+	{
+		B2_NOT_USED(contact);
+		return b2ImmediateCallbackResult::CALL_DEFERRED;
+	}
+	b2ImmediateCallbackResult EndContactImmediate(b2Contact* contact) override
+	{
+		B2_NOT_USED(contact);
+		return b2ImmediateCallbackResult::CALL_DEFERRED;
+	}
+	b2ImmediateCallbackResult PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold) override
+	{
+		B2_NOT_USED(contact);
+		B2_NOT_USED(oldManifold);
+		return b2ImmediateCallbackResult::CALL_DEFERRED;
+	}
+	b2ImmediateCallbackResult PostSolveImmediate(b2Contact* contact, const b2ContactImpulse* impulse) override
+	{
+		B2_NOT_USED(contact);
+		B2_NOT_USED(impulse);
+		return b2ImmediateCallbackResult::CALL_DEFERRED;
+	}
 	virtual void BeginContact(b2Contact* contact)  override { B2_NOT_USED(contact); }
 	virtual void EndContact(b2Contact* contact)  override { B2_NOT_USED(contact); }
 	virtual void PreSolve(b2Contact* contact, const b2Manifold* oldManifold) override;

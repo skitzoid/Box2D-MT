@@ -30,6 +30,7 @@ class b2StackAllocator;
 class b2ContactListener;
 struct b2ContactVelocityConstraint;
 struct b2Profile;
+struct b2ContactManagerPerThreadData;
 
 /// This is an internal class.
 class b2Island
@@ -37,11 +38,12 @@ class b2Island
 public:
     b2Island();
 	b2Island(int32 bodyCapacity, int32 contactCapacity, int32 jointCapacity,
-		b2StackAllocator* allocator, b2ContactListener* listener);
+		b2StackAllocator* allocator, b2ContactListener* listener,
+		b2ContactManagerPerThreadData* td);
 	b2Island(int32 bodyCount, int32 contactCount, int32 jointCount,
 		b2Body** bodies, b2Contact** contacts, b2Joint** joints,
 		b2Velocity* velocities, b2Position* positions,
-		b2ContactListener* listener);
+		b2ContactListener* listener, b2ContactManagerPerThreadData* td);
 	~b2Island();
 
 	void Clear()
@@ -79,6 +81,7 @@ public:
 
 	b2StackAllocator* m_allocator;
 	b2ContactListener* m_listener;
+	b2ContactManagerPerThreadData* m_td;
 
 	b2Body** m_bodies;
 	b2Contact** m_contacts;

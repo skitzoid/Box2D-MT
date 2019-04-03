@@ -27,6 +27,32 @@ public:
 		e_boxcount = 2800
 	};
 
+	// All unused callbacks should override Immediate functions to return DO_NOT_CALL_DEFERRED.
+	// This avoids unnecessary overhead.
+	b2ImmediateCallbackResult BeginContactImmediate(b2Contact* contact) override
+	{
+		B2_NOT_USED(contact);
+		return b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;
+	}
+	b2ImmediateCallbackResult EndContactImmediate(b2Contact* contact) override
+	{
+		B2_NOT_USED(contact);
+		return b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;
+	}
+	b2ImmediateCallbackResult PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold) override
+	{
+		// We can call Test::PreSolve here only because we ensured that it doesn't contain data races.
+		Test::PreSolve(contact, oldManifold);
+
+		return b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;
+	}
+	b2ImmediateCallbackResult PostSolveImmediate(b2Contact* contact, const b2ContactImpulse* impulse) override
+	{
+		B2_NOT_USED(contact);
+		B2_NOT_USED(impulse);
+		return b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;
+	}
+
 	MultithreadDemo()
 	{
 		m_count = 0;
@@ -35,7 +61,8 @@ public:
 		{
 			// This world has been designed with large overlapping static bodies so tunneling is not an issue.
 			// We can disable automatic TOI checks between the static ground body and the other dynamic bodies.
-			// This provides a decent little speedup.
+			// This helps because all CCD/TOI is done on a single thread.
+			// With this flag the ground body will only use CCD against bodies that have the bullet flag set.
 			m_groundBody->SetPreferNoCCD(true);
 
 			b2PolygonShape shape;
@@ -161,7 +188,7 @@ public:
 		jd.localAnchorA = position;
 		jd.localAnchorB.Set(0.0f, 0.0f);
 		jd.referenceAngle = 0.0f;
-		
+
 		m_world->CreateJoint(&jd);
 	}
 

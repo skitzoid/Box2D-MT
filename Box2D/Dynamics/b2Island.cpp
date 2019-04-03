@@ -156,7 +156,8 @@ b2Island::b2Island(
 	int32 contactCapacity,
 	int32 jointCapacity,
 	b2StackAllocator* allocator,
-	b2ContactListener* listener)
+	b2ContactListener* listener,
+	b2ContactManagerPerThreadData* td)
 {
 	m_bodyCapacity = bodyCapacity;
 	m_contactCapacity = contactCapacity;
@@ -167,6 +168,7 @@ b2Island::b2Island(
 
 	m_allocator = allocator;
 	m_listener = listener;
+	m_td = td;
 
 	m_bodies = (b2Body**)m_allocator->Allocate(bodyCapacity * sizeof(b2Body*));
 	m_contacts = (b2Contact**)m_allocator->Allocate(contactCapacity	 * sizeof(b2Contact*));
@@ -185,7 +187,8 @@ b2Island::b2Island(
 	b2Joint** joints,
 	b2Velocity* velocities,
 	b2Position* positions,
-	b2ContactListener* listener)
+	b2ContactListener* listener,
+	b2ContactManagerPerThreadData* td)
 {
 	m_bodyCapacity = bodyCount;
 	m_contactCapacity = contactCount;
@@ -196,6 +199,7 @@ b2Island::b2Island(
 
 	m_allocator = nullptr;
 	m_listener = listener;
+	m_td = td;
 
 	m_bodies = bodies;
 	m_contacts = contacts;
@@ -575,6 +579,10 @@ void b2Island::Report(const b2ContactVelocityConstraint* constraints)
 			impulse.tangentImpulses[j] = vc->points[j].tangentImpulse;
 		}
 
-		m_listener->PostSolve(c, &impulse);
+		if (m_listener->PostSolveImmediate(c, &impulse) == b2ImmediateCallbackResult::CALL_DEFERRED)
+		{
+			b2DeferredPostSolve postSolve = {c, impulse};
+			m_td->m_deferredPostSolves.Push(postSolve);
+		}
 	}
 }

@@ -69,6 +69,12 @@ struct b2ContactImpulse
 	int32 count;
 };
 
+enum class b2ImmediateCallbackResult
+{
+	CALL_DEFERRED = 0,
+	DO_NOT_CALL_DEFERRED,
+};
+
 /// Implement this class to get contact information. You can use these results for
 /// things like sounds and game logic. You can also get contact results by
 /// traversing the contact lists after the time step. However, you might miss
@@ -78,15 +84,23 @@ struct b2ContactImpulse
 /// You should strive to make your callbacks efficient because there may be
 /// many callbacks per time step.
 /// @warning You cannot create/destroy Box2D entities inside these callbacks.
+/// @warning When multi-threading is enabled for the world, the immediate callback
+/// functions are called in a nondeterministic order from multiple threads simultaneously.
+/// Note: The non-immediate callbacks are always called in a deterministic order from
+/// a single thread.
 class b2ContactListener
 {
 public:
 	virtual ~b2ContactListener() {}
 
 	/// Called when two fixtures begin to touch.
+	/// Note: this is called when no other threads are accessing the world's objects.
+	/// Note: this is only called on contacts for which BeginContactImmediate returns CALL_DEFERRED.
 	virtual void BeginContact(b2Contact* contact) { B2_NOT_USED(contact); }
 
 	/// Called when two fixtures cease to touch.
+	/// Note: this is called when no other threads are accessing the world's objects.
+	/// Note: this is only called on contacts for which EndContactImmediate returns CALL_DEFERRED.
 	virtual void EndContact(b2Contact* contact) { B2_NOT_USED(contact); }
 
 	/// This is called after a contact is updated. This allows you to inspect a
@@ -99,6 +113,8 @@ public:
 	/// Note: if you set the number of contact points to zero, you will not
 	/// get an EndContact callback. However, you may get a BeginContact callback
 	/// the next step.
+	/// Note: this is called when no other threads are accessing the world's objects.
+	/// Note: this is only called on contacts for which PreSolveImmediate returns CALL_DEFERRED.
 	virtual void PreSolve(b2Contact* contact, const b2Manifold* oldManifold)
 	{
 		B2_NOT_USED(contact);
@@ -111,11 +127,47 @@ public:
 	/// arbitrarily large if the sub-step is small. Hence the impulse is provided explicitly
 	/// in a separate data structure.
 	/// Note: this is only called for contacts that are touching, solid, and awake.
+	/// Note: this is called when no other threads are accessing the world's objects.
+	/// Note: this is only called on contacts for which PostSolveImmediate returns CALL_DEFERRED.
 	virtual void PostSolve(b2Contact* contact, const b2ContactImpulse* impulse)
 	{
 		B2_NOT_USED(contact);
 		B2_NOT_USED(impulse);
 	}
+
+	/// This lets you process and filter BeginContact callbacks as they arise from multiple threads.
+	/// Within this callback, bodies and joints must not be modified. It's safe to read and modify
+	/// the provided contact. Other contacts must not be accessed. Unmentioned Box2d objects shouldn't
+	/// be accessed.
+	/// @return b2ImmediateCallbackResult::CALL_DEFERRED if BeginContact must be called for the contact.
+	virtual b2ImmediateCallbackResult BeginContactImmediate(b2Contact* contact) = 0;
+
+	/// This lets you process and filter EndContact callbacks as they arise from multiple threads.
+	/// Within this callback, bodies and joints must not be modified. It's safe to read and modify
+	/// the provided contact. Other contacts must not be accessed. Unmentioned Box2d objects shouldn't
+	/// be accessed.
+	/// @return b2ImmediateCallbackResult::CALL_DEFERRED if EndContact must be called for the contact.
+	virtual b2ImmediateCallbackResult EndContactImmediate(b2Contact* contact) = 0;
+
+	/// This lets you process and filter PreSolve callbacks as they arise from multiple threads.
+	/// Within this callback, it's safe to read and modify the provided contact. A non-static body that is
+	/// part of the provided contact is also safe to modify, except for the body's flags, which must be
+	/// treated as read-only. Joints attached to a non-static body are safe to modify. A static body that
+	/// is part of the provided contact must be treated as read-only, except for its flags, which must
+	/// not be accessed. Other bodies, joints, and contacts must not be accessed. Unmentioned Box2d objects
+	/// shouldn't be accessed.
+	/// @return b2ImmediateCallbackResult::CALL_DEFERRED if PreSolve must be called for the contact.
+	virtual b2ImmediateCallbackResult PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold) = 0;
+
+	/// This lets you process and filter PostSolve callbacks as they arise from multiple threads.
+	/// Within this callback, it's safe to read and modify the provided contact. Other contacts must not
+	/// be accessed. It's safe to read or modify a non-static body that is part of the provided contact.
+	/// A static body that is part of the provided contact must be treated as read-only. Unmentioned
+	/// Box2d objects shouldn't be accessed.
+	/// Note: It should technically be safe to access bodies and joints that are in the same island as
+	/// this contact, but this is an implementation detail that should not be relied upon.
+	/// @return b2ImmediateCallbackResult::CALL_DEFERRED if PostSolve must be called for the contact.
+	virtual b2ImmediateCallbackResult PostSolveImmediate(b2Contact* contact, const b2ContactImpulse* impulse) = 0;
 };
 
 /// Callback class for AABB queries.

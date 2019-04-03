@@ -32,6 +32,7 @@
 #include "Box2D/Collision/Shapes/b2Shape.h"
 #include "Box2D/Common/b2BlockAllocator.h"
 #include "Box2D/Dynamics/b2Body.h"
+#include "Box2D/Dynamics/b2ContactManager.h"
 #include "Box2D/Dynamics/b2Fixture.h"
 #include "Box2D/Dynamics/b2World.h"
 
@@ -54,7 +55,7 @@ void b2Contact::AddType(b2ContactCreateFcn* createFcn, b2ContactDestroyFcn* dest
 {
 	b2Assert(0 <= type1 && type1 < b2Shape::e_typeCount);
 	b2Assert(0 <= type2 && type2 < b2Shape::e_typeCount);
-	
+
 	s_registers[type1][type2].createFcn = createFcn;
 	s_registers[type1][type2].destroyFcn = destoryFcn;
 	s_registers[type1][type2].primary = true;
@@ -80,7 +81,7 @@ b2Contact* b2Contact::Create(b2Fixture* fixtureA, int32 indexA, b2Fixture* fixtu
 
 	b2Assert(0 <= type1 && type1 < b2Shape::e_typeCount);
 	b2Assert(0 <= type2 && type2 < b2Shape::e_typeCount);
-	
+
 	b2ContactCreateFcn* createFcn = s_registers[type1][type2].createFcn;
 	if (createFcn)
 	{
@@ -159,10 +160,8 @@ b2Contact::b2Contact(b2Fixture* fA, int32 indexA, b2Fixture* fB, int32 indexB)
 
 // Update the contact manifold and touching status.
 // Note: do not assume the fixture AABBs are overlapping or are valid.
-bool b2Contact::Update(b2ContactListener* listener, bool canWakeBodies)
+void b2Contact::Update(b2ContactManagerPerThreadData* td, b2ContactListener* listener, bool canWakeBodies)
 {
-	bool needsAwake = false;
-
 	b2Manifold oldManifold = m_manifold;
 
 	// Re-enable this contact.
@@ -226,7 +225,7 @@ bool b2Contact::Update(b2ContactListener* listener, bool canWakeBodies)
 			}
 			else
 			{
-				needsAwake = true;
+				td->m_deferredAwakes.Push(this);
 			}
 		}
 	}
@@ -242,18 +241,26 @@ bool b2Contact::Update(b2ContactListener* listener, bool canWakeBodies)
 
 	if (wasTouching == false && touching == true && listener)
 	{
-		listener->BeginContact(this);
+		if (listener->BeginContactImmediate(this) == b2ImmediateCallbackResult::CALL_DEFERRED)
+		{
+			td->m_deferredBeginContacts.Push(this);
+		}
 	}
 
 	if (wasTouching == true && touching == false && listener)
 	{
-		listener->EndContact(this);
+		if (listener->EndContactImmediate(this) == b2ImmediateCallbackResult::CALL_DEFERRED)
+		{
+			td->m_deferredEndContacts.Push(this);
+		}
 	}
 
 	if (sensor == false && touching && listener)
 	{
-		listener->PreSolve(this, &oldManifold);
+		if (listener->PreSolveImmediate(this, &oldManifold) == b2ImmediateCallbackResult::CALL_DEFERRED)
+		{
+			b2DeferredPreSolve presolve = { this, oldManifold };
+			td->m_deferredPreSolves.Push(presolve);
+		}
 	}
-
-	return needsAwake;
 }

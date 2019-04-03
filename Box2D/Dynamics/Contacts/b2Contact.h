@@ -32,6 +32,7 @@ class b2World;
 class b2BlockAllocator;
 class b2StackAllocator;
 class b2ContactListener;
+struct b2ContactManagerPerThreadData;
 
 /// Friction mixing law. The idea is to allow either fixture to drive the friction to zero.
 /// For example, anything slides on ice.
@@ -152,6 +153,7 @@ protected:
 	friend class b2Body;
 	friend class b2Fixture;
 	friend class b2ClearContactIslandFlagsTask;
+	friend bool b2ContactPointerLessThan(const b2Contact* l, const b2Contact* r);
 
 	// Flags stored in m_flags
 	enum
@@ -192,7 +194,7 @@ protected:
 	b2Contact(b2Fixture* fixtureA, int32 indexA, b2Fixture* fixtureB, int32 indexB);
 	virtual ~b2Contact() {}
 
-	bool Update(b2ContactListener* listener, bool canWakeBodies);
+	void Update(b2ContactManagerPerThreadData* td, b2ContactListener* listener, bool canWakeBodies);
 
 	static b2ContactRegister s_registers[b2Shape::e_typeCount][b2Shape::e_typeCount];
 	static bool s_initialized;
