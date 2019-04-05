@@ -65,20 +65,16 @@ void b2BroadPhase::TouchProxy(int32 proxyId)
 
 void b2BroadPhase::BufferMove(int32 proxyId)
 {
-	int32 threadId = b2GetThreadId();
-
-	m_perThreadData[threadId].m_moveBuffer.Push(proxyId);
+	m_moveBuffer.Push(proxyId);
 }
 
 void b2BroadPhase::UnBufferMove(int32 proxyId)
 {
-	b2BroadPhasePerThreadData* td = m_perThreadData + b2GetThreadId();
-
-	for (int32 i = 0; i < td->m_moveBuffer.GetCount(); ++i)
+	for (int32 i = 0; i < m_moveBuffer.GetCount(); ++i)
 	{
-		if (td->m_moveBuffer.At(i) == proxyId)
+		if (m_moveBuffer.At(i) == proxyId)
 		{
-			td->m_moveBuffer.At(i) = e_nullProxy;
+			m_moveBuffer.At(i) = e_nullProxy;
 		}
 	}
 }

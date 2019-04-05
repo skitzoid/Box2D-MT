@@ -38,12 +38,11 @@ class b2Island
 public:
     b2Island();
 	b2Island(int32 bodyCapacity, int32 contactCapacity, int32 jointCapacity,
-		b2StackAllocator* allocator, b2ContactListener* listener,
-		b2ContactManagerPerThreadData* td);
+		b2StackAllocator* allocator, b2ContactListener* listener);
 	b2Island(int32 bodyCount, int32 contactCount, int32 jointCount,
 		b2Body** bodies, b2Contact** contacts, b2Joint** joints,
 		b2Velocity* velocities, b2Position* positions,
-		b2ContactListener* listener, b2ContactManagerPerThreadData* td);
+		b2ContactListener* listener);
 	~b2Island();
 
 	void Clear()
@@ -77,6 +76,7 @@ public:
 		m_joints[m_jointCount++] = joint;
 	}
 
+	template<bool isSingleThread>
 	void Report(const b2ContactVelocityConstraint* constraints);
 
 	b2StackAllocator* m_allocator;

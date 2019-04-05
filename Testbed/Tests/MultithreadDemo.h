@@ -27,7 +27,7 @@ public:
 		e_boxcount = 2800
 	};
 
-	// All unused callbacks should override Immediate functions to return DO_NOT_CALL_DEFERRED.
+	// All unused callbacks should override immediate functions to return DO_NOT_CALL_DEFERRED.
 	// This avoids unnecessary overhead.
 	b2ImmediateCallbackResult BeginContactImmediate(b2Contact* contact) override
 	{
@@ -41,7 +41,7 @@ public:
 	}
 	b2ImmediateCallbackResult PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold) override
 	{
-		// We can call Test::PreSolve here only because we ensured that it doesn't contain data races.
+		// We can call Test::PreSolve here only because we ensured that it won't cause data races.
 		Test::PreSolve(contact, oldManifold);
 
 		return b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;

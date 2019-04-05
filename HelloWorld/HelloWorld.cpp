@@ -84,12 +84,15 @@ int main(int argc, char** argv)
 	int32 velocityIterations = 6;
 	int32 positionIterations = 2;
 
+	// Construct the thread pool that will execute the world's step tasks.
+	b2ThreadPool threadPool;
+
 	// This is our little game loop.
 	for (int32 i = 0; i < 60; ++i)
 	{
 		// Instruct the world to perform a single step of simulation.
 		// It is generally best to keep the time step and iterations fixed.
-		world.Step(timeStep, velocityIterations, positionIterations);
+		world.Step(timeStep, velocityIterations, positionIterations, threadPool);
 
 		// Now print the position and angle of the body.
 		b2Vec2 position = body->GetPosition();

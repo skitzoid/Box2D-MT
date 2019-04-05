@@ -158,9 +158,20 @@ b2Contact::b2Contact(b2Fixture* fA, int32 indexA, b2Fixture* fB, int32 indexB)
 	m_tangentSpeed = 0.0f;
 }
 
+void b2Contact::Update(b2ContactListener* listener)
+{
+	UpdateImpl<true>(nullptr, listener);
+}
+
+void b2Contact::Update(b2ContactManagerPerThreadData& td, b2ContactListener* listener)
+{
+	UpdateImpl<false>(&td, listener);
+}
+
 // Update the contact manifold and touching status.
 // Note: do not assume the fixture AABBs are overlapping or are valid.
-void b2Contact::Update(b2ContactManagerPerThreadData* td, b2ContactListener* listener, bool canWakeBodies)
+template<bool isSingleThread>
+void b2Contact::UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener* listener)
 {
 	b2Manifold oldManifold = m_manifold;
 
@@ -218,7 +229,7 @@ void b2Contact::Update(b2ContactManagerPerThreadData* td, b2ContactListener* lis
 
 		if (touching != wasTouching)
 		{
-			if (canWakeBodies)
+			if (isSingleThread)
 			{
 				bodyA->SetAwake(true);
 				bodyB->SetAwake(true);
@@ -243,7 +254,14 @@ void b2Contact::Update(b2ContactManagerPerThreadData* td, b2ContactListener* lis
 	{
 		if (listener->BeginContactImmediate(this) == b2ImmediateCallbackResult::CALL_DEFERRED)
 		{
-			td->m_deferredBeginContacts.Push(this);
+			if (isSingleThread)
+			{
+				listener->BeginContact(this);
+			}
+			else
+			{
+				td->m_deferredBeginContacts.Push(this);
+			}
 		}
 	}
 
@@ -251,7 +269,14 @@ void b2Contact::Update(b2ContactManagerPerThreadData* td, b2ContactListener* lis
 	{
 		if (listener->EndContactImmediate(this) == b2ImmediateCallbackResult::CALL_DEFERRED)
 		{
-			td->m_deferredEndContacts.Push(this);
+			if (isSingleThread)
+			{
+				listener->EndContact(this);
+			}
+			else
+			{
+				td->m_deferredEndContacts.Push(this);
+			}
 		}
 	}
 
@@ -259,8 +284,15 @@ void b2Contact::Update(b2ContactManagerPerThreadData* td, b2ContactListener* lis
 	{
 		if (listener->PreSolveImmediate(this, &oldManifold) == b2ImmediateCallbackResult::CALL_DEFERRED)
 		{
-			b2DeferredPreSolve presolve = { this, oldManifold };
-			td->m_deferredPreSolves.Push(presolve);
+			if (isSingleThread)
+			{
+				listener->PreSolve(this, &oldManifold);
+			}
+			else
+			{
+				b2DeferredPreSolve presolve = { this, oldManifold };
+				td->m_deferredPreSolves.Push(presolve);
+			}
 		}
 	}
 }

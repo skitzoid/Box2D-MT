@@ -86,25 +86,40 @@ bool b2DeferredMoveProxyLessThan(const b2DeferredMoveProxy& l, const b2DeferredM
 	return l.proxy->proxyId < r.proxy->proxyId;
 }
 
+template<typename T, typename CompType>
+b2GrowableArray<T>* b2SortPerThreadData(b2ContactManagerPerThreadData* td,
+	b2GrowableArray<T> b2ContactManagerPerThreadData::*member,
+	CompType compFunc)
+{
+	b2ContactManagerPerThreadData& td0 = td[0];
+
+	for (int32 i = 1; i < b2_maxThreads; ++i)
+	{
+		while ((td[i].*member).GetCount())
+		{
+			T data = (td[i].*member).Pop();
+			(td0.*member).Push(data);
+		}
+	}
+
+	T* memberDataBegin = (td0.*member).Data();
+	int32 memberDataCount = (td0.*member).GetCount();
+	std::sort(memberDataBegin, memberDataBegin + memberDataCount, compFunc);
+
+	return &(td0.*member);
+}
+
 b2ContactManager::b2ContactManager()
 {
 	m_contactList = nullptr;
 	m_contactFilter = &b2_defaultFilter;
 	m_contactListener = &b2_defaultListener;
 	m_allocator = nullptr;
-	m_deferAwakenings = false;
-	m_deferDestroys = false;
-	m_deferCreates = false;
+	m_isSingleThread = false;
 }
 
 void b2ContactManager::Destroy(b2Contact* c)
 {
-	if (m_deferDestroys)
-	{
-		m_perThreadData[b2GetThreadId()].m_deferredDestroys.Push(c);
-		return;
-	}
-
 	b2Fixture* fixtureA = c->GetFixtureA();
 	b2Fixture* fixtureB = c->GetFixtureB();
 	b2Body* bodyA = fixtureA->GetBody();
@@ -201,14 +216,14 @@ void b2ContactManager::Collide(b2Contact** contacts, int32 count)
 			// Should these bodies collide?
 			if (bodyB->ShouldCollide(bodyA) == false)
 			{
-				Destroy(c);
+				m_perThreadData[b2GetThreadId()].m_deferredDestroys.Push(c);
 				continue;
 			}
 
 			// Check user filtering.
 			if (m_contactFilter && m_contactFilter->ShouldCollide(fixtureA, fixtureB) == false)
 			{
-				Destroy(c);
+				m_perThreadData[b2GetThreadId()].m_deferredDestroys.Push(c);
 				continue;
 			}
 
@@ -232,21 +247,22 @@ void b2ContactManager::Collide(b2Contact** contacts, int32 count)
 		// Here we destroy contacts that cease to overlap in the broad-phase.
 		if (overlap == false)
 		{
-			Destroy(c);
+			m_perThreadData[b2GetThreadId()].m_deferredDestroys.Push(c);
 			continue;
 		}
 
-		// Awakening might be deferred to avoid a data race on body flags.
-		bool canWakeBodies = m_deferAwakenings == false;
-
 		// The contact persists.
-		c->Update(m_perThreadData + b2GetThreadId(), m_contactListener, canWakeBodies);
+		c->Update(m_perThreadData[b2GetThreadId()], m_contactListener);
 	}
 }
 
-void b2ContactManager::FindNewContacts(int32 moveBegin, int32 moveEnd)
+void b2ContactManager::FindNewContacts(int32 moveBegin, int32 moveEnd, bool isSingleThread)
 {
+	m_isSingleThread = isSingleThread;
+
 	m_broadPhase.UpdatePairs(moveBegin, moveEnd, this);
+
+	m_isSingleThread = false;
 }
 
 void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
@@ -310,25 +326,25 @@ void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
 		return;
 	}
 
-	// Defer creation?
-	if (m_deferCreates)
+	if (m_isSingleThread)
 	{
+		// Call the factory.
+		b2Contact* c = b2Contact::Create(fixtureA, indexA, fixtureB, indexB, m_allocator);
+		if (c == nullptr)
+		{
+			return;
+		}
+
+		OnContactCreate(c);
+	}
+	else
+	{
+		// Defer creation.
 		b2DeferredContactCreate deferredCreate;
 		deferredCreate.proxyA = proxyA;
 		deferredCreate.proxyB = proxyB;
 		m_perThreadData[b2GetThreadId()].m_deferredCreates.Push(deferredCreate);
-		return;
 	}
-
-	// Call the factory.
-	b2Contact* c = b2Contact::Create(fixtureA, indexA, fixtureB, indexB, m_allocator);
-	if (c == nullptr)
-	{
-		return;
-	}
-
-	// Finish creating.
-	OnContactCreate(c);
 }
 
 // This allows proxy synchronization to be somewhat parallel.
@@ -380,115 +396,61 @@ void b2ContactManager::GenerateDeferredMoveProxies(b2Body** bodies, int32 count)
 
 void b2ContactManager::ConsumeDeferredBeginContacts()
 {
-	b2ContactManagerPerThreadData* td0 = m_perThreadData + 0;
+	b2GrowableArray<b2Contact*>* begins = b2SortPerThreadData(m_perThreadData,
+		&b2ContactManagerPerThreadData::m_deferredBeginContacts, b2ContactPointerLessThan);
 
-	for (int32 i = 1; i < b2_maxThreads; ++i)
+	while (begins->GetCount())
 	{
-		while (m_perThreadData[i].m_deferredBeginContacts.GetCount())
-		{
-			b2Contact* c = m_perThreadData[i].m_deferredBeginContacts.Pop();
-			td0->m_deferredBeginContacts.Push(c);
-		}
-	}
-
-	b2Contact** deferredBeginContactsBegin = td0->m_deferredBeginContacts.Data();
-	int32 deferredBeginContactsCount = td0->m_deferredBeginContacts.GetCount();
-	std::sort(deferredBeginContactsBegin, deferredBeginContactsBegin + deferredBeginContactsCount, b2ContactPointerLessThan);
-
-	while (td0->m_deferredBeginContacts.GetCount())
-	{
-		m_contactListener->BeginContact(td0->m_deferredBeginContacts.Pop());
+		m_contactListener->BeginContact(begins->Pop());
 	}
 }
 
 void b2ContactManager::ConsumeDeferredEndContacts()
 {
-	b2ContactManagerPerThreadData* td0 = m_perThreadData + 0;
+	b2GrowableArray<b2Contact*>* ends = b2SortPerThreadData(m_perThreadData,
+		&b2ContactManagerPerThreadData::m_deferredEndContacts, b2ContactPointerLessThan);
 
-	for (int32 i = 1; i < b2_maxThreads; ++i)
+	while (ends->GetCount())
 	{
-		while (m_perThreadData[i].m_deferredEndContacts.GetCount())
-		{
-			b2Contact* c = m_perThreadData[i].m_deferredEndContacts.Pop();
-			td0->m_deferredEndContacts.Push(c);
-		}
-	}
-
-	b2Contact** deferredEndContactsBegin = td0->m_deferredEndContacts.Data();
-	int32 deferredEndContactsCount = td0->m_deferredEndContacts.GetCount();
-	std::sort(deferredEndContactsBegin, deferredEndContactsBegin + deferredEndContactsCount, b2ContactPointerLessThan);
-
-	while (td0->m_deferredEndContacts.GetCount())
-	{
-		m_contactListener->EndContact(td0->m_deferredEndContacts.Pop());
+		m_contactListener->EndContact(ends->Pop());
 	}
 }
 
 void b2ContactManager::ConsumeDeferredPreSolves()
 {
-	b2ContactManagerPerThreadData* td0 = m_perThreadData + 0;
-
-	for (int32 i = 1; i < b2_maxThreads; ++i)
-	{
-		while (m_perThreadData[i].m_deferredPreSolves.GetCount())
-		{
-			b2DeferredPreSolve ps = m_perThreadData[i].m_deferredPreSolves.Pop();
-			td0->m_deferredPreSolves.Push(ps);
-		}
-	}
-
-	b2DeferredPreSolve* deferredPreSolvesBegin = td0->m_deferredPreSolves.Data();
-	int32 deferredPreSolvesCount = td0->m_deferredPreSolves.GetCount();
-	std::sort(deferredPreSolvesBegin, deferredPreSolvesBegin + deferredPreSolvesCount,
+	b2GrowableArray<b2DeferredPreSolve>* preSolves = b2SortPerThreadData(m_perThreadData,
+		&b2ContactManagerPerThreadData::m_deferredPreSolves,
 		[](const b2DeferredPreSolve& l, const b2DeferredPreSolve& r)
 		{
 			return b2ContactPointerLessThan(l.contact, r.contact);
 		});
 
-	while (td0->m_deferredPreSolves.GetCount())
+	while (preSolves->GetCount())
 	{
-		const b2DeferredPreSolve& ps = td0->m_deferredPreSolves.Pop();
+		const b2DeferredPreSolve& ps = preSolves->Pop();
 		m_contactListener->PreSolve(ps.contact, &ps.oldManifold);
-	}
-	for (int32 i = 0; i < b2_maxThreads; ++i)
-	{
-		b2Assert(m_perThreadData[i].m_deferredPreSolves.GetCount() == 0);
 	}
 }
 
 void b2ContactManager::ConsumeDeferredPostSolves()
 {
-	b2ContactManagerPerThreadData* td0 = m_perThreadData + 0;
-
-	for (int32 i = 1; i < b2_maxThreads; ++i)
-	{
-		while (m_perThreadData[i].m_deferredPostSolves.GetCount())
-		{
-			b2DeferredPostSolve ps = m_perThreadData[i].m_deferredPostSolves.Pop();
-			td0->m_deferredPostSolves.Push(ps);
-		}
-	}
-
-	b2DeferredPostSolve* deferredPostSolvesBegin = td0->m_deferredPostSolves.Data();
-	int32 deferredPostSolvesCount = td0->m_deferredPostSolves.GetCount();
-	std::sort(deferredPostSolvesBegin, deferredPostSolvesBegin + deferredPostSolvesCount,
+	b2GrowableArray<b2DeferredPostSolve>* postSolves = b2SortPerThreadData(m_perThreadData,
+		&b2ContactManagerPerThreadData::m_deferredPostSolves,
 		[](const b2DeferredPostSolve& l, const b2DeferredPostSolve& r)
 		{
 			return b2ContactPointerLessThan(l.contact, r.contact);
 		});
 
-	while (td0->m_deferredPostSolves.GetCount())
+	while (postSolves->GetCount())
 	{
-		const b2DeferredPostSolve& ps = td0->m_deferredPostSolves.Pop();
+		const b2DeferredPostSolve& ps = postSolves->Pop();
 		m_contactListener->PostSolve(ps.contact, &ps.impulse);
 	}
 }
 
 void b2ContactManager::ConsumeDeferredAwakes()
 {
-	b2Assert(m_deferAwakenings);
-
-	// Awake bodies. Order doesn't affect determinism.
+	// Order doesn't affect determinism so don't bother sorting.
 	for (int32 i = 0; i < b2_maxThreads; ++i)
 	{
 		while (m_perThreadData[i].m_deferredAwakes.GetCount())
@@ -498,73 +460,33 @@ void b2ContactManager::ConsumeDeferredAwakes()
 			c->m_nodeB.other->SetAwake(true);
 		}
 	}
-
-	m_deferAwakenings = false;
 }
 
 void b2ContactManager::ConsumeDeferredDestroys()
 {
-	b2Assert(m_deferDestroys);
+	b2GrowableArray<b2Contact*>* destroys = b2SortPerThreadData(m_perThreadData,
+		&b2ContactManagerPerThreadData::m_deferredDestroys, b2ContactPointerLessThan);
 
-	b2ContactManagerPerThreadData* td0 = m_perThreadData + 0;
-
-	// Put all contacts in a single array.
-	for (int32 i = 1; i < b2_maxThreads; ++i)
+	while (destroys->GetCount())
 	{
-		while (m_perThreadData[i].m_deferredDestroys.GetCount())
-		{
-			b2Contact* c = m_perThreadData[i].m_deferredDestroys.Pop();
-			td0->m_deferredDestroys.Push(c);
-		}
-	}
-
-	// Sort to ensure determinism.
-	b2Contact** deferredDestroysBegin = td0->m_deferredDestroys.Data();
-	int32 deferredDestroyCount = td0->m_deferredDestroys.GetCount();
-	std::sort(deferredDestroysBegin, deferredDestroysBegin + deferredDestroyCount, b2ContactPointerLessThan);
-
-	m_deferDestroys = false;
-
-	// Destroy contacts.
-	while (td0->m_deferredDestroys.GetCount())
-	{
-		b2Contact* c = td0->m_deferredDestroys.Pop();
+		b2Contact* c = destroys->Pop();
 		Destroy(c);
 	}
 }
 
 void b2ContactManager::ConsumeDeferredCreates()
 {
-	b2Assert(m_deferCreates);
-
-	b2ContactManagerPerThreadData* td = m_perThreadData;
-
-	// Put all contacts in a single array.
-	for (int32 i = 1; i < b2_maxThreads; ++i)
-	{
-		while (m_perThreadData[i].m_deferredCreates.GetCount())
-		{
-			b2DeferredContactCreate deferredCreate = m_perThreadData[i].m_deferredCreates.Pop();
-
-			td->m_deferredCreates.Push(deferredCreate);
-		}
-	}
-
-	// Sort to ensure determinism.
-	b2DeferredContactCreate* deferredCreatesBegin = td->m_deferredCreates.Data();
-	int32 deferredCreateCount = td->m_deferredCreates.GetCount();
-	std::sort(deferredCreatesBegin, deferredCreatesBegin + deferredCreateCount, b2DeferredContactCreateLessThan);
-
-	m_deferCreates = false;
+	b2GrowableArray<b2DeferredContactCreate>* creates = b2SortPerThreadData(m_perThreadData,
+		&b2ContactManagerPerThreadData::m_deferredCreates, b2DeferredContactCreateLessThan);
 
 	b2Pair prevPair;
 	prevPair.proxyIdA = b2BroadPhase::e_nullProxy;
 	prevPair.proxyIdB = b2BroadPhase::e_nullProxy;
 
 	// Finish contact creation.
-	while (td->m_deferredCreates.GetCount())
+	while (creates->GetCount())
 	{
-		b2DeferredContactCreate deferredCreate = td->m_deferredCreates.Pop();
+		b2DeferredContactCreate deferredCreate = creates->Pop();
 
 		// Store the pair for fast lookup.
 		b2Pair proxyPair;
@@ -587,13 +509,25 @@ void b2ContactManager::ConsumeDeferredCreates()
 
 		// Call the factory.
 		b2Contact* c = b2Contact::Create(fixtureA, indexA, fixtureB, indexB, m_allocator);
-		if (c == NULL)
+		if (c == nullptr)
 		{
 			return;
 		}
 
 		// Finish creating.
 		OnContactCreate(c);
+	}
+}
+
+void b2ContactManager::ConsumeDeferredMoveProxies()
+{
+	b2GrowableArray<b2DeferredMoveProxy>* moves = b2SortPerThreadData(m_perThreadData,
+		&b2ContactManagerPerThreadData::m_deferredMoveProxies, b2DeferredMoveProxyLessThan);
+
+	while (moves->GetCount())
+	{
+		b2DeferredMoveProxy moveProxy = moves->Pop();
+		m_broadPhase.MoveProxy(moveProxy.proxy->proxyId, moveProxy.proxy->aabb, moveProxy.displacement);
 	}
 }
 
@@ -669,32 +603,5 @@ void b2ContactManager::OnContactCreate(b2Contact* c)
 	{
 		bodyA->SetAwake(true);
 		bodyB->SetAwake(true);
-	}
-}
-
-void b2ContactManager::ConsumeDeferredMoveProxies()
-{
-	b2ContactManagerPerThreadData* td0 = m_perThreadData + 0;
-
-	// Put all proxies in a single array.
-	for (int32 i = 1; i < b2_maxThreads; ++i)
-	{
-		while (m_perThreadData[i].m_deferredMoveProxies.GetCount())
-		{
-			b2DeferredMoveProxy moveProxy = m_perThreadData[i].m_deferredMoveProxies.Pop();
-			td0->m_deferredMoveProxies.Push(moveProxy);
-		}
-	}
-
-	// Sort to ensure determinism.
-	b2DeferredMoveProxy* deferredMovesBegin = td0->m_deferredMoveProxies.Data();
-	int32 deferredMoveCount = td0->m_deferredMoveProxies.GetCount();
-	std::sort(deferredMovesBegin, deferredMovesBegin + deferredMoveCount, b2DeferredMoveProxyLessThan);
-
-	// Move proxies.
-	while (td0->m_deferredMoveProxies.GetCount())
-	{
-		b2DeferredMoveProxy moveProxy = td0->m_deferredMoveProxies.Pop();
-		m_broadPhase.MoveProxy(moveProxy.proxy->proxyId, moveProxy.proxy->aabb, moveProxy.displacement);
 	}
 }

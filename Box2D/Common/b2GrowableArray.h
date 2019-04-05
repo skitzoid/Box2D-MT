@@ -18,15 +18,15 @@
 
 #ifndef B2_GROWABLE_ARRAY_H
 #define B2_GROWABLE_ARRAY_H
-#include <Box2D/Common/b2Settings.h>
-#include <string.h>
+#include "Box2D/Common/b2Settings.h"
+#include <cstring>
 
 /// This is a growable array, meant for internal use only.
 template <typename T>
 class b2GrowableArray
 {
 public:
-	b2GrowableArray(int32 startCapacityHint = 16)
+	b2GrowableArray(int32 startCapacityHint = 1)
 	{
 		m_capacity = startCapacityHint > 0 ? startCapacityHint : 1;
 		m_count = 0;
@@ -37,7 +37,7 @@ public:
 	~b2GrowableArray()
 	{
 		b2Free(m_array);
-		m_array = NULL;
+		m_array = nullptr;
 	}
 
 	void Push(const T& element)

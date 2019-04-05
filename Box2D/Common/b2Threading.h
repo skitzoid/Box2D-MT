@@ -19,9 +19,9 @@
 #ifndef B2_THREADING_H
 #define B2_THREADING_H
 
-#include <Box2D/Common/b2Settings.h>
-#include <Box2D/Common/b2GrowableArray.h>
-#include <Box2D/Common/b2StackAllocator.h>
+#include "Box2D/Common/b2Settings.h"
+#include "Box2D/Common/b2GrowableArray.h"
+#include "Box2D/Common/b2StackAllocator.h"
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -41,13 +41,13 @@ public:
 
 	/// Set the estimated cost of executing the task.
 	/// Higher cost tasks can start execution before lower cost tasks.
-	void SetCost(int32 costEstimate);
+	void SetCost(uint32 costEstimate);
 
 	/// Get the estimated cost of executing the task.
 	int32 GetCost() const;
 
 	/// Get the task group that submitted the task to the thread pool.
-	/// NULL if the task hasn't been submitted.
+	/// Null if the task hasn't been submitted.
 	b2TaskGroup* GetTaskGroup() const;
 
 	/// Execute the task. Called by a worker thread after the
@@ -58,7 +58,7 @@ private:
 	friend class b2TaskGroup;
 
 	// How long will this task take to execute?
-	int32 m_costEstimate;
+	uint32 m_costEstimate;
 
 	/// The task group that submitted the task to the thread pool.
 	b2TaskGroup* m_taskGroup;
@@ -104,7 +104,7 @@ public:
 private:
 	friend class b2ThreadPool;
 
-	std::atomic<uint32> m_remainingTasks;
+	uint32 m_remainingTasks;
 	b2ThreadPool* m_threadPool;
 };
 
@@ -125,10 +125,10 @@ private:
 	friend class b2TaskGroup;
 
 	// Add multiple tasks to be executed.
-	void AddTasks(b2Task** tasks, int32 count);
+	void AddTasks(b2TaskGroup* group, b2Task** tasks, int32 count);
 
 	// Add a single task to be executed.
-	void AddTask(b2Task* task);
+	void AddTask(b2TaskGroup* group, b2Task* task);
 
 	// Wait for all tasks in the group to finish. The
 	// allocator is used to execute tasks while waiting.
@@ -136,11 +136,8 @@ private:
 
 	void WorkerMain(int32 threadId);
 
-	void Destroy();
-
-	std::mutex m_taskMut;
+	std::mutex m_mutex;
 	std::condition_variable m_taskAddedCond;
-	std::mutex m_taskGroupMut;
 	std::condition_variable m_taskGroupFinishedCond;
 	b2GrowableArray<b2Task*> m_pendingTasks;
 
@@ -153,10 +150,10 @@ private:
 inline b2Task::b2Task()
 {
 	m_costEstimate = 0;
-	m_taskGroup = NULL;
+	m_taskGroup = nullptr;
 }
 
-inline void b2Task::SetCost(int32 costEstimate)
+inline void b2Task::SetCost(uint32 costEstimate)
 {
 	m_costEstimate = costEstimate;
 }
@@ -225,7 +222,7 @@ void b2TaskGroup::SubmitRangedTasks(RangedTaskType* tasks, int32 taskCount, int3
 
 inline b2TaskGroup::b2TaskGroup(b2ThreadPool& threadPool)
 {
-	m_remainingTasks.store(0, std::memory_order_relaxed);
+	m_remainingTasks = 0;
 	m_threadPool = &threadPool;
 }
 
@@ -237,23 +234,19 @@ inline b2TaskGroup::~b2TaskGroup()
 
 inline void b2TaskGroup::SubmitTasks(b2Task** tasks, int32 count)
 {
-	m_remainingTasks.fetch_add(count, std::memory_order_relaxed);
-
 	for (int32 i = 0; i < count; ++i)
 	{
 		tasks[i]->m_taskGroup = this;
 	}
 
-	m_threadPool->AddTasks(tasks, count);
+	m_threadPool->AddTasks(this, tasks, count);
 }
 
 inline void b2TaskGroup::SubmitTask(b2Task* task)
 {
-	m_remainingTasks.fetch_add(1, std::memory_order_relaxed);
-
 	task->m_taskGroup = this;
 
-	m_threadPool->AddTask(task);
+	m_threadPool->AddTask(this, task);
 }
 
 inline void b2TaskGroup::Wait(b2StackAllocator& allocator)

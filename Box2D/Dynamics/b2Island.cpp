@@ -148,7 +148,8 @@ However, we can compute sin+cos of the same angle fast.
 
 b2Island::b2Island()
 {
-    m_allocator = nullptr;
+	m_allocator = nullptr;
+	m_td = nullptr;
 }
 
 b2Island::b2Island(
@@ -156,8 +157,7 @@ b2Island::b2Island(
 	int32 contactCapacity,
 	int32 jointCapacity,
 	b2StackAllocator* allocator,
-	b2ContactListener* listener,
-	b2ContactManagerPerThreadData* td)
+	b2ContactListener* listener)
 {
 	m_bodyCapacity = bodyCapacity;
 	m_contactCapacity = contactCapacity;
@@ -168,7 +168,7 @@ b2Island::b2Island(
 
 	m_allocator = allocator;
 	m_listener = listener;
-	m_td = td;
+	m_td = nullptr;
 
 	m_bodies = (b2Body**)m_allocator->Allocate(bodyCapacity * sizeof(b2Body*));
 	m_contacts = (b2Contact**)m_allocator->Allocate(contactCapacity	 * sizeof(b2Contact*));
@@ -187,8 +187,7 @@ b2Island::b2Island(
 	b2Joint** joints,
 	b2Velocity* velocities,
 	b2Position* positions,
-	b2ContactListener* listener,
-	b2ContactManagerPerThreadData* td)
+	b2ContactListener* listener)
 {
 	m_bodyCapacity = bodyCount;
 	m_contactCapacity = contactCount;
@@ -199,7 +198,7 @@ b2Island::b2Island(
 
 	m_allocator = nullptr;
 	m_listener = listener;
-	m_td = td;
+	m_td = nullptr;
 
 	m_bodies = bodies;
 	m_contacts = contacts;
@@ -239,8 +238,11 @@ void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& g
 		float32 w = b->m_angularVelocity;
 
 		// Store positions for continuous collision.
-		b->m_sweep.c0 = b->m_sweep.c;
-		b->m_sweep.a0 = b->m_sweep.a;
+		if (b->m_type != b2_staticBody)
+		{
+			b->m_sweep.c0 = b->m_sweep.c;
+			b->m_sweep.a0 = b->m_sweep.a;
+		}
 
 		if (b->m_type == b2_dynamicBody)
 		{
@@ -384,7 +386,7 @@ void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& g
 
 	profile->solvePosition = timer.GetMilliseconds();
 
-	Report(contactSolver.m_velocityConstraints);
+	Report<false>(contactSolver.m_velocityConstraints);
 
 	if (allowSleep)
 	{
@@ -558,9 +560,10 @@ void b2Island::SolveTOI(const b2TimeStep& subStep, int32 toiIndexA, int32 toiInd
 		body->SynchronizeTransform();
 	}
 
-	Report(contactSolver.m_velocityConstraints);
+	Report<true>(contactSolver.m_velocityConstraints);
 }
 
+template<bool isSingleThread>
 void b2Island::Report(const b2ContactVelocityConstraint* constraints)
 {
 	if (m_listener == nullptr)
@@ -568,6 +571,7 @@ void b2Island::Report(const b2ContactVelocityConstraint* constraints)
 		return;
 	}
 
+	b2ContactManagerPerThreadData* td = m_td;
 	for (int32 i = 0; i < m_contactCount; ++i)
 	{
 		b2Contact* c = m_contacts[i];
@@ -584,8 +588,15 @@ void b2Island::Report(const b2ContactVelocityConstraint* constraints)
 
 		if (m_listener->PostSolveImmediate(c, &impulse) == b2ImmediateCallbackResult::CALL_DEFERRED)
 		{
-			b2DeferredPostSolve postSolve = {c, impulse};
-			m_td->m_deferredPostSolves.Push(postSolve);
+			if (isSingleThread)
+			{
+				m_listener->PostSolve(c, &impulse);
+			}
+			else
+			{
+				b2DeferredPostSolve postSolve = {c, impulse};
+				td->m_deferredPostSolves.Push(postSolve);
+			}
 		}
 	}
 }

@@ -23,7 +23,7 @@
 #include "Box2D/Common/b2Settings.h"
 #include "Box2D/Collision/b2Collision.h"
 #include "Box2D/Collision/b2DynamicTree.h"
-#include <Box2D/Common/b2GrowableArray.h>
+#include "Box2D/Common/b2GrowableArray.h"
 #include <algorithm>
 
 struct b2Pair
@@ -35,7 +35,6 @@ struct b2Pair
 struct b2BroadPhasePerThreadData
 {
 	b2GrowableArray<b2Pair> m_pairBuffer;
-	b2GrowableArray<int32> m_moveBuffer;
 	int32 m_queryProxyId;
 
 	uint8 m_padding[b2_cacheLineSize];
@@ -133,6 +132,7 @@ private:
 	b2DynamicTree m_tree;
 
 	int32 m_proxyCount;
+	b2GrowableArray<int32> m_moveBuffer;
 
 	b2BroadPhasePerThreadData m_perThreadData[b2_maxThreads];
 };
@@ -203,7 +203,7 @@ void b2BroadPhase::UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback)
 	// Perform tree queries for all moving proxies.
 	for (int32 i = moveBegin; i < moveEnd; ++i)
 	{
-		td->m_queryProxyId = m_perThreadData[0].m_moveBuffer.At(i);
+		td->m_queryProxyId = m_moveBuffer.At(i);
 		if (td->m_queryProxyId == e_nullProxy)
 		{
 			continue;
@@ -217,12 +217,6 @@ void b2BroadPhase::UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback)
 
 		// Query the tree, create pairs and add them pair buffer.
 		m_tree.Query(this, fatAABB);
-	}
-
-	// Reset move buffer if we're processing the entire range.
-	if (moveBegin == 0 && moveEnd == m_perThreadData[0].m_moveBuffer.GetCount())
-	{
-		m_perThreadData[0].m_moveBuffer.Clear();
 	}
 
 	// Sort the pair buffer to expose duplicates.
@@ -276,20 +270,12 @@ inline void b2BroadPhase::ShiftOrigin(const b2Vec2& newOrigin)
 
 inline void b2BroadPhase::ResetMoveBuffer()
 {
-	for (int32 i = 0; i < b2_maxThreads; ++i)
-	{
-		m_perThreadData[i].m_moveBuffer.Clear();
-	}
+	m_moveBuffer.Clear();
 }
 
 inline int32 b2BroadPhase::GetMoveCount() const
 {
-	int32 moveCount = 0;
-	for (int32 i = 0; i < b2_maxThreads; ++i)
-	{
-		moveCount += m_perThreadData[i].m_moveBuffer.GetCount();
-	}
-	return moveCount;
+	return m_moveBuffer.GetCount();
 }
 
 #endif

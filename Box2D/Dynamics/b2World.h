@@ -47,8 +47,7 @@ class b2World
 public:
 	/// Construct a world object.
 	/// @param gravity the world gravity vector.
-	/// @param threadPool a thread pool that will enable multi-threaded stepping if provided.
-	b2World(const b2Vec2& gravity, b2ThreadPool* threadPool = NULL);
+	b2World(const b2Vec2& gravity);
 
 	/// Destruct the world. All physics entities are destroyed and all heap memory is released.
 	~b2World();
@@ -59,7 +58,7 @@ public:
 
 	/// Register a contact filter to provide specific control over collision.
 	/// Otherwise the default filter is used (b2_defaultFilter). The listener is
-	/// owned by you and must remain in scope. 
+	/// owned by you and must remain in scope.
 	void SetContactFilter(b2ContactFilter* filter);
 
 	/// Register a contact event listener. The listener is owned by you and must
@@ -96,9 +95,11 @@ public:
 	/// @param timeStep the amount of time to simulate, this should not vary.
 	/// @param velocityIterations for the velocity constraint solver.
 	/// @param positionIterations for the position constraint solver.
+	/// @param threadPool the thread pool that will execute the step tasks.
 	void Step(	float32 timeStep,
 				int32 velocityIterations,
-				int32 positionIterations);
+				int32 positionIterations,
+				b2ThreadPool& threadPool);
 
 	/// Manually clear the force buffer on all bodies. By default, forces are cleared automatically
 	/// after each call to Step. The default behavior is modified by calling SetAutoClearForces.
@@ -186,7 +187,7 @@ public:
 
 	/// Change the global gravity vector.
 	void SetGravity(const b2Vec2& gravity);
-	
+
 	/// Get the global gravity vector.
 	b2Vec2 GetGravity() const;
 
@@ -232,14 +233,13 @@ private:
 	friend class b2ContactManager;
 	friend class b2Controller;
 
-	void Solve(const b2TimeStep& step);
 	void SolveTOI(const b2TimeStep& step);
 
-	void SynchronizeFixturesMT();
-	void FindNewContactsMT();
-	void CollideMT();
-	void SolveMT(const b2TimeStep& step);
-	void ClearIslandFlagsMT();
+	void SynchronizeFixtures(b2ThreadPool& threadPool);
+	void FindNewContacts(b2ThreadPool& threadPool);
+	void Collide(b2ThreadPool& threadPool);
+	void Solve(b2ThreadPool& threadPool, const b2TimeStep& step);
+	void ClearIslandFlags(b2ThreadPool& threadPool);
 
 	void DrawJoint(b2Joint* joint);
 	void DrawShape(b2Fixture* shape, const b2Transform& xf, const b2Color& color);
@@ -278,10 +278,6 @@ private:
 	bool m_stepComplete;
 
 	b2Profile m_profile;
-
-	b2ThreadPool* m_threadPool;
-
-	int32 m_threadCount;
 };
 
 inline b2Body* b2World::GetBodyList()
@@ -342,11 +338,6 @@ inline b2Vec2 b2World::GetGravity() const
 inline bool b2World::IsLocked() const
 {
 	return (m_flags & e_locked) == e_locked;
-}
-
-inline bool b2World::IsMultithreadedStepEnabled() const
-{
-	return m_threadPool != NULL;
 }
 
 inline void b2World::SetAutoClearForces(bool flag)

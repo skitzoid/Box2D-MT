@@ -194,7 +194,11 @@ protected:
 	b2Contact(b2Fixture* fixtureA, int32 indexA, b2Fixture* fixtureB, int32 indexB);
 	virtual ~b2Contact() {}
 
-	void Update(b2ContactManagerPerThreadData* td, b2ContactListener* listener, bool canWakeBodies);
+	void Update(b2ContactManagerPerThreadData& td, b2ContactListener* listener);
+	void Update(b2ContactListener* listener);
+
+	template <bool isSingleThread>
+	void UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener* listener);
 
 	static b2ContactRegister s_registers[b2Shape::e_typeCount][b2Shape::e_typeCount];
 	static bool s_initialized;

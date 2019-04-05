@@ -16,16 +16,10 @@
 * 3. This notice may not be removed or altered from any source distribution.
 */
 
-#include <Box2D/Common/b2Threading.h>
-#include <Box2D/Common/b2Math.h>
-#include <Box2D/Common/b2StackAllocator.h>
+#include "Box2D/Common/b2Threading.h"
+#include "Box2D/Common/b2Math.h"
+#include "Box2D/Common/b2StackAllocator.h"
 #include <algorithm>
-
-using std::thread;
-using std::unique_lock;
-using std::mutex;
-
-const int32 b2_initialPendingTaskCapacity = 256;
 
 // Compare the cost of two tasks.
 bool b2TaskLessThan(const b2Task* l, const b2Task* r)
@@ -34,7 +28,6 @@ bool b2TaskLessThan(const b2Task* l, const b2Task* r)
 }
 
 b2ThreadPool::b2ThreadPool(int32 threadCount)
-: m_pendingTasks(b2_initialPendingTaskCapacity)
 {
 	b2Assert(threadCount <= b2_maxThreadPoolThreads);
 	b2Assert(threadCount >= -1);
@@ -42,35 +35,46 @@ b2ThreadPool::b2ThreadPool(int32 threadCount)
 	if (threadCount == -1)
 	{
 		// Match the number of cores, minus one for the user thread.
-		threadCount = (int32)thread::hardware_concurrency() - 1;
+		threadCount = (int32)std::thread::hardware_concurrency() - 1;
 	}
 
-	// Don't exceed the max.
-	threadCount = b2Min(threadCount, b2_maxThreadPoolThreads);
-
 	// Account for invalid input, single core processors, or hardware_concurrency not being well defined.
-	threadCount = b2Max(threadCount, 0);
+	threadCount = b2Clamp(threadCount, 0, b2_maxThreadPoolThreads);
 
-	// Mark the pool as running.
 	m_signalShutdown = false;
-
-	// Set the thread count.
 	m_threadCount = threadCount;
 
-	// Construct worker threads.
 	if (threadCount > 0)
 	{
-		m_threads = (thread*)b2Alloc(threadCount * sizeof(thread));
+		m_threads = (std::thread*)b2Alloc(threadCount * sizeof(std::thread));
 		for (int32 i = 0; i < threadCount; ++i)
 		{
-			new(&m_threads[i]) thread(&b2ThreadPool::WorkerMain, this, 1 + i);
+			new(&m_threads[i]) std::thread(&b2ThreadPool::WorkerMain, this, 1 + i);
 		}
 	}
 }
 
 b2ThreadPool::~b2ThreadPool()
 {
-	Destroy();
+	{
+		std::lock_guard<std::mutex> lk(m_mutex);
+		m_signalShutdown = true;
+	}
+	m_taskAddedCond.notify_all();
+
+	for (int32 i = 0; i < m_threadCount; ++i)
+	{
+		if (m_threads[i].joinable())
+		{
+			m_threads[i].join();
+		}
+	}
+
+	for (int32 i = 0; i < m_threadCount; ++i)
+	{
+		m_threads[i].~thread();
+	}
+	b2Free(m_threads);
 }
 
 int32 b2ThreadPool::GetThreadCount() const
@@ -78,88 +82,65 @@ int32 b2ThreadPool::GetThreadCount() const
 	return m_threadCount;
 }
 
-void b2ThreadPool::AddTasks(b2Task** tasks, int32 count)
+void b2ThreadPool::AddTasks(b2TaskGroup* group, b2Task** tasks, int32 count)
 {
 	{
-		unique_lock<mutex> lk(m_taskMut);
+		std::lock_guard<std::mutex> lk(m_mutex);
+		group->m_remainingTasks += count;
 		for (int32 i = 0; i < count; ++i)
 		{
 			m_pendingTasks.Push(tasks[i]);
 			std::push_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskLessThan);
 		}
 	}
-
 	m_taskAddedCond.notify_all();
 }
 
-void b2ThreadPool::AddTask(b2Task* task)
+void b2ThreadPool::AddTask(b2TaskGroup* group, b2Task* task)
 {
 	{
-		unique_lock<mutex> lk(m_taskMut);
+		std::lock_guard<std::mutex> lk(m_mutex);
+		group->m_remainingTasks += 1;
 		m_pendingTasks.Push(task);
 		std::push_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskLessThan);
 	}
-
 	m_taskAddedCond.notify_one();
 }
 
 void b2ThreadPool::Wait(const b2TaskGroup& taskGroup, b2StackAllocator& allocator)
 {
-	while (taskGroup.m_remainingTasks.load(std::memory_order_acquire) != 0)
+	std::unique_lock<std::mutex> lk(m_mutex);
+
+	for (;;)
 	{
-		b2Task* task = NULL;
-
-		// Try to execute a task
+		if (taskGroup.m_remainingTasks == 0)
 		{
-			std::lock(m_taskMut, m_taskGroupMut);
-			std::lock_guard<std::mutex> lk1(m_taskMut, std::adopt_lock);
-			std::lock_guard<std::mutex> lk2(m_taskGroupMut, std::adopt_lock);
-
-			// Make sure our group didn't finish between the last check and acquiring the locks.
-			if (taskGroup.m_remainingTasks.load(std::memory_order_acquire) == 0)
-			{
-				return;
-			}
-
-			// Consume a task.
-			if (m_pendingTasks.GetCount() > 0)
-			{
-				std::pop_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskLessThan);
-				task = m_pendingTasks.Pop();
-			}
+			return;
 		}
 
-		if (task == NULL)
+		if (m_pendingTasks.GetCount() == 0)
 		{
-			// No more tasks to execute.
-			unique_lock<mutex> lk(m_taskGroupMut);
+			// Wait for workers to finish executing the group.
 			m_taskGroupFinishedCond.wait(lk, [&taskGroup]() -> bool
 			{
-				return taskGroup.m_remainingTasks.load(std::memory_order_acquire) == 0;
+				return taskGroup.m_remainingTasks == 0;
 			});
 
 			return;
 		}
 
-		// Execute the task.
+		// Execute a task while waiting.
+		std::pop_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskLessThan);
+		b2Task* task = m_pendingTasks.Pop();
+
+		lk.unlock();
+
 		task->Execute(allocator);
 
-		// Reduce the count of tasks remaining in the group.
-		int32 groupRemainingTasks = task->GetTaskGroup()->m_remainingTasks.fetch_sub(1, std::memory_order_release);
+		lk.lock();
 
-		// If this was the last task in the group.
-		if (groupRemainingTasks == 1)
-		{
-			// Sync with the waiting thread to ensure it reads '0' from the group's remaining tasks count.
-			// This shouldn't be necessary with the current usage since only this one thread is waiting,
-			// but just in case that changes...
-			{
-				unique_lock<mutex> lk(m_taskGroupMut);
-			}
-
-			// Let waiting threads know that a group is finished.
-			m_taskGroupFinishedCond.notify_all();
-		}
+		b2TaskGroup* group = task->GetTaskGroup();
+		group->m_remainingTasks -= 1;
 	}
 }
 
@@ -169,15 +150,14 @@ void b2ThreadPool::WorkerMain(int32 threadId)
 
 	b2StackAllocator allocator;
 
+	std::unique_lock<std::mutex> lk(m_mutex);
+
 	for (;;)
 	{
-		b2Task* task = NULL;
-
+		if (m_pendingTasks.GetCount() == 0)
 		{
-			unique_lock<mutex> lk(m_taskMut);
-
 			// Wait for tasks to be added, or for the pool to shutdown.
-			m_taskAddedCond.wait(lk, [this, threadId]() -> bool
+			m_taskAddedCond.wait(lk, [this]()
 			{
 				if (this->m_signalShutdown)
 				{
@@ -190,7 +170,6 @@ void b2ThreadPool::WorkerMain(int32 threadId)
 				return false;
 			});
 
-			// Is the pool shutting down?
 			if (m_signalShutdown)
 			{
 				// Shutting down in the middle of processing tasks is not supported.
@@ -198,54 +177,21 @@ void b2ThreadPool::WorkerMain(int32 threadId)
 
 				return;
 			}
-
-			// Consume a task.
-			std::pop_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskLessThan);
-			task = m_pendingTasks.Pop();
 		}
 
-		// Execute the task.
+		std::pop_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskLessThan);
+		b2Task* task = m_pendingTasks.Pop();
+
+		lk.unlock();
+
 		task->Execute(allocator);
 
-		// Reduce the count of tasks remaining in the group.
-		int32 groupRemainingTasks = task->GetTaskGroup()->m_remainingTasks.fetch_sub(1, std::memory_order_acq_rel);
+		lk.lock();
 
-		// If this was the last task in the group.
-		if (groupRemainingTasks == 1)
+		b2TaskGroup* group = task->GetTaskGroup();
+		if (--group->m_remainingTasks == 0)
 		{
-			// Sync with the waiting thread to ensure it reads '0' from the group's remaining tasks count.
-			{
-				unique_lock<mutex> lk(m_taskGroupMut);
-			}
-
-			// Let waiting threads know that a group is finished.
 			m_taskGroupFinishedCond.notify_all();
 		}
 	}
-}
-
-void b2ThreadPool::Destroy()
-{
-	// Wake up the threads.
-	{
-		unique_lock<mutex> lk(m_taskMut);
-		m_signalShutdown = true;
-	}
-	m_taskAddedCond.notify_all();
-
-	// Wait for them to finish.
-	for (int32 i = 0; i < m_threadCount; ++i)
-	{
-		if (m_threads[i].joinable())
-		{
-			m_threads[i].join();
-		}
-	}
-
-	// Destroy threads.
-	for (int32 i = 0; i < m_threadCount; ++i)
-	{
-		m_threads[i].~thread();
-	}
-	b2Free(m_threads);
 }

@@ -24,7 +24,7 @@ void DestructionListener::SayGoodbye(b2Joint* joint)
 {
 	if (test->m_mouseJoint == joint)
 	{
-		test->m_mouseJoint = NULL;
+		test->m_mouseJoint = nullptr;
 	}
 	else
 	{
@@ -33,21 +33,21 @@ void DestructionListener::SayGoodbye(b2Joint* joint)
 }
 
 Test::Test()
-: m_threadPool(/*thread count*/)
+	: m_threadPool(/*thread count*/)
 {
 	b2Vec2 gravity;
 	gravity.Set(0.0f, -10.0f);
-    m_world = new b2World(gravity, &m_threadPool);
-	m_bomb = NULL;
+	m_world = new b2World(gravity);
+	m_bomb = nullptr;
 	m_textLine = 30;
-	m_mouseJoint = NULL;
+	m_mouseJoint = nullptr;
 	memset(&m_pointCount, 0, sizeof(m_pointCount));
 
 	m_destructionListener.test = this;
 	m_world->SetDestructionListener(&m_destructionListener);
 	m_world->SetContactListener(this);
 	m_world->SetDebugDraw(&g_debugDraw);
-	
+
 	m_bombSpawning = false;
 
 	m_stepCount = 0;
@@ -63,7 +63,7 @@ Test::~Test()
 {
 	// By deleting the world, we delete the bomb, mouse joint, etc.
 	delete m_world;
-	m_world = NULL;
+	m_world = nullptr;
 }
 
 void Test::PreSolve(b2Contact* contact, const b2Manifold* oldManifold)
@@ -113,7 +113,7 @@ public:
 	QueryCallback(const b2Vec2& point)
 	{
 		m_point = point;
-		m_fixture = NULL;
+		m_fixture = nullptr;
 	}
 
 	bool ReportFixture(b2Fixture* fixture) override
@@ -142,8 +142,8 @@ public:
 void Test::MouseDown(const b2Vec2& p)
 {
 	m_mouseWorld = p;
-	
-	if (m_mouseJoint != NULL)
+
+	if (m_mouseJoint != nullptr)
 	{
 		return;
 	}
@@ -177,7 +177,7 @@ void Test::SpawnBomb(const b2Vec2& worldPt)
 	m_bombSpawnPoint = worldPt;
 	m_bombSpawning = true;
 }
-    
+
 void Test::CompleteBombSpawn(const b2Vec2& p)
 {
 	if (m_bombSpawning == false)
@@ -195,8 +195,8 @@ void Test::CompleteBombSpawn(const b2Vec2& p)
 void Test::ShiftMouseDown(const b2Vec2& p)
 {
 	m_mouseWorld = p;
-	
-	if (m_mouseJoint != NULL)
+
+	if (m_mouseJoint != nullptr)
 	{
 		return;
 	}
@@ -209,9 +209,9 @@ void Test::MouseUp(const b2Vec2& p)
 	if (m_mouseJoint)
 	{
 		m_world->DestroyJoint(m_mouseJoint);
-		m_mouseJoint = NULL;
+		m_mouseJoint = nullptr;
 	}
-	
+
 	if (m_bombSpawning)
 	{
 		CompleteBombSpawn(p);
@@ -221,7 +221,7 @@ void Test::MouseUp(const b2Vec2& p)
 void Test::MouseMove(const b2Vec2& p)
 {
 	m_mouseWorld = p;
-	
+
 	if (m_mouseJoint)
 	{
 		m_mouseJoint->SetTarget(p);
@@ -240,7 +240,7 @@ void Test::LaunchBomb(const b2Vec2& position, const b2Vec2& velocity)
 	if (m_bomb)
 	{
 		m_world->DestroyBody(m_bomb);
-		m_bomb = NULL;
+		m_bomb = nullptr;
 	}
 
 	b2BodyDef bd;
@@ -249,7 +249,7 @@ void Test::LaunchBomb(const b2Vec2& position, const b2Vec2& velocity)
 	bd.bullet = true;
 	m_bomb = m_world->CreateBody(&bd);
 	m_bomb->SetLinearVelocity(velocity);
-	
+
 	b2CircleShape circle;
 	circle.m_radius = 0.3f;
 
@@ -257,10 +257,10 @@ void Test::LaunchBomb(const b2Vec2& position, const b2Vec2& velocity)
 	fd.shape = &circle;
 	fd.density = 20.0f;
 	fd.restitution = 0.0f;
-	
+
 	b2Vec2 minV = position - b2Vec2(0.3f,0.3f);
 	b2Vec2 maxV = position + b2Vec2(0.3f,0.3f);
-	
+
 	b2AABB aabb;
 	aabb.lowerBound = minV;
 	aabb.upperBound = maxV;
@@ -301,7 +301,7 @@ void Test::Step(Settings* settings)
 
 	memset(&m_pointCount, 0, sizeof(m_pointCount));
 
-	m_world->Step(timeStep, settings->velocityIterations, settings->positionIterations);
+	m_world->Step(timeStep, settings->velocityIterations, settings->positionIterations, m_threadPool);
 
 	m_world->DrawDebugData();
 	g_debugDraw.Flush();
