@@ -35,6 +35,8 @@ struct b2Profile
 	float32 broadphase;
 	float32 broadphaseSyncFixtures;
 	float32 broadphaseFindContacts;
+	float32 locking;
+	float32 taskStarting;
 };
 
 /// This is an internal structure.

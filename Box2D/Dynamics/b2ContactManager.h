@@ -79,7 +79,7 @@ public:
 	// Broad-phase callback.
 	void AddPair(void* proxyUserDataA, void* proxyUserDataB);
 
-	void FindNewContacts(int32 moveBegin, int32 moveEnd, bool isSingleThread);
+	void FindNewContacts(int32 moveBegin, int32 moveEnd);
 
 	void Collide(b2Contact** contacts, int32 count);
 
@@ -112,7 +112,7 @@ public:
 
 	b2ContactManagerPerThreadData m_perThreadData[b2_maxThreads];
 
-	bool m_isSingleThread;
+	bool m_deferCreates;
 };
 
 inline int32 b2ContactManager::GetContactCount() const

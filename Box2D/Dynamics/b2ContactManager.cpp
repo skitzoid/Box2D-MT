@@ -115,7 +115,7 @@ b2ContactManager::b2ContactManager()
 	m_contactFilter = &b2_defaultFilter;
 	m_contactListener = &b2_defaultListener;
 	m_allocator = nullptr;
-	m_isSingleThread = false;
+	m_deferCreates = false;
 }
 
 void b2ContactManager::Destroy(b2Contact* c)
@@ -256,13 +256,9 @@ void b2ContactManager::Collide(b2Contact** contacts, int32 count)
 	}
 }
 
-void b2ContactManager::FindNewContacts(int32 moveBegin, int32 moveEnd, bool isSingleThread)
+void b2ContactManager::FindNewContacts(int32 moveBegin, int32 moveEnd)
 {
-	m_isSingleThread = isSingleThread;
-
 	m_broadPhase.UpdatePairs(moveBegin, moveEnd, this);
-
-	m_isSingleThread = false;
 }
 
 void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
@@ -326,7 +322,15 @@ void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
 		return;
 	}
 
-	if (m_isSingleThread)
+	if (m_deferCreates)
+	{
+		// Defer creation.
+		b2DeferredContactCreate deferredCreate;
+		deferredCreate.proxyA = proxyA;
+		deferredCreate.proxyB = proxyB;
+		m_perThreadData[b2GetThreadId()].m_deferredCreates.Push(deferredCreate);
+	}
+	else
 	{
 		// Call the factory.
 		b2Contact* c = b2Contact::Create(fixtureA, indexA, fixtureB, indexB, m_allocator);
@@ -336,14 +340,6 @@ void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
 		}
 
 		OnContactCreate(c);
-	}
-	else
-	{
-		// Defer creation.
-		b2DeferredContactCreate deferredCreate;
-		deferredCreate.proxyA = proxyA;
-		deferredCreate.proxyB = proxyB;
-		m_perThreadData[b2GetThreadId()].m_deferredCreates.Push(deferredCreate);
 	}
 }
 

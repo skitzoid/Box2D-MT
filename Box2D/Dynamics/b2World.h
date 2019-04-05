@@ -96,6 +96,9 @@ public:
 	/// @param velocityIterations for the velocity constraint solver.
 	/// @param positionIterations for the position constraint solver.
 	/// @param threadPool the thread pool that will execute the step tasks.
+	/// Note: The world will call StartBusyWaiting on the thread pool. If you want the thread
+	/// pool's workers to stop busy waiting you must call StopBusyWaiting after the step
+	/// (which will degrade performance on some platforms).
 	void Step(	float32 timeStep,
 				int32 velocityIterations,
 				int32 positionIterations,

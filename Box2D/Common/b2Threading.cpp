@@ -52,6 +52,11 @@ b2ThreadPool::b2ThreadPool(int32 threadCount)
 			new(&m_threads[i]) std::thread(&b2ThreadPool::WorkerMain, this, 1 + i);
 		}
 	}
+
+	m_lockMilliseconds = 0;
+	m_taskStartMilliseconds = 0;
+	m_pendingTaskCount.store(0, std::memory_order_relaxed);
+	m_busyWait.store(false, std::memory_order_relaxed);
 }
 
 b2ThreadPool::~b2ThreadPool()
@@ -59,8 +64,9 @@ b2ThreadPool::~b2ThreadPool()
 	{
 		std::lock_guard<std::mutex> lk(m_mutex);
 		m_signalShutdown = true;
+		m_busyWait.store(false, std::memory_order_relaxed);
 	}
-	m_taskAddedCond.notify_all();
+	m_workerCond.notify_all();
 
 	for (int32 i = 0; i < m_threadCount; ++i)
 	{
@@ -77,70 +83,110 @@ b2ThreadPool::~b2ThreadPool()
 	b2Free(m_threads);
 }
 
-int32 b2ThreadPool::GetThreadCount() const
+void b2ThreadPool::StartBusyWaiting()
 {
-	return m_threadCount;
+	{
+		std::lock_guard<std::mutex> lk(m_mutex);
+		m_busyWait.store(true, std::memory_order_relaxed);
+	}
+	m_workerCond.notify_all();
+}
+
+void b2ThreadPool::StopBusyWaiting()
+{
+	std::lock_guard<std::mutex> lk(m_mutex);
+	m_busyWait.store(false, std::memory_order_relaxed);
 }
 
 void b2ThreadPool::AddTasks(b2TaskGroup* group, b2Task** tasks, int32 count)
 {
 	{
+		b2Timer lockTimer;
 		std::lock_guard<std::mutex> lk(m_mutex);
-		group->m_remainingTasks += count;
+		m_lockMilliseconds += lockTimer.GetMilliseconds();
+
 		for (int32 i = 0; i < count; ++i)
 		{
 			m_pendingTasks.Push(tasks[i]);
 			std::push_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskLessThan);
 		}
+		m_pendingTaskCount.store(m_pendingTasks.GetCount(), std::memory_order_relaxed);
+		group->m_remainingTasks.store(group->m_remainingTasks.load(std::memory_order_relaxed) + count, std::memory_order_relaxed);
+
+		group->m_accumulatedNotifyMilliseconds += group->m_maxNotifyAllMilliseconds;
+		group->m_maxNotifyAllMilliseconds = 0;
+		group->m_notifiedAll = true;
+		group->m_notifyTimer.Reset();
 	}
-	m_taskAddedCond.notify_all();
+	m_workerCond.notify_all();
 }
 
 void b2ThreadPool::AddTask(b2TaskGroup* group, b2Task* task)
 {
 	{
+		b2Timer lockTimer;
 		std::lock_guard<std::mutex> lk(m_mutex);
-		group->m_remainingTasks += 1;
+		m_lockMilliseconds += lockTimer.GetMilliseconds();
+
 		m_pendingTasks.Push(task);
 		std::push_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskLessThan);
+		m_pendingTaskCount.store(m_pendingTasks.GetCount(), std::memory_order_relaxed);
+		group->m_remainingTasks.store(group->m_remainingTasks.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+
+		group->m_maxNotifyAllMilliseconds = 0;
+		group->m_notifiedAll = false;
+		group->m_notifyTimer.Reset();
 	}
-	m_taskAddedCond.notify_one();
+	m_workerCond.notify_one();
 }
 
 void b2ThreadPool::Wait(const b2TaskGroup& taskGroup, b2StackAllocator& allocator)
 {
+	b2Timer lockTimer;
 	std::unique_lock<std::mutex> lk(m_mutex);
+	m_lockMilliseconds += lockTimer.GetMilliseconds();
 
-	for (;;)
+	while (true)
 	{
-		if (taskGroup.m_remainingTasks == 0)
+		if (taskGroup.m_remainingTasks.load(std::memory_order_relaxed) == 0)
 		{
+			m_taskStartMilliseconds += taskGroup.m_maxNotifyAllMilliseconds + taskGroup.m_accumulatedNotifyMilliseconds;
 			return;
 		}
 
 		if (m_pendingTasks.GetCount() == 0)
 		{
 			// Wait for workers to finish executing the group.
-			m_taskGroupFinishedCond.wait(lk, [&taskGroup]() -> bool
+			lk.unlock();
+			while (taskGroup.m_remainingTasks.load(std::memory_order_relaxed) > 0)
 			{
-				return taskGroup.m_remainingTasks == 0;
-			});
+				std::this_thread::yield();
+			}
+			lockTimer.Reset();
+			lk.lock();
+			m_lockMilliseconds += lockTimer.GetMilliseconds();
 
+			m_taskStartMilliseconds += taskGroup.m_maxNotifyAllMilliseconds + taskGroup.m_accumulatedNotifyMilliseconds;
 			return;
 		}
 
 		// Execute a task while waiting.
 		std::pop_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskLessThan);
 		b2Task* task = m_pendingTasks.Pop();
+		m_pendingTaskCount.store(m_pendingTasks.GetCount(), std::memory_order_relaxed);
 
 		lk.unlock();
 
 		task->Execute(allocator);
 
+		lockTimer.Reset();
 		lk.lock();
+		m_lockMilliseconds += lockTimer.GetMilliseconds();
 
 		b2TaskGroup* group = task->GetTaskGroup();
-		group->m_remainingTasks -= 1;
+
+		// We only modify this while the mutex is locked, so relaxed ordering is acceptable.
+		group->m_remainingTasks.store(group->m_remainingTasks.load(std::memory_order_relaxed) - 1, std::memory_order_relaxed);
 	}
 }
 
@@ -150,25 +196,55 @@ void b2ThreadPool::WorkerMain(int32 threadId)
 
 	b2StackAllocator allocator;
 
+	b2Timer lockTimer;
 	std::unique_lock<std::mutex> lk(m_mutex);
 
-	for (;;)
+	while (true)
 	{
-		if (m_pendingTasks.GetCount() == 0)
+		bool waitedForTasks = false;
+
+		while (m_pendingTasks.GetCount() == 0)
 		{
-			// Wait for tasks to be added, or for the pool to shutdown.
-			m_taskAddedCond.wait(lk, [this]()
+			waitedForTasks = true;
+
+			if (m_busyWait.load(std::memory_order_relaxed))
 			{
-				if (this->m_signalShutdown)
+				do
 				{
-					return true;
-				}
-				if (m_pendingTasks.GetCount() > 0)
+					lk.unlock();
+					while (m_pendingTaskCount.load(std::memory_order_relaxed) == 0 &&
+						m_busyWait.load(std::memory_order_relaxed))
+					{
+						std::this_thread::yield();
+					}
+					lockTimer.Reset();
+					lk.lock();
+					// Note: the lock time is added outside the loop to exclude locks that weren't actually needed.
+
+				} while (m_pendingTaskCount.load(std::memory_order_relaxed) == 0 &&
+					m_busyWait.load(std::memory_order_relaxed));
+
+				m_lockMilliseconds += lockTimer.GetMilliseconds();
+			}
+			else
+			{
+				m_workerCond.wait(lk, [this]()
 				{
-					return true;
-				}
-				return false;
-			});
+					if (m_busyWait.load(std::memory_order_relaxed))
+					{
+						return true;
+					}
+					if (m_pendingTasks.GetCount() > 0)
+					{
+						return true;
+					}
+					if (m_signalShutdown)
+					{
+						return true;
+					}
+					return false;
+				});
+			}
 
 			if (m_signalShutdown)
 			{
@@ -181,17 +257,32 @@ void b2ThreadPool::WorkerMain(int32 threadId)
 
 		std::pop_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskLessThan);
 		b2Task* task = m_pendingTasks.Pop();
+		m_pendingTaskCount.store(m_pendingTasks.GetCount(), std::memory_order_relaxed);
+
+		b2TaskGroup* group = task->GetTaskGroup();
+
+		// Measure how long it took for threads to get to work after notification.
+		if (waitedForTasks)
+		{
+			if (group->m_notifiedAll)
+			{
+				group->m_maxNotifyAllMilliseconds = group->m_notifyTimer.GetMilliseconds();
+			}
+			else
+			{
+				group->m_accumulatedNotifyMilliseconds += group->m_notifyTimer.GetMilliseconds();
+			}
+		}
 
 		lk.unlock();
 
 		task->Execute(allocator);
 
+		lockTimer.Reset();
 		lk.lock();
+		m_lockMilliseconds += lockTimer.GetMilliseconds();
 
-		b2TaskGroup* group = task->GetTaskGroup();
-		if (--group->m_remainingTasks == 0)
-		{
-			m_taskGroupFinishedCond.notify_all();
-		}
+		// We only modify this while the mutex is locked, so relaxed ordering is acceptable.
+		group->m_remainingTasks.store(group->m_remainingTasks.load(std::memory_order_relaxed) - 1, std::memory_order_relaxed);
 	}
 }

@@ -22,6 +22,7 @@
 #include "Box2D/Common/b2Settings.h"
 #include "Box2D/Common/b2GrowableArray.h"
 #include "Box2D/Common/b2StackAllocator.h"
+#include "Box2D/Common/b2Timer.h"
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -104,8 +105,14 @@ public:
 private:
 	friend class b2ThreadPool;
 
-	uint32 m_remainingTasks;
 	b2ThreadPool* m_threadPool;
+	std::atomic<uint32> m_remainingTasks;
+
+	// Stats
+	b2Timer m_notifyTimer;
+	float32 m_maxNotifyAllMilliseconds;
+	float32 m_accumulatedNotifyMilliseconds;
+	bool m_notifiedAll;
 };
 
 /// The thread pool executes tasks submitted by task groups.
@@ -118,8 +125,23 @@ public:
 
 	~b2ThreadPool();
 
+	/// Wake the workers so they can busy-wait for tasks until UnreadyWorkers is called.
+	void StartBusyWaiting();
+
+	/// Allow the workers to sleep until tasks are added or ReadyWorkers is called.
+	void StopBusyWaiting();
+
 	/// Get the number of threads in the pool.
 	int32 GetThreadCount() const;
+
+	/// Time spent waiting to lock the mutex.
+	float32 GetLockMilliseconds() const;
+
+	/// Time until waiting workers acquired a task after notification.
+	float32 GetTaskStartMilliseconds() const;
+
+	/// Reset lock timer and task start timer.
+	void ResetTimers();
 
 private:
 	friend class b2TaskGroup;
@@ -137,12 +159,16 @@ private:
 	void WorkerMain(int32 threadId);
 
 	std::mutex m_mutex;
-	std::condition_variable m_taskAddedCond;
-	std::condition_variable m_taskGroupFinishedCond;
+	std::condition_variable m_workerCond;
+	std::atomic<int32> m_pendingTaskCount;
+	std::atomic<bool> m_busyWait;
 	b2GrowableArray<b2Task*> m_pendingTasks;
 
 	std::thread* m_threads;
 	int32 m_threadCount;
+
+	float32 m_lockMilliseconds;
+	float32 m_taskStartMilliseconds;
 
 	bool m_signalShutdown;
 };
@@ -222,8 +248,11 @@ void b2TaskGroup::SubmitRangedTasks(RangedTaskType* tasks, int32 taskCount, int3
 
 inline b2TaskGroup::b2TaskGroup(b2ThreadPool& threadPool)
 {
-	m_remainingTasks = 0;
 	m_threadPool = &threadPool;
+	m_remainingTasks = 0;
+	m_maxNotifyAllMilliseconds = 0;
+	m_accumulatedNotifyMilliseconds = 0;
+	m_notifiedAll = false;
 }
 
 inline b2TaskGroup::~b2TaskGroup()
@@ -252,6 +281,27 @@ inline void b2TaskGroup::SubmitTask(b2Task* task)
 inline void b2TaskGroup::Wait(b2StackAllocator& allocator)
 {
 	m_threadPool->Wait(*this, allocator);
+}
+
+inline int32 b2ThreadPool::GetThreadCount() const
+{
+	return m_threadCount;
+}
+
+inline float32 b2ThreadPool::GetLockMilliseconds() const
+{
+	return m_lockMilliseconds;
+}
+
+inline float32 b2ThreadPool::GetTaskStartMilliseconds() const
+{
+	return m_taskStartMilliseconds;
+}
+
+inline void b2ThreadPool::ResetTimers()
+{
+	m_lockMilliseconds = 0;
+	m_taskStartMilliseconds = 0;
 }
 
 #endif

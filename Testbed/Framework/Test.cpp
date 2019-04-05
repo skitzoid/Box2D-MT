@@ -341,6 +341,8 @@ void Test::Step(Settings* settings)
 		m_maxProfile.broadphase = b2Max(m_maxProfile.broadphase, p.broadphase);
 		m_maxProfile.broadphaseSyncFixtures = b2Max(m_maxProfile.broadphaseSyncFixtures, p.broadphaseSyncFixtures);
 		m_maxProfile.broadphaseFindContacts = b2Max(m_maxProfile.broadphaseFindContacts, p.broadphaseFindContacts);
+		m_maxProfile.locking = b2Max(m_maxProfile.locking, p.locking);
+		m_maxProfile.taskStarting = b2Max(m_maxProfile.taskStarting, p.taskStarting);
 
 		m_totalProfile.step += p.step;
 		m_totalProfile.collide += p.collide;
@@ -353,6 +355,8 @@ void Test::Step(Settings* settings)
 		m_totalProfile.broadphase += p.broadphase;
 		m_totalProfile.broadphaseSyncFixtures += p.broadphaseSyncFixtures;
 		m_totalProfile.broadphaseFindContacts += p.broadphaseFindContacts;
+		m_totalProfile.locking += p.locking;
+		m_totalProfile.taskStarting += p.taskStarting;
 	}
 
 	if (settings->drawProfile)
@@ -375,6 +379,8 @@ void Test::Step(Settings* settings)
 			aveProfile.broadphase = scale * m_totalProfile.broadphase;
 			aveProfile.broadphaseSyncFixtures = scale * m_totalProfile.broadphaseSyncFixtures;
 			aveProfile.broadphaseFindContacts = scale * m_totalProfile.broadphaseFindContacts;
+			aveProfile.locking = scale * m_totalProfile.locking;
+			aveProfile.taskStarting = scale * m_totalProfile.taskStarting;
 		}
 
 		g_debugDraw.DrawString(5, m_textLine, "step [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.step, aveProfile.step, m_maxProfile.step);
@@ -398,6 +404,10 @@ void Test::Step(Settings* settings)
 		g_debugDraw.DrawString(5, m_textLine, "| |-solve position * [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.solvePosition, aveProfile.solvePosition, m_maxProfile.solvePosition);
 		m_textLine += DRAW_STRING_NEW_LINE;
 		g_debugDraw.DrawString(5, m_textLine, "|-solveTOI [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.solveTOI, aveProfile.solveTOI, m_maxProfile.solveTOI);
+		m_textLine += DRAW_STRING_NEW_LINE;
+		g_debugDraw.DrawString(5, m_textLine, "locking [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.locking, aveProfile.locking, m_maxProfile.locking);
+		m_textLine += DRAW_STRING_NEW_LINE;
+		g_debugDraw.DrawString(5, m_textLine, "task starting [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.taskStarting, aveProfile.taskStarting, m_maxProfile.taskStarting);
 		m_textLine += DRAW_STRING_NEW_LINE;
 		g_debugDraw.DrawString(5, m_textLine, "* sum of per-thread times");
 		m_textLine += DRAW_STRING_NEW_LINE;

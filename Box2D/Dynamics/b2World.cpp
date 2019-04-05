@@ -144,7 +144,7 @@ public:
 private:
 	virtual void Execute(b2StackAllocator&) override
 	{
-		m_manager->FindNewContacts(m_beginIndex, m_endIndex, false);
+		m_manager->FindNewContacts(m_beginIndex, m_endIndex);
 	}
 };
 
@@ -864,7 +864,7 @@ void b2World::SolveTOI(const b2TimeStep& step)
 				b2Timer timer2;
 
 				// Look for new contacts.
-				m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount(), true);
+				m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount());
 				m_contactManager.m_broadPhase.ResetMoveBuffer();
 
 				m_profile.broadphaseFindContacts += timer2.GetMilliseconds();
@@ -918,11 +918,15 @@ void b2World::FindNewContacts(b2ThreadPool& threadPool)
 		tasks[i].m_manager = &m_contactManager;
 	}
 
+	m_contactManager.m_deferCreates = true;
+
 	// Submit tasks.
 	group.SubmitRangedTasks(tasks, threadPool.GetThreadCount(), m_contactManager.m_broadPhase.GetMoveCount(), m_stackAllocator);
 
 	// Wait for tasks to finish.
 	group.Wait(m_stackAllocator);
+
+	m_contactManager.m_deferCreates = false;
 
 	// Do work that couldn't be done in parallel.
 	m_contactManager.m_broadPhase.ResetMoveBuffer();
@@ -1287,6 +1291,9 @@ void b2World::ClearIslandFlags(b2ThreadPool& threadPool)
 
 void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIterations, b2ThreadPool& threadPool)
 {
+	threadPool.StartBusyWaiting();
+	threadPool.ResetTimers();
+
 	b2Timer stepTimer;
 
 	memset(&m_profile, 0, sizeof(m_profile));
@@ -1363,6 +1370,8 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 	m_flags &= ~e_locked;
 
 	m_profile.step = stepTimer.GetMilliseconds();
+	m_profile.locking = threadPool.GetLockMilliseconds();
+	m_profile.taskStarting = threadPool.GetTaskStartMilliseconds();
 }
 
 void b2World::ClearForces()
