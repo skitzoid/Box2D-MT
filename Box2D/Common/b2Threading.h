@@ -31,6 +31,9 @@
 class b2TaskGroup;
 class b2ThreadPool;
 
+/// Get the calling thread's ID.
+int32 b2GetThreadId();
+
 /// The base class for all tasks that are run by the thread pool.
 class b2Task
 {
@@ -131,7 +134,8 @@ public:
 	/// Allow the workers to sleep until tasks are added or ReadyWorkers is called.
 	void StopBusyWaiting();
 
-	/// Get the number of threads in the pool.
+	/// The number of threads available to execute tasks. This is the number of threads in the pool,
+	/// plus one for the additional thread required to submit tasks and wait on them.
 	int32 GetThreadCount() const;
 
 	/// Time spent waiting to lock the mutex.
@@ -285,7 +289,7 @@ inline void b2TaskGroup::Wait(b2StackAllocator& allocator)
 
 inline int32 b2ThreadPool::GetThreadCount() const
 {
-	return m_threadCount;
+	return m_threadCount + 1;
 }
 
 inline float32 b2ThreadPool::GetLockMilliseconds() const

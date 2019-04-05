@@ -21,6 +21,13 @@
 #include "Box2D/Common/b2StackAllocator.h"
 #include <algorithm>
 
+b2ThreadLocal int32 b2_threadId = 0;
+
+int32 b2GetThreadId()
+{
+	return b2_threadId;
+}
+
 // Compare the cost of two tasks.
 bool b2TaskLessThan(const b2Task* l, const b2Task* r)
 {
@@ -185,14 +192,14 @@ void b2ThreadPool::Wait(const b2TaskGroup& taskGroup, b2StackAllocator& allocato
 
 		b2TaskGroup* group = task->GetTaskGroup();
 
-		// We only modify this while the mutex is locked, so relaxed ordering is acceptable.
+		// We only modify this while the mutex is locked, so it's okay to do this non-atomically.
 		group->m_remainingTasks.store(group->m_remainingTasks.load(std::memory_order_relaxed) - 1, std::memory_order_relaxed);
 	}
 }
 
 void b2ThreadPool::WorkerMain(int32 threadId)
 {
-	b2SetThreadId(threadId);
+	b2_threadId = threadId;
 
 	b2StackAllocator allocator;
 
@@ -205,6 +212,7 @@ void b2ThreadPool::WorkerMain(int32 threadId)
 
 		while (m_pendingTasks.GetCount() == 0)
 		{
+			// Wait for tasks
 			waitedForTasks = true;
 
 			if (m_busyWait.load(std::memory_order_relaxed))
@@ -262,6 +270,7 @@ void b2ThreadPool::WorkerMain(int32 threadId)
 		b2TaskGroup* group = task->GetTaskGroup();
 
 		// Measure how long it took for threads to get to work after notification.
+		// Busy waiting reduces this time.
 		if (waitedForTasks)
 		{
 			if (group->m_notifiedAll)
@@ -282,7 +291,7 @@ void b2ThreadPool::WorkerMain(int32 threadId)
 		lk.lock();
 		m_lockMilliseconds += lockTimer.GetMilliseconds();
 
-		// We only modify this while the mutex is locked, so relaxed ordering is acceptable.
+		// We only modify this while the mutex is locked, so it's okay to do this non-atomically.
 		group->m_remainingTasks.store(group->m_remainingTasks.load(std::memory_order_relaxed) - 1, std::memory_order_relaxed);
 	}
 }

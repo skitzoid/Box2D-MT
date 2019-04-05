@@ -159,12 +159,6 @@ typedef double float64;
 /// Get the estimated cost of solving an island with the specified attributes
 int32 b2GetIslandCost(int32 bodyCount, int32 contactCount, int32 jointCount);
 
-/// Set the calling thread's ID.
-void b2SetThreadId(int32 threadId);
-
-/// Get the calling thread's ID.
-int32 b2GetThreadId();
-
 
 // Memory Allocation
 
