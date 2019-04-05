@@ -312,12 +312,12 @@ public:
 	/// Get the type of this body.
 	b2BodyType GetType() const;
 
-	/// Should this body only use continuous collision detection when colliding 
+	/// Should this body only use continuous collision detection when colliding
 	/// with bullet bodies? This only affects static bodies. Other bodies always
 	/// behave as if this were true.
 	void SetPreferNoCCD(bool flag);
 
-	/// Does this body only use continuous collision detection when colliding 
+	/// Does this body only use continuous collision detection when colliding
 	/// with bullet bodies?
 	bool GetPreferNoCCD() const;
 
@@ -412,8 +412,8 @@ private:
 	friend class b2ContactManager;
 	friend class b2ContactSolver;
 	friend class b2Contact;
-	friend class b2ClearBodyIslandFlagsTask;
-	
+	friend class b2BodyPostSolveResetTask;
+
 	friend class b2DistanceJoint;
 	friend class b2FrictionJoint;
 	friend class b2GearJoint;

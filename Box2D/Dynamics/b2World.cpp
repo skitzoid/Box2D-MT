@@ -148,21 +148,36 @@ private:
 	}
 };
 
-class b2ClearContactIslandFlagsTask : public b2RangedTask
+class b2ContactPostSolveResetTask : public b2RangedTask
 {
 public:
 	b2Contact** m_contacts;
+	bool m_toiCandidates;
 private:
 	virtual void Execute(b2StackAllocator&) override
 	{
-		for (int32 i = m_beginIndex; i < m_endIndex; ++i)
+		if (m_toiCandidates)
 		{
-			m_contacts[i]->m_flags &= ~b2Contact::e_islandFlag;
+			for (int32 i = m_beginIndex; i < m_endIndex; ++i)
+			{
+				m_contacts[i]->m_flags &= ~(b2Contact::e_toiFlag | b2Contact::e_islandFlag);
+				m_contacts[i]->m_toiCount = 0;
+				m_contacts[i]->m_toi = 1.0f;
+			}
+		}
+		else
+		{
+			for (int32 i = m_beginIndex; i < m_endIndex; ++i)
+			{
+				m_contacts[i]->m_flags &= ~b2Contact::e_islandFlag;
+			}
 		}
 	}
 };
 
-class b2ClearBodyIslandFlagsTask : public b2RangedTask
+
+
+class b2BodyPostSolveResetTask : public b2RangedTask
 {
 public:
 	b2Body** m_bodies;
@@ -172,6 +187,7 @@ private:
 		for (int32 i = m_beginIndex; i < m_endIndex; ++i)
 		{
 			m_bodies[i]->m_flags &= ~b2Body::e_islandFlag;
+			m_bodies[i]->m_sweep.alpha0 = 0.0f;
 		}
 	}
 };
@@ -554,25 +570,6 @@ void b2World::SolveTOI(const b2TimeStep& step)
 {
 	b2Island island(2 * b2_maxTOIContacts, b2_maxTOIContacts, 0, &m_stackAllocator,
 		m_contactManager.m_contactListener);
-
-	if (m_stepComplete)
-	{
-		for (b2Body* b = m_bodyList; b; b = b->m_next)
-		{
-			b->m_flags &= ~b2Body::e_islandFlag;
-			b->m_sweep.alpha0 = 0.0f;
-		}
-
-		for (int32 i = 0; i < m_contactManager.m_contactsTOI.GetCount(); ++i)
-		{
-			b2Contact* c = m_contactManager.m_contactsTOI.At(i);
-
-			// Invalidate TOI
-			c->m_flags &= ~(b2Contact::e_toiFlag | b2Contact::e_islandFlag);
-			c->m_toiCount = 0;
-			c->m_toi = 1.0f;
-		}
-	}
 
 	// Find TOI events and solve them.
 	for (;;)
@@ -1243,18 +1240,20 @@ void b2World::ClearIslandFlags(b2ThreadPool& threadPool)
 {
 	b2TaskGroup group(threadPool);
 
-	b2ClearContactIslandFlagsTask contactsTasks[b2_maxThreads];
-	b2ClearContactIslandFlagsTask toiContactsTasks[b2_maxThreads];
+	b2ContactPostSolveResetTask contactsTasks[b2_maxThreads];
+	b2ContactPostSolveResetTask toiContactsTasks[b2_maxThreads];
 
-	b2ClearBodyIslandFlagsTask bodyTasks[b2_maxThreads];
-	b2ClearBodyIslandFlagsTask staticBodyTasks[b2_maxThreads];
+	b2BodyPostSolveResetTask bodyTasks[b2_maxThreads];
+	b2BodyPostSolveResetTask staticBodyTasks[b2_maxThreads];
 
 	// Initialize tasks.
 	for (int32 i = 0; i < threadPool.GetThreadCount(); ++i)
 	{
 		contactsTasks[i].m_contacts = m_contactManager.m_contactsNonTOI.Data();
+		contactsTasks[i].m_toiCandidates = false;
 
 		toiContactsTasks[i].m_contacts = m_contactManager.m_contactsTOI.Data();
+		toiContactsTasks[i].m_toiCandidates = true;
 
 		bodyTasks[i].m_bodies = m_nonStaticBodies.Data();
 

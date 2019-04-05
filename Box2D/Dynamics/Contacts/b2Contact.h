@@ -152,7 +152,7 @@ protected:
 	friend class b2ContactSolver;
 	friend class b2Body;
 	friend class b2Fixture;
-	friend class b2ClearContactIslandFlagsTask;
+	friend class b2ContactPostSolveResetTask;
 	friend bool b2ContactPointerLessThan(const b2Contact* l, const b2Contact* r);
 
 	// Flags stored in m_flags
