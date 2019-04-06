@@ -217,20 +217,14 @@ void b2ThreadPool::WorkerMain(int32 threadId)
 
 			if (m_busyWait.load(std::memory_order_relaxed))
 			{
-				do
+				lk.unlock();
+				while (m_pendingTaskCount.load(std::memory_order_relaxed) == 0 &&
+					m_busyWait.load(std::memory_order_relaxed))
 				{
-					lk.unlock();
-					while (m_pendingTaskCount.load(std::memory_order_relaxed) == 0 &&
-						m_busyWait.load(std::memory_order_relaxed))
-					{
-						std::this_thread::yield();
-					}
-					lockTimer.Reset();
-					lk.lock();
-					// Note: the lock time is added outside the loop to exclude locks that weren't actually needed.
-
-				} while (m_pendingTaskCount.load(std::memory_order_relaxed) == 0 &&
-					m_busyWait.load(std::memory_order_relaxed));
+					std::this_thread::yield();
+				}
+				lockTimer.Reset();
+				lk.lock();
 
 				m_lockMilliseconds += lockTimer.GetMilliseconds();
 			}
