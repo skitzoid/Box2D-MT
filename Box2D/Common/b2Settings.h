@@ -157,9 +157,6 @@ typedef double float64;
 /// When this is defined the stack allocator will assert if it needs to use malloc.
 #define b2_assertStackAllocatorNoMalloc
 
-/// When this is defined b2Prefetch will be implemented.
-#define b2_prefetchEnabled
-
 /// Get the estimated cost of solving an island with the specified attributes
 int32 b2GetIslandCost(int32 bodyCount, int32 contactCount, int32 jointCount);
 
