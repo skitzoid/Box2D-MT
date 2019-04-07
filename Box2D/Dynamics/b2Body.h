@@ -22,7 +22,6 @@
 
 #include "Box2D/Common/b2Math.h"
 #include "Box2D/Collision/Shapes/b2Shape.h"
-#include "Box2D/Common/b2Threading.h"
 #include <memory>
 
 class b2Fixture;
@@ -397,11 +396,11 @@ public:
 	b2World* GetWorld();
 	const b2World* GetWorld() const;
 
-	/// Get the island index for the current thread.
-	int32 GetIslandIndex() const;
+	/// Get the island index for the specified thread.
+	int32 GetIslandIndex(int32 threadId) const;
 
-	/// Set the island index for the current thread.
-	void SetIslandIndex(int32 islandIndex);
+	/// Set the island index for the specified thread.
+	void SetIslandIndex(int32 islandIndex, int32 threadId);
 
 	/// Dump this body to a log file
 	void Dump();
@@ -916,15 +915,13 @@ inline const b2World* b2Body::GetWorld() const
 	return m_world;
 }
 
-inline int32 b2Body::GetIslandIndex() const
+inline int32 b2Body::GetIslandIndex(int32 threadId) const
 {
-	int32 threadId = b2GetThreadId();
 	return m_islandIndex[threadId];
 }
 
-inline void b2Body::SetIslandIndex(int32 islandIndex)
+inline void b2Body::SetIslandIndex(int32 islandIndex, int32 threadId)
 {
-	int32 threadId = b2GetThreadId();
 	m_islandIndex[threadId] = islandIndex;
 }
 

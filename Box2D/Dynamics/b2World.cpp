@@ -33,7 +33,7 @@
 #include "Box2D/Collision/b2TimeOfImpact.h"
 #include "Box2D/Common/b2Draw.h"
 #include "Box2D/Common/b2Timer.h"
-#include "Box2D/Common/b2Threading.h"
+#include "Box2D/MT/b2TaskExecutor.h"
 #include <new>
 
 class b2SolveTask : public b2Task
@@ -78,22 +78,22 @@ public:
 
 private:
 
-	virtual void Execute(b2StackAllocator& allocator) override
+	virtual void Execute(b2TaskExecutionContext& context) override
 	{
 		for (int32 islandIndex = 0; islandIndex < m_islandCount; ++islandIndex)
 		{
 			b2Island& island = m_islands[islandIndex];
 
-			island.m_allocator = &allocator;
-			island.m_td = m_td + b2GetThreadId();
+			island.m_allocator = context.allocator;
+			island.m_td = m_td + context.threadId;
 
 			// Set the per-thread island indices.
 			for (int32 i = 0; i < island.m_bodyCount; ++i)
 			{
-				island.m_bodies[i]->SetIslandIndex(i);
+				island.m_bodies[i]->SetIslandIndex(i, context.threadId);
 			}
 
-			island.Solve(&m_profile, *m_timestep, m_gravity, m_allowSleep);
+			island.Solve(&m_profile, *m_timestep, m_gravity, context.threadId, m_allowSleep);
 
 			island.m_allocator = nullptr;
 		}
@@ -113,52 +113,90 @@ private:
 	b2Profile m_profile;
 };
 
-class b2CollideTask : public b2RangedTask
+class b2CollideTask : public b2RangeTask
 {
 public:
+	b2CollideTask() {}
+	b2CollideTask(const b2RangeTaskRange& range, b2ContactManager* manager, b2Contact** contacts)
+		: m_manager(manager)
+		, m_contacts(contacts)
+	{
+		m_range = range;
+	}
+private:
+	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange range) override
+	{
+		m_manager->Collide(m_contacts + range.begin, range.end - range.begin, context.threadId);
+	}
+	virtual void Execute(b2TaskExecutionContext& context) override
+	{
+		Execute(context, GetRange());
+	}
 	b2ContactManager* m_manager;
 	b2Contact** m_contacts;
-private:
-	virtual void Execute(b2StackAllocator&) override
-	{
-		m_manager->Collide(m_contacts + m_beginIndex, m_endIndex - m_beginIndex);
-	}
 };
 
-class b2BroadphaseGenerateDefferedMovesTask : public b2RangedTask
+class b2BroadphaseGenerateDefferedMovesTask : public b2RangeTask
 {
 public:
+	b2BroadphaseGenerateDefferedMovesTask() {}
+	b2BroadphaseGenerateDefferedMovesTask(const b2RangeTaskRange& range, b2ContactManager* manager, b2Body** bodies)
+		: m_manager(manager)
+		, m_bodies(bodies)
+	{
+		m_range = range;
+	}
+private:
+	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange range) override
+	{
+		m_manager->GenerateDeferredMoveProxies(m_bodies + range.begin, range.end - range.begin, context.threadId);
+	}
+	virtual void Execute(b2TaskExecutionContext& context) override
+	{
+		Execute(context, GetRange());
+	}
 	b2ContactManager* m_manager;
 	b2Body** m_bodies;
-private:
-	virtual void Execute(b2StackAllocator&) override
-	{
-		m_manager->GenerateDeferredMoveProxies(m_bodies + m_beginIndex, m_endIndex - m_beginIndex);
-	}
 };
 
-class b2BroadphaseFindNewContactsTask : public b2RangedTask
+class b2BroadphaseFindNewContactsTask : public b2RangeTask
 {
 public:
+	b2BroadphaseFindNewContactsTask() {}
+	b2BroadphaseFindNewContactsTask(const b2RangeTaskRange& range, b2ContactManager* manager)
+		: m_manager(manager)
+	{
+		m_range = range;
+	}
+private:
+	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange range) override
+	{
+		m_manager->FindNewContacts(range.begin, range.end, context.threadId);
+	}
+	virtual void Execute(b2TaskExecutionContext& context) override
+	{
+		Execute(context, GetRange());
+	}
 	b2ContactManager* m_manager;
-private:
-	virtual void Execute(b2StackAllocator&) override
-	{
-		m_manager->FindNewContacts(m_beginIndex, m_endIndex);
-	}
 };
 
-class b2ContactPostSolveResetTask : public b2RangedTask
+class b2ContactPostSolveResetTask : public b2RangeTask
 {
 public:
-	b2Contact** m_contacts;
-	bool m_toiCandidates;
-private:
-	virtual void Execute(b2StackAllocator&) override
+	b2ContactPostSolveResetTask() {}
+	b2ContactPostSolveResetTask(const b2RangeTaskRange& range, b2Contact** contacts, bool toiCandidates)
+		: m_contacts(contacts)
+		, m_toiCandidates(toiCandidates)
 	{
+		m_range = range;
+	}
+private:
+	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange range) override
+	{
+		B2_NOT_USED(context);
 		if (m_toiCandidates)
 		{
-			for (int32 i = m_beginIndex; i < m_endIndex; ++i)
+			for (uint32 i = range.begin; i < range.end; ++i)
 			{
 				m_contacts[i]->m_flags &= ~(b2Contact::e_toiFlag | b2Contact::e_islandFlag);
 				m_contacts[i]->m_toiCount = 0;
@@ -167,30 +205,63 @@ private:
 		}
 		else
 		{
-			for (int32 i = m_beginIndex; i < m_endIndex; ++i)
+			for (uint32 i = range.begin; i < range.end; ++i)
 			{
 				m_contacts[i]->m_flags &= ~b2Contact::e_islandFlag;
 			}
 		}
 	}
+	virtual void Execute(b2TaskExecutionContext& context) override
+	{
+		Execute(context, GetRange());
+	}
+	b2Contact** m_contacts;
+	bool m_toiCandidates;
 };
 
-
-
-class b2BodyPostSolveResetTask : public b2RangedTask
+class b2BodyPostSolveResetTask : public b2RangeTask
 {
 public:
-	b2Body** m_bodies;
-private:
-	virtual void Execute(b2StackAllocator&) override
+	b2BodyPostSolveResetTask() {}
+	b2BodyPostSolveResetTask(const b2RangeTaskRange& range, b2Body** bodies)
+		: m_bodies(bodies)
 	{
-		for (int32 i = m_beginIndex; i < m_endIndex; ++i)
+		m_range = range;
+	}
+private:
+	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange range) override
+	{
+		B2_NOT_USED(context);
+		for (uint32 i = range.begin; i < range.end; ++i)
 		{
 			m_bodies[i]->m_flags &= ~b2Body::e_islandFlag;
 			m_bodies[i]->m_sweep.alpha0 = 0.0f;
 		}
 	}
+	virtual void Execute(b2TaskExecutionContext& context) override
+	{
+		Execute(context, GetRange());
+	}
+	b2Body** m_bodies;
 };
+
+template<typename RangeTaskType>
+inline void b2SubmitRangeTasks(b2TaskExecutor& executor, void* taskGroup, RangeTaskType* rangeTasks, uint32 count)
+{
+	b2Task* tasks[b2_partitionedRangeTasksCapacity];
+	for (uint32 i = 0; i < count; ++i)
+	{
+		tasks[i] = rangeTasks + i;
+		tasks[i]->SetTaskGroup(taskGroup);
+	}
+	executor.SubmitRangeTasks(taskGroup, tasks, count);
+}
+
+inline void b2SubmitTask(b2TaskExecutor& executor, void* taskGroup, b2Task* task)
+{
+	task->SetTaskGroup(taskGroup);
+	executor.SubmitTask(taskGroup, task);
+}
 
 b2World::b2World(const b2Vec2& gravity)
 {
@@ -838,7 +909,7 @@ void b2World::SolveTOI(const b2TimeStep& step)
 		subStep.positionIterations = 20;
 		subStep.velocityIterations = step.velocityIterations;
 		subStep.warmStarting = false;
-		island.SolveTOI(subStep, bA->GetIslandIndex(), bB->GetIslandIndex());
+		island.SolveTOI(subStep, bA->GetIslandIndex(0), bB->GetIslandIndex(0));
 
 		{
 			b2Timer timer;
@@ -864,8 +935,8 @@ void b2World::SolveTOI(const b2TimeStep& step)
 				b2Timer timer2;
 
 				// Look for new contacts.
-				m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount());
-				m_contactManager.m_broadPhase.ResetMoveBuffer();
+				m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount(), 0);
+				m_contactManager.m_broadPhase.ResetBuffers();
 
 				m_profile.broadphaseFindContacts += timer2.GetMilliseconds();
 			}
@@ -883,88 +954,84 @@ void b2World::SolveTOI(const b2TimeStep& step)
 	}
 }
 
-void b2World::SynchronizeFixtures(b2ThreadPool& threadPool)
+void b2World::SynchronizeFixtures(b2TaskExecutor& executor)
 {
-	b2TaskGroup group(threadPool);
+	void* taskGroup = executor.CreateTaskGroup(m_stackAllocator);
 
-	b2BroadphaseGenerateDefferedMovesTask moveTasks[b2_maxThreads];
-
-	// Initialize tasks.
-	for (int32 i = 0; i < threadPool.GetThreadCount(); ++i)
+	b2BroadphaseGenerateDefferedMovesTask tasks[b2_partitionedRangeTasksCapacity];
 	{
-		moveTasks[i].m_manager = &m_contactManager;
-		moveTasks[i].m_bodies = m_nonStaticBodies.Data();
+		b2PartitionedRange pr = executor.PartitionRange(b2RangeTaskRange(0, m_nonStaticBodies.GetCount()));
+		for (uint32 i = 0; i < pr.count; ++i)
+		{
+			tasks[i] = b2BroadphaseGenerateDefferedMovesTask(pr.ranges[i], &m_contactManager, m_nonStaticBodies.Data());
+		}
+		b2SubmitRangeTasks(executor, taskGroup, tasks, pr.count);
 	}
 
-	// Submit tasks.
-	group.SubmitRangedTasks(moveTasks, threadPool.GetThreadCount(), m_nonStaticBodies.GetCount(), m_stackAllocator);
-
-	// Wait for tasks to finish.
-	group.Wait(m_stackAllocator);
+	executor.Wait(taskGroup, m_stackAllocator);
 
 	// Do work that couldn't be done in parallel.
 	m_contactManager.ConsumeDeferredMoveProxies();
+
+	executor.DestroyTaskGroup(taskGroup, m_stackAllocator);
 }
 
-void b2World::FindNewContacts(b2ThreadPool& threadPool)
+void b2World::FindNewContacts(b2TaskExecutor& executor)
 {
-	b2TaskGroup group(threadPool);
+	void* taskGroup = executor.CreateTaskGroup(m_stackAllocator);
 
-	b2BroadphaseFindNewContactsTask tasks[b2_maxThreads];
-
-	// Initialize tasks.
-	for (int32 i = 0; i < threadPool.GetThreadCount(); ++i)
+	b2BroadphaseFindNewContactsTask tasks[b2_partitionedRangeTasksCapacity];
 	{
-		tasks[i].m_manager = &m_contactManager;
+		b2PartitionedRange pr = executor.PartitionRange(b2RangeTaskRange(0, m_contactManager.m_broadPhase.GetMoveCount()));
+		for (uint32 i = 0; i < pr.count; ++i)
+		{
+			tasks[i] = b2BroadphaseFindNewContactsTask(pr.ranges[i], &m_contactManager);
+		}
+
+		m_contactManager.m_deferCreates = true;
+		b2SubmitRangeTasks(executor, taskGroup, tasks, pr.count);
 	}
 
-	m_contactManager.m_deferCreates = true;
-
-	// Submit tasks.
-	group.SubmitRangedTasks(tasks, threadPool.GetThreadCount(), m_contactManager.m_broadPhase.GetMoveCount(), m_stackAllocator);
-
-	// Wait for tasks to finish.
-	group.Wait(m_stackAllocator);
-
+	executor.Wait(taskGroup, m_stackAllocator);
 	m_contactManager.m_deferCreates = false;
 
 	// Do work that couldn't be done in parallel.
-	m_contactManager.m_broadPhase.ResetMoveBuffer();
+	m_contactManager.m_broadPhase.ResetBuffers();
 	m_contactManager.ConsumeDeferredCreates();
+
+	executor.DestroyTaskGroup(taskGroup, m_stackAllocator);
 }
 
-void b2World::Collide(b2ThreadPool& threadPool)
+void b2World::Collide(b2TaskExecutor& executor)
 {
 	if (m_contactManager.GetContactCount() == 0)
 	{
 		return;
 	}
 
-	b2TaskGroup group(threadPool);
+	void* taskGroup = executor.CreateTaskGroup(m_stackAllocator);
 
-	b2CollideTask contactsTasks[b2_maxThreads];
-	b2CollideTask toiContactsTasks[b2_maxThreads];
-
-	// Initialize tasks.
-	for (int32 i = 0; i < threadPool.GetThreadCount(); ++i)
+	b2CollideTask nonToiTasks[b2_partitionedRangeTasksCapacity];
 	{
-		contactsTasks[i].m_manager = &m_contactManager;
-		contactsTasks[i].m_contacts = m_contactManager.m_contactsNonTOI.Data();
-
-		toiContactsTasks[i].m_manager = &m_contactManager;
-		toiContactsTasks[i].m_contacts = m_contactManager.m_contactsTOI.Data();
+		b2PartitionedRange pr = executor.PartitionRange(b2RangeTaskRange(0, m_contactManager.m_contactsNonTOI.GetCount()));
+		for (uint32 i = 0; i < pr.count; ++i)
+		{
+			nonToiTasks[i] = b2CollideTask(pr.ranges[i], &m_contactManager, m_contactManager.m_contactsNonTOI.Data());
+		}
+		b2SubmitRangeTasks(executor, taskGroup, nonToiTasks, pr.count);
 	}
 
-	// Submit tasks for non-TOI contacts.
-	group.SubmitRangedTasks(contactsTasks, threadPool.GetThreadCount(),
-		m_contactManager.m_contactsNonTOI.GetCount(), m_stackAllocator);
+	b2CollideTask toiTasks[b2_partitionedRangeTasksCapacity];
+	{
+		b2PartitionedRange pr = executor.PartitionRange(b2RangeTaskRange(0, m_contactManager.m_contactsTOI.GetCount()));
+		for (uint32 i = 0; i < pr.count; ++i)
+		{
+			toiTasks[i] = b2CollideTask(pr.ranges[i], &m_contactManager, m_contactManager.m_contactsTOI.Data());
+		}
+		b2SubmitRangeTasks(executor, taskGroup, toiTasks, pr.count);
+	}
 
-	// Submit tasks for TOI contacts.
-	group.SubmitRangedTasks(toiContactsTasks, threadPool.GetThreadCount(),
-		m_contactManager.m_contactsTOI.GetCount(), m_stackAllocator);
-
-	// Wait for tasks to finish.
-	group.Wait(m_stackAllocator);
+	executor.Wait(taskGroup, m_stackAllocator);
 
 	// Do work that couldn't be done in parallel.
 	// TODO_JUSTIN: The sorting of deferred data could be parallelized. See if it's worth it.
@@ -973,12 +1040,14 @@ void b2World::Collide(b2ThreadPool& threadPool)
 	m_contactManager.ConsumeDeferredBeginContacts();
 	m_contactManager.ConsumeDeferredEndContacts();
 	m_contactManager.ConsumeDeferredPreSolves();
+
+	executor.DestroyTaskGroup(taskGroup, m_stackAllocator);
 }
 
-void b2World::Solve(b2ThreadPool& threadPool, const b2TimeStep& step)
+void b2World::Solve(b2TaskExecutor& executor, const b2TimeStep& step)
 {
 	b2SolveTask* solveTaskList = nullptr;
-	b2TaskGroup solveGroup(threadPool);
+	void* taskGroup = executor.CreateTaskGroup(m_stackAllocator);
 
 	// A single static body can be included in multiple islands.
 	// In the worst case every non static body is in its own island with every static body.
@@ -1011,7 +1080,7 @@ void b2World::Solve(b2ThreadPool& threadPool, const b2TimeStep& step)
 	int32 jointCount = 0;
 
 	// Clear all the island flags.
-	ClearIslandFlags(threadPool);
+	ClearIslandFlags(executor);
 
 	b2Timer traversalTimer;
 
@@ -1171,7 +1240,7 @@ void b2World::Solve(b2ThreadPool& threadPool, const b2TimeStep& step)
 		if (currSolveTask->GetCost() >= b2_solveBatchTargetCost ||
             currSolveTask->GetBodyCount() >= b2_solveBatchTargetBodyCount)
 		{
-			solveGroup.SubmitTask(currSolveTask);
+			b2SubmitTask(executor, taskGroup, currSolveTask);
             currSolveTask = nullptr;
 		}
 	}
@@ -1179,14 +1248,14 @@ void b2World::Solve(b2ThreadPool& threadPool, const b2TimeStep& step)
 	// Pick up stragglers.
 	if (currSolveTask != nullptr)
 	{
-        solveGroup.SubmitTask(currSolveTask);
+        b2SubmitTask(executor, taskGroup, currSolveTask);
         currSolveTask = nullptr;
 	}
 
 	m_profile.solveTraversal += traversalTimer.GetMilliseconds();
 
 	// Wait for tasks to finish.
-	solveGroup.Wait(m_stackAllocator);
+	executor.Wait(taskGroup, m_stackAllocator);
 
 	// Deallocate tasks.
 	while (solveTaskList)
@@ -1221,7 +1290,7 @@ void b2World::Solve(b2ThreadPool& threadPool, const b2TimeStep& step)
 		b2Timer timer;
 
 		// Synchronize fixtures, check for out of range bodies.
-		SynchronizeFixtures(threadPool);
+		SynchronizeFixtures(executor);
 
 		m_profile.broadphaseSyncFixtures += timer.GetMilliseconds();
 
@@ -1229,7 +1298,7 @@ void b2World::Solve(b2ThreadPool& threadPool, const b2TimeStep& step)
 			b2Timer timer2;
 
 			// Look for new contacts.
-			FindNewContacts(threadPool);
+			FindNewContacts(executor);
 
 			m_profile.broadphaseFindContacts += timer2.GetMilliseconds();
 		}
@@ -1238,61 +1307,64 @@ void b2World::Solve(b2ThreadPool& threadPool, const b2TimeStep& step)
 		m_profile.broadphase += broadPhaseTime;
 		m_profile.solve -= broadPhaseTime;
 	}
+
+	executor.DestroyTaskGroup(taskGroup, m_stackAllocator);
 }
 
-void b2World::ClearIslandFlags(b2ThreadPool& threadPool)
+void b2World::ClearIslandFlags(b2TaskExecutor& executor)
 {
-	b2TaskGroup group(threadPool);
+	void* taskGroup = executor.CreateTaskGroup(m_stackAllocator);
 
-	b2ContactPostSolveResetTask contactsTasks[b2_maxThreads];
-	b2ContactPostSolveResetTask toiContactsTasks[b2_maxThreads];
-
-	b2BodyPostSolveResetTask bodyTasks[b2_maxThreads];
-	b2BodyPostSolveResetTask staticBodyTasks[b2_maxThreads];
-
-	// Initialize tasks.
-	for (int32 i = 0; i < threadPool.GetThreadCount(); ++i)
+	b2ContactPostSolveResetTask contactsTasks[b2_partitionedRangeTasksCapacity];
 	{
-		contactsTasks[i].m_contacts = m_contactManager.m_contactsNonTOI.Data();
-		contactsTasks[i].m_toiCandidates = false;
-
-		toiContactsTasks[i].m_contacts = m_contactManager.m_contactsTOI.Data();
-		toiContactsTasks[i].m_toiCandidates = true;
-
-		bodyTasks[i].m_bodies = m_nonStaticBodies.Data();
-
-		staticBodyTasks[i].m_bodies = m_staticBodies.Data();
+		b2PartitionedRange pr = executor.PartitionRange(b2RangeTaskRange(0, m_contactManager.m_contactsNonTOI.GetCount()));
+		for (uint32 i = 0; i < pr.count; ++i)
+		{
+			contactsTasks[i] = b2ContactPostSolveResetTask(pr.ranges[i], m_contactManager.m_contactsNonTOI.Data(), false);
+		}
+		b2SubmitRangeTasks(executor, taskGroup, contactsTasks, pr.count);
 	}
-
-	// Submit tasks for non-TOI contacts.
-	group.SubmitRangedTasks(contactsTasks, threadPool.GetThreadCount(),
-		m_contactManager.m_contactsNonTOI.GetCount(), m_stackAllocator);
-
-	// Submit tasks for TOI contacts.
-	group.SubmitRangedTasks(toiContactsTasks, threadPool.GetThreadCount(),
-		m_contactManager.m_contactsTOI.GetCount(), m_stackAllocator);
-
-	// Submit tasks for non-static bodies.
-	group.SubmitRangedTasks(bodyTasks, threadPool.GetThreadCount(),
-		m_nonStaticBodies.GetCount(), m_stackAllocator);
-
-	// Submit tasks for static bodies.
-	group.SubmitRangedTasks(staticBodyTasks, threadPool.GetThreadCount(),
-		m_staticBodies.GetCount(), m_stackAllocator);
+	b2ContactPostSolveResetTask toiContactsTasks[b2_partitionedRangeTasksCapacity];
+	{
+		b2PartitionedRange pr = executor.PartitionRange(b2RangeTaskRange(0, m_contactManager.m_contactsTOI.GetCount()));
+		for (uint32 i = 0; i < pr.count; ++i)
+		{
+			toiContactsTasks[i] = b2ContactPostSolveResetTask(pr.ranges[i], m_contactManager.m_contactsTOI.Data(), true);
+		}
+		b2SubmitRangeTasks(executor, taskGroup, toiContactsTasks, pr.count);
+	}
+	b2BodyPostSolveResetTask bodyTasks[b2_partitionedRangeTasksCapacity];
+	{
+		b2PartitionedRange pr = executor.PartitionRange(b2RangeTaskRange(0, m_nonStaticBodies.GetCount()));
+		for (uint32 i = 0; i < pr.count; ++i)
+		{
+			bodyTasks[i] = b2BodyPostSolveResetTask(pr.ranges[i], m_nonStaticBodies.Data());
+		}
+		b2SubmitRangeTasks(executor, taskGroup, bodyTasks, pr.count);
+	}
+	b2BodyPostSolveResetTask staticBodyTasks[b2_partitionedRangeTasksCapacity];
+	{
+		b2PartitionedRange pr = executor.PartitionRange(b2RangeTaskRange(0, m_staticBodies.GetCount()));
+		for (uint32 i = 0; i < pr.count; ++i)
+		{
+			staticBodyTasks[i] = b2BodyPostSolveResetTask(pr.ranges[i], m_staticBodies.Data());
+		}
+		b2SubmitRangeTasks(executor, taskGroup, staticBodyTasks, pr.count);
+	}
 
 	for (b2Joint* j = m_jointList; j; j = j->m_next)
 	{
 		j->m_islandFlag = false;
 	}
 
-	// Wait for tasks to finish.
-	group.Wait(m_stackAllocator);
+	executor.Wait(taskGroup, m_stackAllocator);
+
+	executor.DestroyTaskGroup(taskGroup, m_stackAllocator);
 }
 
-void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIterations, b2ThreadPool& threadPool)
+void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIterations, b2TaskExecutor& executor)
 {
-	threadPool.StartBusyWaiting();
-	threadPool.ResetTimers();
+	executor.StepBegin();
 
 	b2Timer stepTimer;
 
@@ -1303,7 +1375,7 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 	{
 		b2Timer timer;
 
-		FindNewContacts(threadPool);
+		FindNewContacts(executor);
 
 		m_flags &= ~e_newFixture;
 		float32 elapsed = timer.GetMilliseconds();
@@ -1334,7 +1406,7 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 	{
 		b2Timer timer;
 
-		Collide(threadPool);
+		Collide(executor);
 
 		m_profile.collide += timer.GetMilliseconds();
 	}
@@ -1344,7 +1416,7 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 	{
 		b2Timer timer;
 
-		Solve(threadPool, step);
+		Solve(executor, step);
 
 		m_profile.solve += timer.GetMilliseconds();
 	}
@@ -1369,9 +1441,9 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 
 	m_flags &= ~e_locked;
 
+	executor.StepEnd(m_profile);
+
 	m_profile.step = stepTimer.GetMilliseconds();
-	m_profile.locking = threadPool.GetLockMilliseconds();
-	m_profile.taskStarting = threadPool.GetTaskStartMilliseconds();
 }
 
 void b2World::ClearForces()
@@ -1733,7 +1805,7 @@ void b2World::Dump()
 	int32 i = 0;
 	for (b2Body* b = m_bodyList; b; b = b->m_next)
 	{
-		b->SetIslandIndex(i);
+		b->SetIslandIndex(i, 0);
 		b->Dump();
 		++i;
 	}

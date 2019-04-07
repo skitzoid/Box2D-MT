@@ -126,8 +126,8 @@ b2PrismaticJoint::b2PrismaticJoint(const b2PrismaticJointDef* def)
 
 void b2PrismaticJoint::InitVelocityConstraints(const b2SolverData& data)
 {
-	m_indexA = m_bodyA->GetIslandIndex();
-	m_indexB = m_bodyB->GetIslandIndex();
+	m_indexA = m_bodyA->GetIslandIndex(data.threadId);
+	m_indexB = m_bodyB->GetIslandIndex(data.threadId);
 	m_localCenterA = m_bodyA->m_sweep.localCenter;
 	m_localCenterB = m_bodyB->m_sweep.localCenter;
 	m_invMassA = m_bodyA->m_invMass;
@@ -622,8 +622,8 @@ float32 b2PrismaticJoint::GetMotorForce(float32 inv_dt) const
 
 void b2PrismaticJoint::Dump()
 {
-	int32 indexA = m_bodyA->GetIslandIndex();
-	int32 indexB = m_bodyB->GetIslandIndex();
+	int32 indexA = m_bodyA->GetIslandIndex(0);
+	int32 indexB = m_bodyB->GetIslandIndex(0);
 
 	b2Log("  b2PrismaticJointDef jd;\n");
 	b2Log("  jd.bodyA = bodies[%d];\n", indexA);

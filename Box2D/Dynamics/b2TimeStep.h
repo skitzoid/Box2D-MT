@@ -70,6 +70,7 @@ struct b2SolverData
 	b2TimeStep step;
 	b2Position* positions;
 	b2Velocity* velocities;
+	int32 threadId;
 };
 
 #endif

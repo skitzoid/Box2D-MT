@@ -96,7 +96,7 @@ float32 b2MouseJoint::GetDampingRatio() const
 
 void b2MouseJoint::InitVelocityConstraints(const b2SolverData& data)
 {
-	m_indexB = m_bodyB->GetIslandIndex();
+	m_indexB = m_bodyB->GetIslandIndex(data.threadId);
 	m_localCenterB = m_bodyB->m_sweep.localCenter;
 	m_invMassB = m_bodyB->m_invMass;
 	m_invIB = m_bodyB->m_invI;

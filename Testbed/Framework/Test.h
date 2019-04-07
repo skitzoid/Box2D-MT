@@ -219,7 +219,7 @@ protected:
 	b2Profile m_maxProfile;
 	b2Profile m_totalProfile;
 
-	b2ThreadPool m_threadPool;
+	b2ThreadPoolTaskExecutor m_threadPool;
 };
 
 #endif

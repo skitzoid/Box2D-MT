@@ -73,8 +73,8 @@ b2PulleyJoint::b2PulleyJoint(const b2PulleyJointDef* def)
 
 void b2PulleyJoint::InitVelocityConstraints(const b2SolverData& data)
 {
-	m_indexA = m_bodyA->GetIslandIndex();
-	m_indexB = m_bodyB->GetIslandIndex();
+	m_indexA = m_bodyA->GetIslandIndex(data.threadId);
+	m_indexB = m_bodyB->GetIslandIndex(data.threadId);
 	m_localCenterA = m_bodyA->m_sweep.localCenter;
 	m_localCenterB = m_bodyB->m_sweep.localCenter;
 	m_invMassA = m_bodyA->m_invMass;
@@ -325,8 +325,8 @@ float32 b2PulleyJoint::GetCurrentLengthB() const
 
 void b2PulleyJoint::Dump()
 {
-	int32 indexA = m_bodyA->GetIslandIndex();
-	int32 indexB = m_bodyB->GetIslandIndex();
+	int32 indexA = m_bodyA->GetIslandIndex(0);
+	int32 indexB = m_bodyB->GetIslandIndex(0);
 
 	b2Log("  b2PulleyJointDef jd;\n");
 	b2Log("  jd.bodyA = bodies[%d];\n", indexA);

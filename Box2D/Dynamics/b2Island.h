@@ -52,14 +52,13 @@ public:
 		m_jointCount = 0;
 	}
 
-	void Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& gravity, bool allowSleep);
+	void Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& gravity, int32 threadId, bool allowSleep);
 
 	void SolveTOI(const b2TimeStep& subStep, int32 toiIndexA, int32 toiIndexB);
 
 	void Add(b2Body* body)
 	{
 		b2Assert(m_bodyCount < m_bodyCapacity);
-		body->SetIslandIndex(m_bodyCount);
 		m_bodies[m_bodyCount] = body;
 		++m_bodyCount;
 	}

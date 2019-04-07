@@ -131,30 +131,34 @@ typedef double float64;
 #define b2_angularSleepTolerance	(2.0f / 180.0f * b2_pi)
 
 
-// Threading
-
-/// Thread local storage (thread_local isn't supported by some otherwise compatible compilers).
-// TODO: Check version numbers and other platforms. Adjust as needed.
-#if defined(_MSC_VER)
-#define b2ThreadLocal __declspec(thread)
-#else
-#define b2ThreadLocal __thread
-#endif
+// Performance
 
 /// The size of a cache line.
-#define b2_cacheLineSize			64
+#define b2_cacheLineSize						64
 
 /// The maximum number of thread pool threads.
-#define b2_maxThreadPoolThreads		7
+#define b2_maxThreadPoolThreads					7
 
 /// The maximum number of threads.
-#define b2_maxThreads				(b2_maxThreadPoolThreads + 1)
+#define b2_maxThreads							(b2_maxThreadPoolThreads + 1)
 
 /// The world may continue gathering bodies for solving until this estimated cost is reached.
-#define b2_solveBatchTargetCost         100
+#define b2_solveBatchTargetCost					100
 
 /// The world may continue gathering bodies for solving until it gathers this many.
-#define b2_solveBatchTargetBodyCount    16
+#define b2_solveBatchTargetBodyCount			16
+
+/// Minimum partition size of a range task.
+#define b2_rangeTaskMinPartitionSize			16
+
+/// The maximum number of subtasks that a range task can be split into.
+#define b2_partitionedRangeTasksCapacity		2 * b2_maxThreads
+
+/// When this is defined the stack allocator will assert if it needs to use malloc.
+#define b2_assertStackAllocatorNoMalloc
+
+/// When this is defined b2Prefetch will be implemented.
+#define b2_prefetchEnabled
 
 /// Get the estimated cost of solving an island with the specified attributes
 int32 b2GetIslandCost(int32 bodyCount, int32 contactCount, int32 jointCount);

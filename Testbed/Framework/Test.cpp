@@ -301,6 +301,11 @@ void Test::Step(Settings* settings)
 
 	memset(&m_pointCount, 0, sizeof(m_pointCount));
 
+	// Calling glFinish before the step makes it much less likely for our worker threads to be
+	// preempted during the step. Without glFinish they are frequently preempted to allow the
+	// compositor to run (on Ubuntu with compiz at least).
+	g_debugDraw.Finish();
+
 	m_world->Step(timeStep, settings->velocityIterations, settings->positionIterations, m_threadPool);
 
 	m_world->DrawDebugData();

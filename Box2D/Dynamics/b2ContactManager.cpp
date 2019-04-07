@@ -196,7 +196,7 @@ void b2ContactManager::Destroy(b2Contact* c)
 // This is the top level collision call for the time step. Here
 // all the narrow phase collision is processed for the world
 // contact list.
-void b2ContactManager::Collide(b2Contact** contacts, int32 count)
+void b2ContactManager::Collide(b2Contact** contacts, int32 count, int32 threadId)
 {
 	// Update awake contacts.
 	for (int32 i = 0; i < count; ++i)
@@ -216,14 +216,14 @@ void b2ContactManager::Collide(b2Contact** contacts, int32 count)
 			// Should these bodies collide?
 			if (bodyB->ShouldCollide(bodyA) == false)
 			{
-				m_perThreadData[b2GetThreadId()].m_deferredDestroys.Push(c);
+				m_perThreadData[threadId].m_deferredDestroys.Push(c);
 				continue;
 			}
 
 			// Check user filtering.
 			if (m_contactFilter && m_contactFilter->ShouldCollide(fixtureA, fixtureB) == false)
 			{
-				m_perThreadData[b2GetThreadId()].m_deferredDestroys.Push(c);
+				m_perThreadData[threadId].m_deferredDestroys.Push(c);
 				continue;
 			}
 
@@ -247,21 +247,21 @@ void b2ContactManager::Collide(b2Contact** contacts, int32 count)
 		// Here we destroy contacts that cease to overlap in the broad-phase.
 		if (overlap == false)
 		{
-			m_perThreadData[b2GetThreadId()].m_deferredDestroys.Push(c);
+			m_perThreadData[threadId].m_deferredDestroys.Push(c);
 			continue;
 		}
 
 		// The contact persists.
-		c->Update(m_perThreadData[b2GetThreadId()], m_contactListener);
+		c->Update(m_perThreadData[threadId], m_contactListener);
 	}
 }
 
-void b2ContactManager::FindNewContacts(int32 moveBegin, int32 moveEnd)
+void b2ContactManager::FindNewContacts(int32 moveBegin, int32 moveEnd, int32 threadId)
 {
-	m_broadPhase.UpdatePairs(moveBegin, moveEnd, this);
+	m_broadPhase.UpdatePairs(moveBegin, moveEnd, this, threadId);
 }
 
-void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
+void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB, int32 threadId)
 {
 	b2FixtureProxy* proxyA = (b2FixtureProxy*)proxyUserDataA;
 	b2FixtureProxy* proxyB = (b2FixtureProxy*)proxyUserDataB;
@@ -328,7 +328,7 @@ void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
 		b2DeferredContactCreate deferredCreate;
 		deferredCreate.proxyA = proxyA;
 		deferredCreate.proxyB = proxyB;
-		m_perThreadData[b2GetThreadId()].m_deferredCreates.Push(deferredCreate);
+		m_perThreadData[threadId].m_deferredCreates.Push(deferredCreate);
 	}
 	else
 	{
@@ -344,7 +344,7 @@ void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
 }
 
 // This allows proxy synchronization to be somewhat parallel.
-void b2ContactManager::GenerateDeferredMoveProxies(b2Body** bodies, int32 count)
+void b2ContactManager::GenerateDeferredMoveProxies(b2Body** bodies, int32 count, int32 threadId)
 {
 	for (int32 i = 0; i < count; ++i)
 	{
@@ -383,7 +383,7 @@ void b2ContactManager::GenerateDeferredMoveProxies(b2Body** bodies, int32 count)
 					b2DeferredMoveProxy moveProxy;
 					moveProxy.proxy = proxy;
 					moveProxy.displacement = b->m_xf.p - xf1.p;
-					m_perThreadData[b2GetThreadId()].m_deferredMoveProxies.Push(moveProxy);
+					m_perThreadData[threadId].m_deferredMoveProxies.Push(moveProxy);
 				}
 			}
 		}

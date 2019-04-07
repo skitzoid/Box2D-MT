@@ -22,12 +22,11 @@
 
 #include "Box2D/Common/b2Math.h"
 #include "Box2D/Common/b2BlockAllocator.h"
+#include "Box2D/Common/b2GrowableArray.h"
 #include "Box2D/Common/b2StackAllocator.h"
 #include "Box2D/Dynamics/b2ContactManager.h"
 #include "Box2D/Dynamics/b2WorldCallbacks.h"
 #include "Box2D/Dynamics/b2TimeStep.h"
-#include "Box2D/Common/b2GrowableArray.h"
-
 
 struct b2AABB;
 struct b2BodyDef;
@@ -37,7 +36,7 @@ class b2Body;
 class b2Draw;
 class b2Fixture;
 class b2Joint;
-class b2ThreadPool;
+class b2TaskExecutor;
 
 /// The world class manages all physics entities, dynamic simulation,
 /// and asynchronous queries. The world also contains efficient memory
@@ -95,14 +94,11 @@ public:
 	/// @param timeStep the amount of time to simulate, this should not vary.
 	/// @param velocityIterations for the velocity constraint solver.
 	/// @param positionIterations for the position constraint solver.
-	/// @param threadPool the thread pool that will execute the step tasks.
-	/// Note: The world will call StartBusyWaiting on the thread pool. If you want the thread
-	/// pool's workers to stop busy waiting you must call StopBusyWaiting after the step
-	/// (which will degrade performance on some platforms).
+	/// @param executor the object that will execute the world's task.
 	void Step(	float32 timeStep,
 				int32 velocityIterations,
 				int32 positionIterations,
-				b2ThreadPool& threadPool);
+				b2TaskExecutor& executor);
 
 	/// Manually clear the force buffer on all bodies. By default, forces are cleared automatically
 	/// after each call to Step. The default behavior is modified by calling SetAutoClearForces.
@@ -238,11 +234,11 @@ private:
 
 	void SolveTOI(const b2TimeStep& step);
 
-	void SynchronizeFixtures(b2ThreadPool& threadPool);
-	void FindNewContacts(b2ThreadPool& threadPool);
-	void Collide(b2ThreadPool& threadPool);
-	void Solve(b2ThreadPool& threadPool, const b2TimeStep& step);
-	void ClearIslandFlags(b2ThreadPool& threadPool);
+	void SynchronizeFixtures(b2TaskExecutor& executor);
+	void FindNewContacts(b2TaskExecutor& executor);
+	void Collide(b2TaskExecutor& executor);
+	void Solve(b2TaskExecutor& executor, const b2TimeStep& step);
+	void ClearIslandFlags(b2TaskExecutor& executor);
 
 	void DrawJoint(b2Joint* joint);
 	void DrawShape(b2Fixture* shape, const b2Transform& xf, const b2Color& color);

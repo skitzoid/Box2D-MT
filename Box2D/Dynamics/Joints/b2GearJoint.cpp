@@ -131,10 +131,10 @@ b2GearJoint::b2GearJoint(const b2GearJointDef* def)
 
 void b2GearJoint::InitVelocityConstraints(const b2SolverData& data)
 {
-	m_indexA = m_bodyA->GetIslandIndex();
-	m_indexB = m_bodyB->GetIslandIndex();
-	m_indexC = m_bodyC->GetIslandIndex();
-	m_indexD = m_bodyD->GetIslandIndex();
+	m_indexA = m_bodyA->GetIslandIndex(data.threadId);
+	m_indexB = m_bodyB->GetIslandIndex(data.threadId);
+	m_indexC = m_bodyC->GetIslandIndex(data.threadId);
+	m_indexD = m_bodyD->GetIslandIndex(data.threadId);
 	m_lcA = m_bodyA->m_sweep.localCenter;
 	m_lcB = m_bodyB->m_sweep.localCenter;
 	m_lcC = m_bodyC->m_sweep.localCenter;
@@ -403,8 +403,8 @@ float32 b2GearJoint::GetRatio() const
 
 void b2GearJoint::Dump()
 {
-	int32 indexA = m_bodyA->GetIslandIndex();
-	int32 indexB = m_bodyB->GetIslandIndex();
+	int32 indexA = m_bodyA->GetIslandIndex(0);
+	int32 indexB = m_bodyB->GetIslandIndex(0);
 
 	int32 index1 = m_joint1->m_index;
 	int32 index2 = m_joint2->m_index;

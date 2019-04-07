@@ -77,15 +77,15 @@ public:
 	b2ContactManager();
 
 	// Broad-phase callback.
-	void AddPair(void* proxyUserDataA, void* proxyUserDataB);
+	void AddPair(void* proxyUserDataA, void* proxyUserDataB, int32 threadId);
 
-	void FindNewContacts(int32 moveBegin, int32 moveEnd);
+	void FindNewContacts(int32 moveBegin, int32 moveEnd, int32 threadId);
 
-	void Collide(b2Contact** contacts, int32 count);
+	void Collide(b2Contact** contacts, int32 count, int32 threadId);
 
 	void Destroy(b2Contact* c);
 
-	void GenerateDeferredMoveProxies(b2Body** bodies, int32 count);
+	void GenerateDeferredMoveProxies(b2Body** bodies, int32 count, int32 threadId);
 
 	void ConsumeDeferredBeginContacts();
 	void ConsumeDeferredEndContacts();

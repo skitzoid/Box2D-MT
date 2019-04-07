@@ -58,8 +58,8 @@ b2WeldJoint::b2WeldJoint(const b2WeldJointDef* def)
 
 void b2WeldJoint::InitVelocityConstraints(const b2SolverData& data)
 {
-	m_indexA = m_bodyA->GetIslandIndex();
-	m_indexB = m_bodyB->GetIslandIndex();
+	m_indexA = m_bodyA->GetIslandIndex(data.threadId);
+	m_indexB = m_bodyB->GetIslandIndex(data.threadId);
 	m_localCenterA = m_bodyA->m_sweep.localCenter;
 	m_localCenterB = m_bodyB->m_sweep.localCenter;
 	m_invMassA = m_bodyA->m_invMass;
@@ -277,7 +277,7 @@ bool b2WeldJoint::SolvePositionConstraints(const b2SolverData& data)
 		angularError = b2Abs(C2);
 
 		b2Vec3 C(C1.x, C1.y, C2);
-	
+
 		b2Vec3 impulse;
 		if (K.ez.z > 0.0f)
 		{
@@ -329,8 +329,8 @@ float32 b2WeldJoint::GetReactionTorque(float32 inv_dt) const
 
 void b2WeldJoint::Dump()
 {
-	int32 indexA = m_bodyA->GetIslandIndex();
-	int32 indexB = m_bodyB->GetIslandIndex();
+	int32 indexA = m_bodyA->GetIslandIndex(0);
+	int32 indexB = m_bodyB->GetIslandIndex(0);
 
 	b2Log("  b2WeldJointDef jd;\n");
 	b2Log("  jd.bodyA = bodies[%d];\n", indexA);

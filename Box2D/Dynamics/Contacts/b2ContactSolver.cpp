@@ -54,6 +54,7 @@ b2ContactSolver::b2ContactSolver(b2ContactSolverDef* def)
 	m_positions = def->positions;
 	m_velocities = def->velocities;
 	m_contacts = def->contacts;
+	int32 threadId = def->threadId;
 
 	// Initialize position independent portions of the constraints.
 	for (int32 i = 0; i < m_count; ++i)
@@ -77,8 +78,8 @@ b2ContactSolver::b2ContactSolver(b2ContactSolverDef* def)
 		vc->friction = contact->m_friction;
 		vc->restitution = contact->m_restitution;
 		vc->tangentSpeed = contact->m_tangentSpeed;
-		vc->indexA = bodyA->GetIslandIndex();
-		vc->indexB = bodyB->GetIslandIndex();
+		vc->indexA = bodyA->GetIslandIndex(threadId);
+		vc->indexB = bodyB->GetIslandIndex(threadId);
 		vc->invMassA = bodyA->m_invMass;
 		vc->invMassB = bodyB->m_invMass;
 		vc->invIA = bodyA->m_invI;
@@ -89,8 +90,8 @@ b2ContactSolver::b2ContactSolver(b2ContactSolverDef* def)
 		vc->normalMass.SetZero();
 
 		b2ContactPositionConstraint* pc = m_positionConstraints + i;
-		pc->indexA = bodyA->GetIslandIndex();
-		pc->indexB = bodyB->GetIslandIndex();
+		pc->indexA = bodyA->GetIslandIndex(threadId);
+		pc->indexB = bodyB->GetIslandIndex(threadId);
 		pc->invMassA = bodyA->m_invMass;
 		pc->invMassB = bodyB->m_invMass;
 		pc->localCenterA = bodyA->m_sweep.localCenter;
@@ -108,7 +109,7 @@ b2ContactSolver::b2ContactSolver(b2ContactSolverDef* def)
 		{
 			b2ManifoldPoint* cp = manifold->points + j;
 			b2VelocityConstraintPoint* vcp = vc->points + j;
-	
+
 			if (m_step.warmStarting)
 			{
 				vcp->normalImpulse = m_step.dtRatio * cp->normalImpulse;
@@ -385,17 +386,17 @@ void b2ContactSolver::SolveVelocityConstraints()
 			// implies that we must have in any solution either vn_i = 0 or x_i = 0. So for the 2D contact problem the cases
 			// vn1 = 0 and vn2 = 0, x1 = 0 and x2 = 0, x1 = 0 and vn2 = 0, x2 = 0 and vn1 = 0 need to be tested. The first valid
 			// solution that satisfies the problem is chosen.
-			// 
+			//
 			// In order to account of the accumulated impulse 'a' (because of the iterative nature of the solver which only requires
 			// that the accumulated impulse is clamped and not the incremental impulse) we change the impulse variable (x_i).
 			//
 			// Substitute:
-			// 
+			//
 			// x = a + d
-			// 
+			//
 			// a := old total impulse
 			// x := new total impulse
-			// d := incremental impulse 
+			// d := incremental impulse
 			//
 			// For the current iteration we extend the formula for the incremental impulse
 			// to compute the new total impulse:
@@ -479,7 +480,7 @@ void b2ContactSolver::SolveVelocityConstraints()
 				//
 				// Case 2: vn1 = 0 and x2 = 0
 				//
-				//   0 = a11 * x1 + a12 * 0 + b1' 
+				//   0 = a11 * x1 + a12 * 0 + b1'
 				// vn2 = a21 * x1 + a22 * 0 + b2'
 				//
 				x.x = - cp1->normalMass * b.x;
@@ -520,7 +521,7 @@ void b2ContactSolver::SolveVelocityConstraints()
 				//
 				// Case 3: vn2 = 0 and x1 = 0
 				//
-				// vn1 = a11 * 0 + a12 * x2 + b1' 
+				// vn1 = a11 * 0 + a12 * x2 + b1'
 				//   0 = a21 * 0 + a22 * x2 + b2'
 				//
 				x.x = 0.0f;
@@ -560,7 +561,7 @@ void b2ContactSolver::SolveVelocityConstraints()
 
 				//
 				// Case 4: x1 = 0 and x2 = 0
-				// 
+				//
 				// vn1 = b1
 				// vn2 = b2;
 				x.x = 0.0f;

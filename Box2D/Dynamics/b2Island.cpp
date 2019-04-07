@@ -221,7 +221,7 @@ b2Island::~b2Island()
 	}
 }
 
-void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& gravity, bool allowSleep)
+void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& gravity, int32 threadId, bool allowSleep)
 {
 	b2Timer timer;
 
@@ -231,6 +231,7 @@ void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& g
 	for (int32 i = 0; i < m_bodyCount; ++i)
 	{
 		b2Body* b = m_bodies[i];
+		b->SetIslandIndex(i, threadId);
 
 		b2Vec2 c = b->m_sweep.c;
 		float32 a = b->m_sweep.a;
@@ -274,12 +275,14 @@ void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& g
 	solverData.step = step;
 	solverData.positions = m_positions;
 	solverData.velocities = m_velocities;
+	solverData.threadId = threadId;
 
 	// Initialize velocity constraints.
 	b2ContactSolverDef contactSolverDef;
 	contactSolverDef.step = step;
 	contactSolverDef.contacts = m_contacts;
 	contactSolverDef.count = m_contactCount;
+	contactSolverDef.threadId = threadId;
 	contactSolverDef.positions = m_positions;
 	contactSolverDef.velocities = m_velocities;
 	contactSolverDef.allocator = m_allocator;
@@ -449,6 +452,7 @@ void b2Island::SolveTOI(const b2TimeStep& subStep, int32 toiIndexA, int32 toiInd
 	b2ContactSolverDef contactSolverDef;
 	contactSolverDef.contacts = m_contacts;
 	contactSolverDef.count = m_contactCount;
+	contactSolverDef.threadId = 0;
 	contactSolverDef.allocator = m_allocator;
 	contactSolverDef.step = subStep;
 	contactSolverDef.positions = m_positions;

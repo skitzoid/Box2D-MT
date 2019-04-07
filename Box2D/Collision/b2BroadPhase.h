@@ -23,7 +23,7 @@
 #include "Box2D/Collision/b2Collision.h"
 #include "Box2D/Collision/b2DynamicTree.h"
 #include "Box2D/Common/b2GrowableArray.h"
-#include "Box2D/Common/b2Threading.h"
+#include "Box2D/MT/b2Threading.h"
 #include <algorithm>
 
 struct b2Pair
@@ -82,8 +82,11 @@ public:
 	int32 GetProxyCount() const;
 
 	/// Update the pairs. This results in pair callbacks. This can only add pairs.
+	/// Note: This can be called from multiple threads on separate ranges of the
+	/// move buffer. After all threads have finished, ResetBuffers must be called
+	/// from a single thread before the next call to UpdatePairs.
 	template <typename T>
-	void UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback);
+	void UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback, int32 threadId);
 
 	/// Query an AABB for overlapping proxies. The callback class
 	/// is called for each proxy that overlaps the supplied AABB.
@@ -114,8 +117,8 @@ public:
 	/// @param newOrigin the new origin with respect to the old origin
 	void ShiftOrigin(const b2Vec2& newOrigin);
 
-	/// Reset the move buffer. Should only be called by the multi-threaded contact finder.
-	void ResetMoveBuffer();
+	/// Reset the pair buffers and move buffer.
+	void ResetBuffers();
 
 	/// Get the number of proxies in the move buffer.
 	int32 GetMoveCount() const;
@@ -191,14 +194,9 @@ inline float32 b2BroadPhase::GetTreeQuality() const
 }
 
 template <typename T>
-void b2BroadPhase::UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback)
+void b2BroadPhase::UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback, int32 threadId)
 {
-	int32 threadId = b2GetThreadId();
-
 	b2BroadPhasePerThreadData* td = m_perThreadData + threadId;
-
-	// Reset pair buffer
-	td->m_pairBuffer.Clear();
 
 	// Perform tree queries for all moving proxies.
 	for (int32 i = moveBegin; i < moveEnd; ++i)
@@ -231,7 +229,7 @@ void b2BroadPhase::UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback)
 		void* userDataA = m_tree.GetUserData(primaryPair.proxyIdA);
 		void* userDataB = m_tree.GetUserData(primaryPair.proxyIdB);
 
-		callback->AddPair(userDataA, userDataB);
+		callback->AddPair(userDataA, userDataB, threadId);
 
 		++i;
 
@@ -268,9 +266,14 @@ inline void b2BroadPhase::ShiftOrigin(const b2Vec2& newOrigin)
 	m_tree.ShiftOrigin(newOrigin);
 }
 
-inline void b2BroadPhase::ResetMoveBuffer()
+inline void b2BroadPhase::ResetBuffers()
 {
 	m_moveBuffer.Clear();
+
+	for (int32 i = 0; i < b2_maxThreads; ++i)
+	{
+		m_perThreadData[i].m_pairBuffer.Clear();
+	}
 }
 
 inline int32 b2BroadPhase::GetMoveCount() const
