@@ -124,7 +124,7 @@ public:
 		m_range = range;
 	}
 private:
-	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange range) override
+	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange& range) override
 	{
 		m_manager->Collide(m_contacts + range.begin, range.end - range.begin, context.threadId);
 	}
@@ -147,7 +147,7 @@ public:
 		m_range = range;
 	}
 private:
-	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange range) override
+	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange& range) override
 	{
 		m_manager->GenerateDeferredMoveProxies(m_bodies + range.begin, range.end - range.begin, context.threadId);
 	}
@@ -169,7 +169,7 @@ public:
 		m_range = range;
 	}
 private:
-	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange range) override
+	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange& range) override
 	{
 		m_manager->FindNewContacts(range.begin, range.end, context.threadId);
 	}
@@ -191,7 +191,7 @@ public:
 		m_range = range;
 	}
 private:
-	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange range) override
+	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange& range) override
 	{
 		B2_NOT_USED(context);
 		if (m_toiCandidates)
@@ -229,7 +229,7 @@ public:
 		m_range = range;
 	}
 private:
-	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange range) override
+	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange& range) override
 	{
 		B2_NOT_USED(context);
 		for (uint32 i = range.begin; i < range.end; ++i)

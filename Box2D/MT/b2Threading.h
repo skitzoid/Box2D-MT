@@ -85,7 +85,7 @@ public:
 	b2RangeTask();
 
 	/// Execute the task over the specified range.
-	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange range) = 0;
+	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange& range) = 0;
 
 	const b2RangeTaskRange& GetRange() const;
 
