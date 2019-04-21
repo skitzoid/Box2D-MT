@@ -44,15 +44,9 @@ public:
 
 	/// Create a task group.
 	/// The allocator can provide storage for the task group if needed.
-	/// Note: the id value will be unique for each active task and less than
-	/// b2_maxConcurrentTaskGroups.
-	/// Note: currently there is only 1 active task at a time so id is always
-	/// 0, but if this changes then tasks with lower ids will be waited on
-	/// first, so the id can be interpreted as priority.
-	virtual b2TaskGroup CreateTaskGroup(b2StackAllocator& allocator, uint32 id)
+	virtual b2TaskGroup CreateTaskGroup(b2StackAllocator& allocator)
 	{
 		B2_NOT_USED(allocator);
-		B2_NOT_USED(id);
 		b2TaskGroup taskGroup(nullptr);
 		return taskGroup;
 	}

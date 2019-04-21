@@ -32,18 +32,15 @@ class b2ThreadPool;
 class b2ThreadPoolTaskGroup
 {
 public:
-	explicit b2ThreadPoolTaskGroup(b2ThreadPool& threadPool, uint32 priority);
+	explicit b2ThreadPoolTaskGroup(b2ThreadPool& threadPool);
 
 	~b2ThreadPoolTaskGroup();
-
-	uint32 GetPriority() const;
 
 private:
 	friend class b2ThreadPool;
 
 	b2ThreadPool* m_threadPool;
 	std::atomic<uint32> m_remainingTasks;
-	uint32 m_priority;
 };
 
 /// The thread pool manages worker threads that execute tasks.
@@ -141,10 +138,7 @@ public:
 
 	/// Create a task group.
 	/// The allocator can provide storage for the task group if needed.
-	/// Note: the id value will be unique for each active task and less than
-	/// b2_maxConcurrentTaskGroups. Tasks with lower ids will be waited on
-	/// first, so it can be interpreted as a priority.
-	b2TaskGroup CreateTaskGroup(b2StackAllocator& allocator, uint32 id) override;
+	b2TaskGroup CreateTaskGroup(b2StackAllocator& allocator) override;
 
 	/// Destroy the task group, freeing any allocations made in CreateTaskGroup.
 	void DestroyTaskGroup(b2TaskGroup taskGroup, b2StackAllocator& allocator) override;
@@ -170,11 +164,6 @@ inline b2ThreadPoolTaskGroup::~b2ThreadPoolTaskGroup()
 {
 	// If any tasks were submitted, Wait must be called before the task group is destroyed.
 	b2Assert(m_remainingTasks.load(std::memory_order_relaxed) == 0);
-}
-
-inline uint32 b2ThreadPoolTaskGroup::GetPriority() const
-{
-	return m_priority;
 }
 
 inline int32 b2ThreadPool::GetThreadCount() const

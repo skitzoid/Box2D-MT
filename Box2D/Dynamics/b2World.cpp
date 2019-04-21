@@ -1465,7 +1465,7 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 		memset(&m_contactManager.m_perThreadData[i].m_profile, 0, sizeof(b2Profile));
 	}
 
-	b2TaskGroup taskGroup = executor.CreateTaskGroup(m_stackAllocator, 0);
+	b2TaskGroup taskGroup = executor.CreateTaskGroup(m_stackAllocator);
 
 	// If new fixtures were added, we need to find the new contacts.
 	if (m_flags & e_newFixture)

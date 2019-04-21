@@ -34,7 +34,7 @@ workspace 'Box2D'
 	filter 'configurations:Release'
 		defines { 'NDEBUG' }
 		optimize 'On'
-	filter 'configurations:DRD'
+	filter 'configurations:drd'
 		defines { 'NDEBUG', 'b2_drd' }
 		optimize 'On'
 		symbols 'On'

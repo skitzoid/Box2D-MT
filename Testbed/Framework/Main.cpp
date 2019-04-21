@@ -409,7 +409,6 @@ static void sInterface()
 
 		ImVec2 button_sz = ImVec2(-1, 0);
 
-		ImGui::PushItemWidth(-1.0f);
 		ImGui::Text("Profiling Iters");
 		ImGui::SliderInt("##Profiling Iters", &settings.mtProfileIterations, 0, 16);
 
@@ -418,7 +417,7 @@ static void sInterface()
 
 		ImGui::Checkbox("Current Test Only", &settings.mtCurrentTestOnly);
 
-		if (ImGui::Button("Test MT", button_sz))
+		if (ImGui::Button("Run Tests (hides window)", button_sz))
 			sTestMT();
 
 		ImGui::Separator();

@@ -170,10 +170,6 @@ typedef double			float64;
 /// Custom executors must not exceed this value.
 #define b2_partitionRangeMaxOutput				2 * b2_maxThreads
 
-/// The maximum number of concurrently active task groups. Do not change this value.
-/// This may increase in the future.
-#define b2_maxConcurrentTaskGroups				1
-
 /// Get the estimated cost of solving an island with the specified attributes
 int32 b2GetIslandCost(int32 bodyCount, int32 contactCount, int32 jointCount);
 

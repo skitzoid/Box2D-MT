@@ -56,22 +56,13 @@ inline b2ThreadPoolTaskGroup* b2GetThreadPoolTaskGroup(b2TaskGroup taskGroup)
 // Compare the cost of two tasks.
 inline bool b2TaskCostLessThan(const b2Task* a, const b2Task* b)
 {
-	const b2ThreadPoolTaskGroup* gA = b2GetThreadPoolTaskGroup(a->GetTaskGroup());
-	const b2ThreadPoolTaskGroup* gB = b2GetThreadPoolTaskGroup(b->GetTaskGroup());
-
-	static_assert(b2_maxConcurrentTaskGroups < 32, "Need to change task cost calculation.");
-
-	uint64 groupCostA = uint64(1) << (32 + (b2_maxConcurrentTaskGroups - gA->GetPriority()));
-	uint64 groupCostB = uint64(1) << (32 + (b2_maxConcurrentTaskGroups - gB->GetPriority()));
-
-	return groupCostA + a->GetCost() < groupCostB + b->GetCost();
+	return a->GetCost() < b->GetCost();
 }
 
-b2ThreadPoolTaskGroup::b2ThreadPoolTaskGroup(b2ThreadPool& threadPool, uint32 priority)
+b2ThreadPoolTaskGroup::b2ThreadPoolTaskGroup(b2ThreadPool& threadPool)
 {
 	m_threadPool = &threadPool;
 	m_remainingTasks.store(0, std::memory_order_relaxed);
-	m_priority = priority;
 
 	// This prevents DRD from generating false positive data races.
 	b2_drdIgnoreVar(m_remainingTasks);
@@ -337,10 +328,10 @@ void b2ThreadPoolTaskExecutor::StepEnd(b2Profile& profile)
 	}
 }
 
-b2TaskGroup b2ThreadPoolTaskExecutor::CreateTaskGroup(b2StackAllocator& allocator, uint32 id)
+b2TaskGroup b2ThreadPoolTaskExecutor::CreateTaskGroup(b2StackAllocator& allocator)
 {
 	b2ThreadPoolTaskGroup* tpTaskGroup = (b2ThreadPoolTaskGroup*)allocator.Allocate(sizeof(b2ThreadPoolTaskGroup));
-	new(tpTaskGroup) b2ThreadPoolTaskGroup(m_threadPool, id);
+	new(tpTaskGroup) b2ThreadPoolTaskGroup(m_threadPool);
 	b2TaskGroup taskGroup(tpTaskGroup);
 	return taskGroup;
 }
