@@ -26,6 +26,10 @@ class b2TaskExecutor
 {
 public:
 
+	/// The total number of threads that can be executed.
+	/// Must be between 1 and b2_maxThreads.
+	virtual uint32 GetThreadCount() const = 0;
+
 	/// Called when the step begins.
 	virtual void StepBegin()
 	{
@@ -39,50 +43,54 @@ public:
 	}
 
 	/// Create a task group.
-	/// The provided allocator can provide storage for the task group if desired.
-	virtual void* CreateTaskGroup(b2StackAllocator& allocator)
+	/// The allocator can provide storage for the task group if needed.
+	/// Note: the id value will be unique for each active task and less than
+	/// b2_maxConcurrentTaskGroups.
+	/// Note: currently there is only 1 active task at a time so id is always
+	/// 0, but if this changes then tasks with lower ids will be waited on
+	/// first, so the id can be interpreted as priority.
+	virtual b2TaskGroup CreateTaskGroup(b2StackAllocator& allocator, uint32 id)
 	{
 		B2_NOT_USED(allocator);
-		return nullptr;
+		B2_NOT_USED(id);
+		b2TaskGroup taskGroup(nullptr);
+		return taskGroup;
 	}
 
 	/// Destroy the task group, freeing any allocations made by CreateTaskGroup.
-	virtual void DestroyTaskGroup(void* userTaskGroup, b2StackAllocator& allocator)
+	virtual void DestroyTaskGroup(b2TaskGroup taskGroup, b2StackAllocator& allocator)
 	{
-		B2_NOT_USED(userTaskGroup);
+		B2_NOT_USED(taskGroup);
 		B2_NOT_USED(allocator);
 	}
 
 	/// Partition a range into sub-ranges that will each be assigned to a range task.
-	virtual b2PartitionedRange PartitionRange(const b2RangeTaskRange& sourceRange)
+	virtual void PartitionRange(uint32 begin, uint32 end, b2PartitionedRange& output)
 	{
-		b2PartitionedRange output{};
-
-		output.ranges[0] = sourceRange;
+		output[0] = b2RangeTaskRange(begin, end);
 		output.count = 1;
-
-		return output;
 	}
 
 	/// Submit a single task for execution.
-	virtual void SubmitTask(void* userTaskGroup, b2Task* task)
+	virtual void SubmitTask(b2TaskGroup taskGroup, b2Task* task)
 	{
-		B2_NOT_USED(userTaskGroup);
+		B2_NOT_USED(taskGroup);
 		B2_NOT_USED(task);
 	}
 
-	/// Submit range tasks for execution.
-	virtual void SubmitRangeTasks(void* userTaskGroup, b2Task** rangeTasks, int32 count)
+	/// Submit multiple tasks for execution.
+	virtual void SubmitTasks(b2TaskGroup taskGroup, b2Task** tasks, uint32 count)
 	{
-		B2_NOT_USED(userTaskGroup);
-		B2_NOT_USED(rangeTasks);
-		B2_NOT_USED(count);
+		for (uint32 i = 0; i < count; ++i)
+		{
+			SubmitTask(taskGroup, tasks[i]);
+		}
 	}
 
 	/// Wait for all tasks in the group to finish.
-	virtual void Wait(void* userTaskGroup, b2StackAllocator& allocator)
+	virtual void Wait(b2TaskGroup taskGroup, const b2ThreadContext& ctx)
 	{
-		B2_NOT_USED(userTaskGroup);
-		B2_NOT_USED(allocator);
+		B2_NOT_USED(taskGroup);
+		B2_NOT_USED(ctx);
 	}
 };

@@ -2,6 +2,15 @@
 -- https://premake.github.io/
 
 workspace 'Box2D'
+	newoption
+	{
+		trigger     = 'drd',
+		description = 'Make a DRD configuration that prevents false positives from b2ThreadPool (valgrind must be installed).'
+	}
+	filter 'options:drd'
+		configurations { 'drd' }
+	filter {}
+
 	configurations { 'Debug', 'Release' }
 	startproject 'Testbed'
 	location 'Build'
@@ -25,6 +34,10 @@ workspace 'Box2D'
 	filter 'configurations:Release'
 		defines { 'NDEBUG' }
 		optimize 'On'
+	filter 'configurations:DRD'
+		defines { 'NDEBUG', 'b2_drd' }
+		optimize 'On'
+		symbols 'On'
 	filter {}
 
 project 'Box2D'

@@ -19,40 +19,21 @@
 #include "Box2D/Dynamics/b2TimeStep.h"
 #include "Box2D/MT/b2Threading.h"
 
-thread_local int32 b2_threadId = 0;
-
-void b2SetThreadId(int32 threadId)
+void b2PartitionRange(uint32 begin, uint32 end, uint32 targetOutputCount, b2PartitionedRange& output)
 {
-	b2_threadId = threadId;
-}
+	b2Assert(targetOutputCount <= b2_partitionRangeMaxOutput);
+	b2Assert(begin < end);
 
-int32 b2GetThreadId()
-{
-	return b2_threadId;
-}
+	uint32 elementCount = end - begin;
 
-b2PartitionedRange b2PartitionRange(const b2RangeTaskRange& sourceRange, int32 targetOutputCount, int32 minRangeSize)
-{
-	b2Assert(targetOutputCount > 0);
-	b2Assert(targetOutputCount <= b2_partitionedRangeTasksCapacity);
+	uint32 elementsPerTask = elementCount / targetOutputCount;
+	uint32 elementsRemainder = elementCount % targetOutputCount;
 
-	b2PartitionedRange output;
-
-	int32 elementCount = sourceRange.end - sourceRange.begin;
-
-	int32 elementsPerTask = elementCount / targetOutputCount;
-	if (elementsPerTask < minRangeSize)
+	uint32 beginIndex = begin;
+	uint32 endIndex = 0;
+	for (uint32 i = 0; i < targetOutputCount; ++i)
 	{
-		targetOutputCount = b2Max(1, elementCount / minRangeSize);
-		elementsPerTask = elementCount / targetOutputCount;
-	}
-	int32 elementsRemainder = elementCount % targetOutputCount;
-
-	int32 beginIndex = sourceRange.begin;
-	int32 endIndex = 0;
-	for (int32 i = 0; i < targetOutputCount; ++i)
-	{
-		int32 rangeSize = elementsPerTask;
+		uint32 rangeSize = elementsPerTask;
 		if (i < elementsRemainder)
 		{
 			rangeSize += 1;
@@ -62,8 +43,8 @@ b2PartitionedRange b2PartitionRange(const b2RangeTaskRange& sourceRange, int32 t
 		{
 			endIndex = elementCount;
 		}
-		output.ranges[output.count].begin = beginIndex;
-		output.ranges[output.count].end = endIndex;
+		output[output.count].begin = beginIndex;
+		output[output.count].end = endIndex;
 		output.count += 1;
 		if (endIndex == elementCount)
 		{
@@ -71,7 +52,4 @@ b2PartitionedRange b2PartitionRange(const b2RangeTaskRange& sourceRange, int32 t
 		}
 		beginIndex = endIndex;
 	}
-
-	return output;
 }
-

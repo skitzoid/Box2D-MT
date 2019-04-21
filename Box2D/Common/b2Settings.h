@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/skitzoid/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -20,9 +20,10 @@
 #ifndef B2_SETTINGS_H
 #define B2_SETTINGS_H
 
-#include <stddef.h>
-#include <assert.h>
-#include <float.h>
+#include <cstddef>
+#include <cassert>
+#include <cstdint>
+#include <limits>
 
 #if !defined(NDEBUG)
 	#define b2DEBUG
@@ -31,17 +32,19 @@
 #define B2_NOT_USED(x) ((void)(x))
 #define b2Assert(A) assert(A)
 
-typedef signed char	int8;
-typedef signed short int16;
-typedef signed int int32;
-typedef unsigned char uint8;
-typedef unsigned short uint16;
-typedef unsigned int uint32;
-typedef float float32;
-typedef double float64;
+typedef std::int8_t		int8;
+typedef std::int16_t	int16;
+typedef std::int32_t	int32;
+typedef std::int64_t	int64;
+typedef std::uint8_t	uint8;
+typedef std::uint16_t	uint16;
+typedef std::uint32_t	uint32;
+typedef std::uint64_t	uint64;
+typedef float			float32;
+typedef double			float64;
 
-#define	b2_maxFloat		FLT_MAX
-#define	b2_epsilon		FLT_EPSILON
+#define	b2_maxFloat		std::numeric_limits<float32>::max()
+#define	b2_epsilon		std::numeric_limits<float32>::epsilon()
 #define b2_pi			3.14159265359f
 
 /// @file
@@ -133,6 +136,21 @@ typedef double float64;
 
 // Performance
 
+/// Force inline of larger functions that tend to not be inlined by default.
+#ifdef _MSC_VER
+    #define b2_forceInline __forceinline
+#elif defined(__GNUC__)
+    #define b2_forceInline inline __attribute__((__always_inline__))
+#elif defined(__CLANG__)
+    #if __has_attribute(__always_inline__)
+        #define b2_forceInline inline __attribute__((__always_inline__))
+    #else
+        #define b2_forceInline inline
+    #endif
+#else
+    #define b2_forceInline inline
+#endif
+
 /// The size of a cache line.
 #define b2_cacheLineSize						64
 
@@ -148,14 +166,13 @@ typedef double float64;
 /// The world may continue gathering bodies for solving until it gathers this many.
 #define b2_solveBatchTargetBodyCount			16
 
-/// Minimum partition size of a range task.
-#define b2_rangeTaskMinPartitionSize			16
-
 /// The maximum number of subtasks that a range task can be split into.
-#define b2_partitionedRangeTasksCapacity		2 * b2_maxThreads
+/// Custom executors must not exceed this value.
+#define b2_partitionRangeMaxOutput				2 * b2_maxThreads
 
-/// When this is defined the stack allocator will assert if it needs to use malloc.
-#define b2_assertStackAllocatorNoMalloc
+/// The maximum number of concurrently active task groups. Do not change this value.
+/// This may increase in the future.
+#define b2_maxConcurrentTaskGroups				1
 
 /// Get the estimated cost of solving an island with the specified attributes
 int32 b2GetIslandCost(int32 bodyCount, int32 contactCount, int32 jointCount);

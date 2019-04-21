@@ -16,84 +16,108 @@
 * 3. This notice may not be removed or altered from any source distribution.
 */
 
+#include <algorithm>
 #include "Box2D/MT/b2ThreadPool.h"
 #include "Box2D/Common/b2Math.h"
 #include "Box2D/Common/b2StackAllocator.h"
 #include "Box2D/Dynamics/b2TimeStep.h"
-#include <algorithm>
 
-// Compare the cost of two tasks.
-inline bool b2TaskCostLessThan(const b2Task* l, const b2Task* r)
+// Prevent false positives when testing with DRD.
+#ifdef b2_drd
+	#include "valgrind/drd.h"
+	// These prevent the "Probably a race condition" warnings that occur when
+	// notifying a condition variable without the associated mutex being locked.
+	#define b2_holdLockDuringNotify
+	// This is used on atomic variables to prevent false positive data races that are
+	// detected on conflicting atomic loads and stores (DRD can't recognize atomics).
+	#define b2_drdIgnoreVar(x) DRD_IGNORE_VAR(x)
+#else
+	#define b2_drdIgnoreVar(x) do { } while(0)
+#endif
+
+// This define expands the scope of lock guards to include the condition variable notify.
+// It isn't necessary to hold a lock during notification, and doing so can force the
+// notified thread to wait for the notifier to unlock the mutex, but tools like drd issue
+// a warning when a condition variable is notified without holding a lock.
+#ifdef b2_holdLockDuringNotify
+	#define b2_notifyLockScopeBegin
+	#define b2_notifyLockScopeEnd
+#else
+	#define b2_notifyLockScopeBegin {
+	#define b2_notifyLockScopeEnd }
+#endif
+
+inline b2ThreadPoolTaskGroup* b2GetThreadPoolTaskGroup(b2TaskGroup taskGroup)
 {
-	return l->GetCost() < r->GetCost();
+	b2Assert(taskGroup.userData);
+	return (b2ThreadPoolTaskGroup*)taskGroup.userData;
 }
 
-b2ThreadPool::b2ThreadPool(int32 threadCount)
+// Compare the cost of two tasks.
+inline bool b2TaskCostLessThan(const b2Task* a, const b2Task* b)
 {
-	b2Assert(threadCount <= b2_maxThreadPoolThreads);
-	b2Assert(threadCount >= -1);
+	const b2ThreadPoolTaskGroup* gA = b2GetThreadPoolTaskGroup(a->GetTaskGroup());
+	const b2ThreadPoolTaskGroup* gB = b2GetThreadPoolTaskGroup(b->GetTaskGroup());
 
-	if (threadCount == -1)
+	static_assert(b2_maxConcurrentTaskGroups < 32, "Need to change task cost calculation.");
+
+	uint64 groupCostA = uint64(1) << (32 + (b2_maxConcurrentTaskGroups - gA->GetPriority()));
+	uint64 groupCostB = uint64(1) << (32 + (b2_maxConcurrentTaskGroups - gB->GetPriority()));
+
+	return groupCostA + a->GetCost() < groupCostB + b->GetCost();
+}
+
+b2ThreadPoolTaskGroup::b2ThreadPoolTaskGroup(b2ThreadPool& threadPool, uint32 priority)
+{
+	m_threadPool = &threadPool;
+	m_remainingTasks.store(0, std::memory_order_relaxed);
+	m_priority = priority;
+
+	// This prevents DRD from generating false positive data races.
+	b2_drdIgnoreVar(m_remainingTasks);
+}
+
+b2ThreadPool::b2ThreadPool(int32 totalThreadCount)
+{
+	b2Assert(totalThreadCount <= b2_maxThreads);
+	b2Assert(totalThreadCount >= -1);
+
+	if (totalThreadCount == -1)
 	{
-		// Match the number of cores, minus one for the user thread.
-		threadCount = (int32)std::thread::hardware_concurrency() - 1;
-	}
-
-	// Account for invalid input, single core processors, or hardware_concurrency not being well defined.
-	threadCount = b2Clamp(threadCount, 0, b2_maxThreadPoolThreads);
-
-	m_signalShutdown = false;
-	m_threadCount = threadCount;
-
-	if (threadCount > 0)
-	{
-		m_threads = (std::thread*)b2Alloc(threadCount * sizeof(std::thread));
-		for (int32 i = 0; i < threadCount; ++i)
-		{
-			new(&m_threads[i]) std::thread(&b2ThreadPool::WorkerMain, this, 1 + i);
-		}
-	}
-	else
-	{
-		m_threads = nullptr;
+		// Use the number of logical cores.
+		// TODO: Use the number of physical cores, although finding that number
+		// is platform specific. See boost::thread::physical_concurrency.
+		totalThreadCount = (int32)std::thread::hardware_concurrency();
 	}
 
 	m_lockMilliseconds = 0;
-	m_taskStartMilliseconds = 0;
 	m_pendingTaskCount.store(0, std::memory_order_relaxed);
 	m_busyWait.store(false, std::memory_order_relaxed);
+	m_signalShutdown = false;
+
+	// This prevents DRD from generating false positive data races.
+	b2_drdIgnoreVar(m_pendingTaskCount);
+	b2_drdIgnoreVar(m_busyWait);
+
+	// Minus one for the user thread.
+	m_threadCount = b2Clamp(totalThreadCount - 1, 0, b2_maxThreadPoolThreads);
+	for (int32 i = 0; i < m_threadCount; ++i)
+	{
+		m_threads[i] = std::thread(&b2ThreadPool::WorkerMain, this, 1 + i);
+	}
 }
 
 b2ThreadPool::~b2ThreadPool()
 {
-	{
-		std::lock_guard<std::mutex> lk(m_mutex);
-		m_signalShutdown = true;
-		m_busyWait.store(false, std::memory_order_relaxed);
-	}
-	m_workerCond.notify_all();
-
-	for (int32 i = 0; i < m_threadCount; ++i)
-	{
-		if (m_threads[i].joinable())
-		{
-			m_threads[i].join();
-		}
-	}
-
-	for (int32 i = 0; i < m_threadCount; ++i)
-	{
-		m_threads[i].~thread();
-	}
-	b2Free(m_threads);
+	Shutdown();
 }
 
 void b2ThreadPool::StartBusyWaiting()
 {
-	{
+	b2_notifyLockScopeBegin
 		std::lock_guard<std::mutex> lk(m_mutex);
 		m_busyWait.store(true, std::memory_order_relaxed);
-	}
+	b2_notifyLockScopeEnd
 	m_workerCond.notify_all();
 }
 
@@ -103,32 +127,27 @@ void b2ThreadPool::StopBusyWaiting()
 	m_busyWait.store(false, std::memory_order_relaxed);
 }
 
-void b2ThreadPool::SubmitTasks(b2ThreadPoolTaskGroup& group, b2Task** tasks, int32 count)
+void b2ThreadPool::SubmitTasks(b2ThreadPoolTaskGroup& group, b2Task** tasks, uint32 count)
 {
-	{
+	b2_notifyLockScopeBegin
 		b2Timer lockTimer;
 		std::lock_guard<std::mutex> lk(m_mutex);
 		m_lockMilliseconds += lockTimer.GetMilliseconds();
 
-		for (int32 i = 0; i < count; ++i)
+		for (uint32 i = 0; i < count; ++i)
 		{
 			m_pendingTasks.Push(tasks[i]);
 			std::push_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskCostLessThan);
 		}
 		m_pendingTaskCount.store(m_pendingTasks.GetCount(), std::memory_order_relaxed);
 		group.m_remainingTasks.store(group.m_remainingTasks.load(std::memory_order_relaxed) + count, std::memory_order_relaxed);
-
-		group.m_accumulatedNotifyMilliseconds += group.m_maxNotifyAllMilliseconds;
-		group.m_maxNotifyAllMilliseconds = 0;
-		group.m_notifiedAll = true;
-		group.m_notifyTimer.Reset();
-	}
+	b2_notifyLockScopeEnd
 	m_workerCond.notify_all();
 }
 
 void b2ThreadPool::SubmitTask(b2ThreadPoolTaskGroup& group, b2Task* task)
 {
-	{
+	b2_notifyLockScopeBegin
 		b2Timer lockTimer;
 		std::lock_guard<std::mutex> lk(m_mutex);
 		m_lockMilliseconds += lockTimer.GetMilliseconds();
@@ -137,19 +156,14 @@ void b2ThreadPool::SubmitTask(b2ThreadPoolTaskGroup& group, b2Task* task)
 		std::push_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskCostLessThan);
 		m_pendingTaskCount.store(m_pendingTasks.GetCount(), std::memory_order_relaxed);
 		group.m_remainingTasks.store(group.m_remainingTasks.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
-
-		group.m_maxNotifyAllMilliseconds = 0;
-		group.m_notifiedAll = false;
-		group.m_notifyTimer.Reset();
-	}
+	b2_notifyLockScopeEnd
 	m_workerCond.notify_one();
 }
 
-void b2ThreadPool::Wait(const b2ThreadPoolTaskGroup& group, b2StackAllocator& allocator)
+void b2ThreadPool::Wait(const b2ThreadPoolTaskGroup& group, const b2ThreadContext& context)
 {
-    b2TaskExecutionContext context;
-    context.allocator = &allocator;
-    context.threadId = 0;
+	// We don't expect worker threads to call wait.
+	b2Assert(context.threadId == 0);
 
 	b2Timer lockTimer;
 	std::unique_lock<std::mutex> lk(m_mutex);
@@ -159,23 +173,20 @@ void b2ThreadPool::Wait(const b2ThreadPoolTaskGroup& group, b2StackAllocator& al
 	{
 		if (group.m_remainingTasks.load(std::memory_order_relaxed) == 0)
 		{
-			m_taskStartMilliseconds += group.m_maxNotifyAllMilliseconds + group.m_accumulatedNotifyMilliseconds;
 			return;
 		}
 
 		if (m_pendingTasks.GetCount() == 0)
 		{
-			// Wait for workers to finish executing the group.
 			lk.unlock();
+			// Busy wait.
 			while (group.m_remainingTasks.load(std::memory_order_relaxed) > 0)
 			{
 				std::this_thread::yield();
 			}
-			lockTimer.Reset();
+			b2Timer timer;
 			lk.lock();
-			m_lockMilliseconds += lockTimer.GetMilliseconds();
-
-			m_taskStartMilliseconds += group.m_maxNotifyAllMilliseconds + group.m_accumulatedNotifyMilliseconds;
+			m_lockMilliseconds += timer.GetMilliseconds();
 			return;
 		}
 
@@ -193,35 +204,41 @@ void b2ThreadPool::Wait(const b2ThreadPoolTaskGroup& group, b2StackAllocator& al
 		m_lockMilliseconds += lockTimer.GetMilliseconds();
 
 		// This is not necessarily the group we're waiting on.
-		b2ThreadPoolTaskGroup* executeGroup = (b2ThreadPoolTaskGroup*)task->GetTaskGroup();
+		b2ThreadPoolTaskGroup* executeGroup = b2GetThreadPoolTaskGroup(task->GetTaskGroup());
 
 		// We only modify this while the mutex is locked, so it's okay to do this non-atomically.
-		executeGroup->m_remainingTasks.store(executeGroup->m_remainingTasks.load(std::memory_order_relaxed) - 1, std::memory_order_relaxed);
+		executeGroup->m_remainingTasks.store(executeGroup->m_remainingTasks.load(std::memory_order_relaxed) - 1,
+			std::memory_order_relaxed);
 	}
 }
 
-void b2ThreadPool::WorkerMain(int32 threadId)
+void b2ThreadPool::Restart(int32 threadCount)
 {
-	b2SetThreadId(threadId);
+	Shutdown();
+	m_signalShutdown = false;
 
-	b2StackAllocator allocator;
+	m_threadCount = b2Clamp(threadCount - 1, 0, b2_maxThreadPoolThreads);
+	for (int32 i = 0; i < m_threadCount; ++i)
+	{
+		m_threads[i] = std::thread(&b2ThreadPool::WorkerMain, this, 1 + i);
+	}
+}
 
-    b2TaskExecutionContext context;
-    context.allocator = &allocator;
-    context.threadId = threadId;
+void b2ThreadPool::WorkerMain(uint32 threadId)
+{
+	b2StackAllocator stack;
+
+	b2ThreadContext context;
+	context.stack = &stack;
+	context.threadId = threadId;
 
 	b2Timer lockTimer;
 	std::unique_lock<std::mutex> lk(m_mutex);
 
 	while (true)
 	{
-		bool waitedForTasks = false;
-
 		while (m_pendingTasks.GetCount() == 0)
 		{
-			// Wait for tasks
-			waitedForTasks = true;
-
 			if (m_busyWait.load(std::memory_order_relaxed))
 			{
 				lk.unlock();
@@ -230,9 +247,9 @@ void b2ThreadPool::WorkerMain(int32 threadId)
 				{
 					std::this_thread::yield();
 				}
-				lockTimer.Reset();
+				b2Timer timer;
 				lk.lock();
-				m_lockMilliseconds += lockTimer.GetMilliseconds();
+				m_lockMilliseconds += timer.GetMilliseconds();
 				// Note: the pending task count will be checked again now that we have the lock,
 				// and we'll go back to waiting if there's no longer any pending tasks.
 			}
@@ -260,7 +277,6 @@ void b2ThreadPool::WorkerMain(int32 threadId)
 			{
 				// Shutting down in the middle of processing tasks is not supported.
 				b2Assert(m_pendingTasks.GetCount() == 0);
-
 				return;
 			}
 		}
@@ -269,21 +285,7 @@ void b2ThreadPool::WorkerMain(int32 threadId)
 		b2Task* task = m_pendingTasks.Pop();
 		m_pendingTaskCount.store(m_pendingTasks.GetCount(), std::memory_order_relaxed);
 
-		b2ThreadPoolTaskGroup* group = (b2ThreadPoolTaskGroup*)task->GetTaskGroup();
-
-		// Measure how long it took for threads to get to work after notification.
-		// Busy waiting reduces this time.
-		if (waitedForTasks)
-		{
-			if (group->m_notifiedAll)
-			{
-				group->m_maxNotifyAllMilliseconds = group->m_notifyTimer.GetMilliseconds();
-			}
-			else
-			{
-				group->m_accumulatedNotifyMilliseconds += group->m_notifyTimer.GetMilliseconds();
-			}
-		}
+		b2ThreadPoolTaskGroup* group = b2GetThreadPoolTaskGroup(task->GetTaskGroup());
 
 		lk.unlock();
 
@@ -294,7 +296,28 @@ void b2ThreadPool::WorkerMain(int32 threadId)
 		m_lockMilliseconds += lockTimer.GetMilliseconds();
 
 		// We only modify this while the mutex is locked, so it's okay to do this non-atomically.
-		group->m_remainingTasks.store(group->m_remainingTasks.load(std::memory_order_relaxed) - 1, std::memory_order_relaxed);
+		int32 prevRemainingTasks = group->m_remainingTasks.load(std::memory_order_relaxed);
+		group->m_remainingTasks.store(prevRemainingTasks - 1, std::memory_order_relaxed);
+	}
+}
+
+void b2ThreadPool::Shutdown()
+{
+	{
+		b2_notifyLockScopeBegin
+			std::lock_guard<std::mutex> lk(m_mutex);
+			m_signalShutdown = true;
+			m_busyWait.store(false, std::memory_order_relaxed);
+		b2_notifyLockScopeEnd
+		m_workerCond.notify_all();
+	}
+
+	for (int32 i = 0; i < m_threadCount; ++i)
+	{
+		if (m_threads[i].joinable())
+		{
+			m_threads[i].join();
+		}
 	}
 }
 
@@ -307,7 +330,6 @@ void b2ThreadPoolTaskExecutor::StepBegin()
 void b2ThreadPoolTaskExecutor::StepEnd(b2Profile& profile)
 {
 	profile.locking = m_threadPool.GetLockMilliseconds();
-	profile.taskStarting = m_threadPool.GetTaskStartMilliseconds();
 
 	if (m_continuousBusyWait == false)
 	{
@@ -315,44 +337,50 @@ void b2ThreadPoolTaskExecutor::StepEnd(b2Profile& profile)
 	}
 }
 
-void* b2ThreadPoolTaskExecutor::CreateTaskGroup(b2StackAllocator& allocator)
+b2TaskGroup b2ThreadPoolTaskExecutor::CreateTaskGroup(b2StackAllocator& allocator, uint32 id)
 {
-	b2ThreadPoolTaskGroup* taskGroup = (b2ThreadPoolTaskGroup*)allocator.Allocate(sizeof(b2ThreadPoolTaskGroup));
-	new(taskGroup) b2ThreadPoolTaskGroup(m_threadPool);
+	b2ThreadPoolTaskGroup* tpTaskGroup = (b2ThreadPoolTaskGroup*)allocator.Allocate(sizeof(b2ThreadPoolTaskGroup));
+	new(tpTaskGroup) b2ThreadPoolTaskGroup(m_threadPool, id);
+	b2TaskGroup taskGroup(tpTaskGroup);
 	return taskGroup;
 }
 
-void b2ThreadPoolTaskExecutor::DestroyTaskGroup(void* userTaskGroup, b2StackAllocator& allocator)
+void b2ThreadPoolTaskExecutor::DestroyTaskGroup(b2TaskGroup taskGroup, b2StackAllocator& allocator)
 {
-	b2ThreadPoolTaskGroup* taskGroup = (b2ThreadPoolTaskGroup*)userTaskGroup;
-	taskGroup->~b2ThreadPoolTaskGroup();
-	allocator.Free(taskGroup);
+	b2ThreadPoolTaskGroup* tpTaskGroup = b2GetThreadPoolTaskGroup(taskGroup);
+	b2Assert(tpTaskGroup);
+
+	tpTaskGroup->~b2ThreadPoolTaskGroup();
+	allocator.Free(tpTaskGroup);
 }
 
-b2PartitionedRange b2ThreadPoolTaskExecutor::PartitionRange(const b2RangeTaskRange& sourceRange)
+void b2ThreadPoolTaskExecutor::PartitionRange(uint32 begin, uint32 end, b2PartitionedRange& output)
 {
-	b2PartitionedRange output = b2PartitionRange(sourceRange, m_targetRangeTaskCount, b2_rangeTaskMinPartitionSize);
+	uint32 targetOutputCount = m_threadPool.GetThreadCount();
 
-	return output;
+	b2PartitionRange(begin, end, targetOutputCount, output);
 }
 
-void b2ThreadPoolTaskExecutor::SubmitTask(void* userTaskGroup, b2Task* task)
+void b2ThreadPoolTaskExecutor::SubmitTask(b2TaskGroup taskGroup, b2Task* task)
 {
-	b2ThreadPoolTaskGroup* taskGroup = (b2ThreadPoolTaskGroup*)userTaskGroup;
+	b2ThreadPoolTaskGroup* tpTaskGroup = b2GetThreadPoolTaskGroup(taskGroup);
+	b2Assert(tpTaskGroup);
 
-	m_threadPool.SubmitTask(*taskGroup, task);
+	m_threadPool.SubmitTask(*tpTaskGroup, task);
 }
 
-void b2ThreadPoolTaskExecutor::SubmitRangeTasks(void* userTaskGroup, b2Task** rangeTasks, int32 count)
+void b2ThreadPoolTaskExecutor::SubmitTasks(b2TaskGroup taskGroup, b2Task** tasks, uint32 count)
 {
-	b2ThreadPoolTaskGroup* taskGroup = (b2ThreadPoolTaskGroup*)userTaskGroup;
+	b2ThreadPoolTaskGroup* tpTaskGroup = b2GetThreadPoolTaskGroup(taskGroup);
+	b2Assert(tpTaskGroup);
 
-	m_threadPool.SubmitTasks(*taskGroup, rangeTasks, count);
+	m_threadPool.SubmitTasks(*tpTaskGroup, tasks, count);
 }
 
-void b2ThreadPoolTaskExecutor::Wait(void* userTaskGroup, b2StackAllocator& allocator)
+void b2ThreadPoolTaskExecutor::Wait(b2TaskGroup taskGroup, const b2ThreadContext& ctx)
 {
-	b2ThreadPoolTaskGroup* taskGroup = (b2ThreadPoolTaskGroup*)userTaskGroup;
+	b2ThreadPoolTaskGroup* tpTaskGroup = b2GetThreadPoolTaskGroup(taskGroup);
+	b2Assert(tpTaskGroup);
 
-	m_threadPool.Wait(*taskGroup, allocator);
+	m_threadPool.Wait(*tpTaskGroup, ctx);
 }

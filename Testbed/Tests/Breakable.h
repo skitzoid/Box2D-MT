@@ -61,7 +61,17 @@ public:
 		m_broke = false;
 	}
 
-	void PostSolve(b2Contact* contact, const b2ContactImpulse* impulse)
+	// Here we return CALL_DEFERRED from PostSolveImmediate so that PostSolve will be called (from a single thread).
+	b2ImmediateCallbackResult PostSolveImmediate(b2Contact* contact, const b2ContactImpulse* impulse,
+												uint32 threadId) override
+	{
+		B2_NOT_USED(contact);
+		B2_NOT_USED(impulse);
+		B2_NOT_USED(threadId);
+		return b2ImmediateCallbackResult::CALL_DEFERRED;
+	}
+
+	void PostSolve(b2Contact* contact, const b2ContactImpulse* impulse) override
 	{
 		if (m_broke)
 		{

@@ -21,11 +21,18 @@
 
 class b2StackAllocator;
 
-/// Thread specific data given to a task for exeuction.
-struct b2TaskExecutionContext
+/// Thread data required for task execution.
+struct b2ThreadContext
 {
-	b2StackAllocator* allocator;
-	int32 threadId;
+	b2StackAllocator* stack;
+	uint32 threadId;
+};
+
+/// Represents a group of tasks. The user data should be set by an executor.
+struct b2TaskGroup
+{
+	explicit b2TaskGroup(void* userDataIn) : userData(userDataIn) {}
+	void* userData;
 };
 
 /// The base class for all tasks that are run by the thread pool.
@@ -33,10 +40,13 @@ class b2Task
 {
 public:
 	/// Construct a task.
-	b2Task();
+	b2Task()
+		: m_costEstimate(0)
+		, m_taskGroup(nullptr)
+	{ }
 
 	/// Execute the task.
-	virtual void Execute(b2TaskExecutionContext& context) = 0;
+	virtual void Execute(const b2ThreadContext& ctx) = 0;
 
 	virtual ~b2Task() {}
 
@@ -47,22 +57,28 @@ public:
 	int32 GetCost() const;
 
 	/// Associate this task with a task group.
-	void SetTaskGroup(void* taskGroup);
+	void SetTaskGroup(b2TaskGroup taskGroup);
 
 	/// Get the group that this task is associated with.
-	void* GetTaskGroup() const;
+	b2TaskGroup GetTaskGroup() const;
 
 private:
 	uint32 m_costEstimate;
-	void* m_taskGroup;
+	b2TaskGroup m_taskGroup;
 };
 
 /// A range over which a range task executes.
 struct b2RangeTaskRange
 {
-	b2RangeTaskRange() {}
+	b2RangeTaskRange()
+		: begin(0)
+		, end(0)
+	{ }
 
-	b2RangeTaskRange(uint32 beginIn, uint32 endIn) : begin(beginIn), end(endIn) {}
+	b2RangeTaskRange(uint32 beginIn, uint32 endIn)
+		: begin(beginIn)
+		, end(endIn)
+	{ }
 
 	uint32 begin;
 	uint32 end;
@@ -71,9 +87,14 @@ struct b2RangeTaskRange
 /// A set of sequential ranges.
 struct b2PartitionedRange
 {
-	b2PartitionedRange() : count(0) {}
+	b2PartitionedRange()
+		: count(0)
+	{ }
 
-	b2RangeTaskRange ranges[b2_partitionedRangeTasksCapacity];
+	b2RangeTaskRange& operator[](size_t i);
+	const b2RangeTaskRange& operator[](size_t i) const;
+
+	b2RangeTaskRange ranges[b2_partitionRangeMaxOutput];
 	uint32 count;
 };
 
@@ -82,10 +103,16 @@ class b2RangeTask : public b2Task
 {
 public:
 	/// Construct a range task.
-	b2RangeTask();
+	b2RangeTask() { }
+	b2RangeTask(const b2RangeTaskRange& range)
+		: m_range{range}
+	{ }
 
 	/// Execute the task over the specified range.
-	virtual void Execute(b2TaskExecutionContext& context, const b2RangeTaskRange& range) = 0;
+	virtual void Execute(const b2ThreadContext& ctx, const b2RangeTaskRange& range) = 0;
+
+	/// Execute the task over the stored range.
+	virtual void Execute(const b2ThreadContext& ctx) final;
 
 	const b2RangeTaskRange& GetRange() const;
 
@@ -93,23 +120,9 @@ protected:
 	b2RangeTaskRange m_range;
 };
 
-/// Set the calling thread's ID.
-/// Must be in the range [0, b2_maxThreads) and unique for each of an executors concurrently executing threads.
-void b2SetThreadId(int32 threadId);
-
-/// Get the calling thread's ID.
-int32 b2GetThreadId();
-
-/// Evenly divide the source range into the target number of ranges.
-/// The size of the output ranges will be at least minRangeSize.
-/// The difference between the size of any two output ranges will be 0 or 1.
-b2PartitionedRange b2PartitionRange(const b2RangeTaskRange& sourceRange, int32 targetOutputCount, int32 minRangeSize);
-
-inline b2Task::b2Task()
-{
-	m_costEstimate = 0;
-	m_taskGroup = nullptr;
-}
+/// Evenly divides the range [begin, end) into the target number of ranges.
+/// The max difference in the sizes of any two output ranges is 1.
+void b2PartitionRange(uint32 begin, uint32 end, uint32 targetOutputCount, b2PartitionedRange& output);
 
 inline void b2Task::SetCost(uint32 costEstimate)
 {
@@ -121,20 +134,29 @@ inline int32 b2Task::GetCost() const
 	return m_costEstimate;
 }
 
-inline void b2Task::SetTaskGroup(void* data)
+inline void b2Task::SetTaskGroup(b2TaskGroup taskGroup)
 {
-	m_taskGroup = data;
+	m_taskGroup = taskGroup;
 }
 
-inline void* b2Task::GetTaskGroup() const
+inline b2TaskGroup b2Task::GetTaskGroup() const
 {
 	return m_taskGroup;
 }
 
-inline b2RangeTask::b2RangeTask()
-	: m_range{}
+inline b2RangeTaskRange& b2PartitionedRange::operator[](size_t i)
 {
+	return ranges[i];
+}
 
+inline const b2RangeTaskRange& b2PartitionedRange::operator[](size_t i) const
+{
+	return ranges[i];
+}
+
+inline void b2RangeTask::Execute(const b2ThreadContext& ctx)
+{
+	Execute(ctx, GetRange());
 }
 
 inline const b2RangeTaskRange& b2RangeTask::GetRange() const

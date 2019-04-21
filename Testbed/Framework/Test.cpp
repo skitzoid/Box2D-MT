@@ -33,7 +33,7 @@ void DestructionListener::SayGoodbye(b2Joint* joint)
 }
 
 Test::Test()
-	: m_threadPool(/*thread count*/)
+	: m_threadPoolExec(/*thread count*/)
 {
 	b2Vec2 gravity;
 	gravity.Set(0.0f, -10.0f);
@@ -49,14 +49,17 @@ Test::Test()
 	m_world->SetDebugDraw(&g_debugDraw);
 
 	m_bombSpawning = false;
+	m_visible = true;
 
 	m_stepCount = 0;
+	m_smoothProfileStepCount = 0;
 
 	b2BodyDef bodyDef;
 	m_groundBody = m_world->CreateBody(&bodyDef);
 
-	memset(&m_maxProfile, 0, sizeof(b2Profile));
-	memset(&m_totalProfile, 0, sizeof(b2Profile));
+	memset(&m_maxProfile, 0, sizeof(m_maxProfile));
+	memset(&m_totalProfile, 0, sizeof(m_totalProfile));
+	memset(&m_smoothProfile, 0, sizeof(m_smoothProfile));
 }
 
 Test::~Test()
@@ -66,13 +69,17 @@ Test::~Test()
 	m_world = nullptr;
 }
 
-void Test::PreSolve(b2Contact* contact, const b2Manifold* oldManifold)
+b2ImmediateCallbackResult Test::PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold, uint32 threadId)
 {
+	// Derived tests must override immediate functions and return CALL_DEFERRED
+	// if they need the deferred functions to be called.
+	b2ImmediateCallbackResult result = b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;
+
 	const b2Manifold* manifold = contact->GetManifold();
 
 	if (manifold->pointCount == 0)
 	{
-		return;
+		return result;
 	}
 
 	b2Fixture* fixtureA = contact->GetFixtureA();
@@ -83,8 +90,6 @@ void Test::PreSolve(b2Contact* contact, const b2Manifold* oldManifold)
 
 	b2WorldManifold worldManifold;
 	contact->GetWorldManifold(&worldManifold);
-
-	int32 threadId = b2GetThreadId();
 
 	for (int32 i = 0; i < manifold->pointCount && m_pointCount[threadId] < k_maxContactPoints; ++i)
 	{
@@ -99,6 +104,8 @@ void Test::PreSolve(b2Contact* contact, const b2Manifold* oldManifold)
 		cp->separation = worldManifold.separations[i];
 		++m_pointCount[threadId];
 	}
+
+	return result;
 }
 
 void Test::DrawTitle(const char *string)
@@ -270,6 +277,11 @@ void Test::LaunchBomb(const b2Vec2& position, const b2Vec2& velocity)
 
 void Test::Step(Settings* settings)
 {
+	if (settings->threadCount != m_threadPoolExec.GetThreadCount())
+	{
+		m_threadPoolExec.GetThreadPool().Restart(settings->threadCount);
+	}
+
 	float32 timeStep = settings->hz > 0.0f ? 1.0f / settings->hz : float32(0.0f);
 
 	if (settings->pause)
@@ -301,22 +313,28 @@ void Test::Step(Settings* settings)
 
 	memset(&m_pointCount, 0, sizeof(m_pointCount));
 
-	// Calling glFinish before the step makes it much less likely for our worker threads to be
-	// preempted during the step. Without glFinish they are frequently preempted to allow the
-	// compositor to run (on Ubuntu with compiz at least).
-	g_debugDraw.Finish();
+	if (timeStep > 0.0f)
+	{
+		m_world->Step(timeStep, settings->velocityIterations, settings->positionIterations, m_threadPoolExec);
+	}
 
-	m_world->Step(timeStep, settings->velocityIterations, settings->positionIterations, m_threadPool);
+	if (m_visible)
+	{
+		m_world->DrawDebugData();
+		g_debugDraw.Flush();
 
-	m_world->DrawDebugData();
-	g_debugDraw.Flush();
+		// Calling glFinish is not ideal for rendering performance but without this our step profile
+		// is pretty inconsistent (on Ubuntu with compiz at least).
+		g_debugDraw.Finish();
+	}
 
 	if (timeStep > 0.0f)
 	{
 		++m_stepCount;
+		++m_smoothProfileStepCount;
 	}
 
-	if (settings->drawStats)
+	if (settings->drawStats && m_visible)
 	{
 		int32 bodyCount = m_world->GetBodyCount();
 		int32 contactCount = m_world->GetContactCount();
@@ -333,6 +351,7 @@ void Test::Step(Settings* settings)
 	}
 
 	// Track maximum profile times
+	if (timeStep > 0.0f)
 	{
 		const b2Profile& p = m_world->GetProfile();
 		m_maxProfile.step = b2Max(m_maxProfile.step, p.step);
@@ -347,29 +366,23 @@ void Test::Step(Settings* settings)
 		m_maxProfile.broadphaseSyncFixtures = b2Max(m_maxProfile.broadphaseSyncFixtures, p.broadphaseSyncFixtures);
 		m_maxProfile.broadphaseFindContacts = b2Max(m_maxProfile.broadphaseFindContacts, p.broadphaseFindContacts);
 		m_maxProfile.locking = b2Max(m_maxProfile.locking, p.locking);
-		m_maxProfile.taskStarting = b2Max(m_maxProfile.taskStarting, p.taskStarting);
 
-		m_totalProfile.step += p.step;
-		m_totalProfile.collide += p.collide;
-		m_totalProfile.solve += p.solve;
-		m_totalProfile.solveTraversal += p.solveTraversal;
-		m_totalProfile.solveInit += p.solveInit;
-		m_totalProfile.solveVelocity += p.solveVelocity;
-		m_totalProfile.solvePosition += p.solvePosition;
-		m_totalProfile.solveTOI += p.solveTOI;
-		m_totalProfile.broadphase += p.broadphase;
-		m_totalProfile.broadphaseSyncFixtures += p.broadphaseSyncFixtures;
-		m_totalProfile.broadphaseFindContacts += p.broadphaseFindContacts;
-		m_totalProfile.locking += p.locking;
-		m_totalProfile.taskStarting += p.taskStarting;
+		b2AddProfile(m_totalProfile, p, 1.0f);
+
+		float32 scale = 1.0f / settings->stepsPerProfileUpdate;
+		b2AddProfile(m_smoothProfile[1], p, scale);
+
+		if (m_smoothProfileStepCount >= settings->stepsPerProfileUpdate)
+		{
+			m_smoothProfile[0] = m_smoothProfile[1];
+			m_smoothProfile[1] = b2Profile{};
+			m_smoothProfileStepCount = 0;
+		}
 	}
 
-	if (settings->drawProfile)
+	if (settings->drawProfile && m_visible)
 	{
-		const b2Profile& p = m_world->GetProfile();
-
-		b2Profile aveProfile;
-		memset(&aveProfile, 0, sizeof(b2Profile));
+		b2Profile aveProfile{};
 		if (m_stepCount > 0)
 		{
 			float32 scale = 1.0f / m_stepCount;
@@ -385,8 +398,9 @@ void Test::Step(Settings* settings)
 			aveProfile.broadphaseSyncFixtures = scale * m_totalProfile.broadphaseSyncFixtures;
 			aveProfile.broadphaseFindContacts = scale * m_totalProfile.broadphaseFindContacts;
 			aveProfile.locking = scale * m_totalProfile.locking;
-			aveProfile.taskStarting = scale * m_totalProfile.taskStarting;
 		}
+
+		b2Profile p = m_smoothProfile[0];
 
 		g_debugDraw.DrawString(5, m_textLine, "step [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.step, aveProfile.step, m_maxProfile.step);
 		m_textLine += DRAW_STRING_NEW_LINE;
@@ -412,13 +426,11 @@ void Test::Step(Settings* settings)
 		m_textLine += DRAW_STRING_NEW_LINE;
 		g_debugDraw.DrawString(5, m_textLine, "locking [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.locking, aveProfile.locking, m_maxProfile.locking);
 		m_textLine += DRAW_STRING_NEW_LINE;
-		g_debugDraw.DrawString(5, m_textLine, "task starting [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.taskStarting, aveProfile.taskStarting, m_maxProfile.taskStarting);
-		m_textLine += DRAW_STRING_NEW_LINE;
 		g_debugDraw.DrawString(5, m_textLine, "* sum of per-thread times");
 		m_textLine += DRAW_STRING_NEW_LINE;
 	}
 
-	if (m_bombSpawning)
+	if (m_bombSpawning && m_visible)
 	{
 		b2Color c;
 		c.Set(0.0f, 0.0f, 1.0f);
@@ -428,7 +440,7 @@ void Test::Step(Settings* settings)
 		g_debugDraw.DrawSegment(m_mouseWorld, m_bombSpawnPoint, c);
 	}
 
-	if (settings->drawContactPoints)
+	if (settings->drawContactPoints && m_visible)
 	{
 		const float32 k_impulseScale = 0.1f;
 		const float32 k_axisScale = 0.3f;

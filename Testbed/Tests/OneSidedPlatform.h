@@ -74,24 +74,27 @@ public:
 		}
 	}
 
-	void PreSolve(b2Contact* contact, const b2Manifold* oldManifold)
+	b2ImmediateCallbackResult PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold, uint32 threadId) override
 	{
-		Test::PreSolve(contact, oldManifold);
+		b2ImmediateCallbackResult result = Test::PreSolveImmediate(contact, oldManifold, threadId);
 
 		b2Fixture* fixtureA = contact->GetFixtureA();
 		b2Fixture* fixtureB = contact->GetFixtureB();
 
 		if (fixtureA != m_platform && fixtureA != m_character)
 		{
-			return;
+			return result;
 		}
 
 		if (fixtureB != m_platform && fixtureB != m_character)
 		{
-			return;
+			return result;
 		}
 
 #if 1
+		// It's safe to read the character's position here only because it's one of
+		// the fixtures on the contact. Accessing positions of arbitrary bodies in
+		// PreSolveImmediate would be a data race.
 		b2Vec2 position = m_character->GetBody()->GetPosition();
 
 		if (position.y < m_top + m_radius - 3.0f * b2_linearSlop)
@@ -105,6 +108,7 @@ public:
             contact->SetEnabled(false);
         }
 #endif
+		return result;
 	}
 
 	void Step(Settings* settings)

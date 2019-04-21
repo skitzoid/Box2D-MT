@@ -75,7 +75,7 @@ public:
 
 		b2Body* body2 = m_world->CreateBody(&triangleBodyDef);
 		body2->CreateFixture(&triangleShapeDef);
-		
+
 		// Small box
 		polygon.SetAsBox(1.0f, 0.5f);
 
@@ -93,7 +93,7 @@ public:
 		// Large box (recycle definitions)
 		polygon.SetAsBox(2.0f, 1.0f);
 		boxBodyDef.position.Set(RandomFloat(xLo, xHi), RandomFloat(yLo, yHi));
-		
+
 		b2Body* body4 = m_world->CreateBody(&boxBodyDef);
 		body4->CreateFixture(&boxShapeDef);
 
@@ -133,29 +133,32 @@ public:
 
 		// Traverse the contact results. Destroy bodies that
 		// are touching heavier bodies.
-		for (int32 i = 0; i < m_pointCount[0]; ++i)
+		for (int32 i = 0; i < b2_maxThreads; ++i)
 		{
-			ContactPoint* point = m_points[0] + i;
-
-			b2Body* body1 = point->fixtureA->GetBody();
-			b2Body* body2 = point->fixtureB->GetBody();
-			float32 mass1 = body1->GetMass();
-			float32 mass2 = body2->GetMass();
-
-			if (mass1 > 0.0f && mass2 > 0.0f)
+			for (int32 j = 0; j < m_pointCount[i]; ++j)
 			{
-				if (mass2 > mass1)
-				{
-					nuke[nukeCount++] = body1;
-				}
-				else
-				{
-					nuke[nukeCount++] = body2;
-				}
+				ContactPoint* point = m_points[i] + j;
 
-				if (nukeCount == k_maxNuke)
+				b2Body* body1 = point->fixtureA->GetBody();
+				b2Body* body2 = point->fixtureB->GetBody();
+				float32 mass1 = body1->GetMass();
+				float32 mass2 = body2->GetMass();
+
+				if (mass1 > 0.0f && mass2 > 0.0f)
 				{
-					break;
+					if (mass2 > mass1)
+					{
+						nuke[nukeCount++] = body1;
+					}
+					else
+					{
+						nuke[nukeCount++] = body2;
+					}
+
+					if (nukeCount == k_maxNuke)
+					{
+						break;
+					}
 				}
 			}
 		}

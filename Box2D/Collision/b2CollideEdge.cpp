@@ -622,8 +622,8 @@ b2EPAxis b2EPCollider::ComputeEdgeSeparation()
 	b2EPAxis axis;
 	axis.type = b2EPAxis::e_edgeA;
 	axis.index = m_front ? 0 : 1;
-	axis.separation = FLT_MAX;
-	
+	axis.separation = b2_maxFloat;
+
 	for (int32 i = 0; i < m_polygonB.count; ++i)
 	{
 		float32 s = b2Dot(m_normal, m_polygonB.vertices[i] - m_v1);
@@ -641,7 +641,7 @@ b2EPAxis b2EPCollider::ComputePolygonSeparation()
 	b2EPAxis axis;
 	axis.type = b2EPAxis::e_unknown;
 	axis.index = -1;
-	axis.separation = -FLT_MAX;
+	axis.separation = -b2_maxFloat;
 
 	b2Vec2 perp(-m_normal.y, m_normal.x);
 

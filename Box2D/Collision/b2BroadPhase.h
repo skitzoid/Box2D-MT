@@ -23,7 +23,6 @@
 #include "Box2D/Collision/b2Collision.h"
 #include "Box2D/Collision/b2DynamicTree.h"
 #include "Box2D/Common/b2GrowableArray.h"
-#include "Box2D/MT/b2Threading.h"
 #include <algorithm>
 
 struct b2Pair
@@ -34,6 +33,8 @@ struct b2Pair
 
 struct b2BroadPhasePerThreadData
 {
+	bool QueryCallback(int32 proxyId);
+
 	b2GrowableArray<b2Pair> m_pairBuffer;
 	int32 m_queryProxyId;
 
@@ -86,7 +87,7 @@ public:
 	/// move buffer. After all threads have finished, ResetBuffers must be called
 	/// from a single thread before the next call to UpdatePairs.
 	template <typename T>
-	void UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback, int32 threadId);
+	void UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback, uint32 threadId);
 
 	/// Query an AABB for overlapping proxies. The callback class
 	/// is called for each proxy that overlaps the supplied AABB.
@@ -129,8 +130,6 @@ private:
 
 	void BufferMove(int32 proxyId);
 	void UnBufferMove(int32 proxyId);
-
-	bool QueryCallback(int32 proxyId);
 
 	b2DynamicTree m_tree;
 
@@ -194,14 +193,14 @@ inline float32 b2BroadPhase::GetTreeQuality() const
 }
 
 template <typename T>
-void b2BroadPhase::UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback, int32 threadId)
+void b2BroadPhase::UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback, uint32 threadId)
 {
 	b2BroadPhasePerThreadData* td = m_perThreadData + threadId;
 
 	// Perform tree queries for all moving proxies.
 	for (int32 i = moveBegin; i < moveEnd; ++i)
 	{
-		td->m_queryProxyId = m_moveBuffer.At(i);
+		td->m_queryProxyId = m_moveBuffer[i];
 		if (td->m_queryProxyId == e_nullProxy)
 		{
 			continue;
@@ -214,7 +213,7 @@ void b2BroadPhase::UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback, int3
 		fatAABB = m_tree.GetFatAABB(td->m_queryProxyId);
 
 		// Query the tree, create pairs and add them pair buffer.
-		m_tree.Query(this, fatAABB);
+		m_tree.Query(td, fatAABB);
 	}
 
 	// Sort the pair buffer to expose duplicates.
@@ -224,7 +223,7 @@ void b2BroadPhase::UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback, int3
 	int32 i = 0;
 	while (i < td->m_pairBuffer.GetCount())
 	{
-		b2Pair& primaryPair = td->m_pairBuffer.At(i);
+		b2Pair& primaryPair = td->m_pairBuffer[i];
 
 		void* userDataA = m_tree.GetUserData(primaryPair.proxyIdA);
 		void* userDataB = m_tree.GetUserData(primaryPair.proxyIdB);
@@ -236,7 +235,7 @@ void b2BroadPhase::UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback, int3
 		// Skip any duplicate pairs.
 		while (i < td->m_pairBuffer.GetCount())
 		{
-			b2Pair& pair = td->m_pairBuffer.At(i);
+			b2Pair& pair = td->m_pairBuffer[i];
 			if (pair.proxyIdA != primaryPair.proxyIdA || pair.proxyIdB != primaryPair.proxyIdB)
 			{
 				break;

@@ -81,6 +81,14 @@ public:
 		}
 	}
 
+	// Return CALL_DEFERRED so that BeginContact will be called (from a single thread).
+	b2ImmediateCallbackResult BeginContactImmediate(b2Contact* contact, uint32 threadId) override
+	{
+		B2_NOT_USED(contact);
+		B2_NOT_USED(threadId);
+		return b2ImmediateCallbackResult::CALL_DEFERRED;
+	}
+
 	// Implement contact listener.
 	void BeginContact(b2Contact* contact)
 	{
@@ -106,6 +114,14 @@ public:
 				*touching = true;
 			}
 		}
+	}
+
+	// Return CALL_DEFERRED so that EndContact will be called (from a single thread).
+	b2ImmediateCallbackResult EndContactImmediate(b2Contact* contact, uint32 threadId) override
+	{
+		B2_NOT_USED(contact);
+		B2_NOT_USED(threadId);
+		return b2ImmediateCallbackResult::CALL_DEFERRED;
 	}
 
 	// Implement contact listener.
@@ -157,7 +173,7 @@ public:
 			b2Vec2 position = body->GetPosition();
 
 			b2Vec2 d = center - position;
-			if (d.LengthSquared() < FLT_EPSILON * FLT_EPSILON)
+			if (d.LengthSquared() < b2_epsilon * b2_epsilon)
 			{
 				continue;
 			}

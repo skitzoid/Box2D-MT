@@ -27,6 +27,7 @@
 #include "Box2D/Dynamics/b2ContactManager.h"
 #include "Box2D/Dynamics/b2WorldCallbacks.h"
 #include "Box2D/Dynamics/b2TimeStep.h"
+#include "Box2D/MT/b2Threading.h"
 
 struct b2AABB;
 struct b2BodyDef;
@@ -232,13 +233,31 @@ private:
 	friend class b2ContactManager;
 	friend class b2Controller;
 
-	void SolveTOI(const b2TimeStep& step);
+	void SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2TimeStep& step);
 
-	void SynchronizeFixtures(b2TaskExecutor& executor);
-	void FindNewContacts(b2TaskExecutor& executor);
-	void Collide(b2TaskExecutor& executor);
-	void Solve(b2TaskExecutor& executor, const b2TimeStep& step);
-	void ClearIslandFlags(b2TaskExecutor& executor);
+	// Destroy contacts that aren't overlapping in the broadphase.
+	void DestroyNonOverlappingContacts(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 threadCount);
+
+	// Synchronize broadphase proxies with their fixtures.
+	void SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 threadCount);
+
+	// Run find new contacts tasks.
+	void FindNewContacts(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 threadCount);
+
+	// Start collision tasks for existing contacts.
+	void Collide(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 threadCount);
+
+	// Traverse the graph of bodies, contacts, and joints to create solve tasks.
+	// Wait for all solve tasks to finish.
+	// Synchronize fixtures.
+	// Find new contacts.
+	void Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2TimeStep& step, uint32 threadCount);
+
+	// Run tasks for clearing all island flags on bodies, contacts, and joints.
+	void SolveInit(b2TaskExecutor& executor, b2TaskGroup taskGroup);
+	void SolveTOIInit(b2TaskExecutor& executor, b2TaskGroup taskGroup);
+
+	void RecalculateToiCandidacy(b2Body* b);
 
 	void DrawJoint(b2Joint* joint);
 	void DrawShape(b2Fixture* shape, const b2Transform& xf, const b2Color& color);
@@ -321,7 +340,7 @@ inline int32 b2World::GetJointCount() const
 
 inline int32 b2World::GetContactCount() const
 {
-	return m_contactManager.GetContactCount();
+	return m_contactManager.m_contacts.GetCount();
 }
 
 inline void b2World::SetGravity(const b2Vec2& gravity)

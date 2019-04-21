@@ -547,6 +547,47 @@ void b2Body::SetFixedRotation(bool flag)
 	ResetMassData();
 }
 
+void b2Body::SetPreferNoCCD(bool flag)
+{
+	bool needsToiChecks = IsToiCandidate();
+	if (flag)
+	{
+		m_flags |= e_preferNoCCDFlag;
+	}
+	else
+	{
+		m_flags &= ~e_preferNoCCDFlag;
+	}
+	if (needsToiChecks != IsToiCandidate())
+	{
+		m_world->m_contactManager.RecalculateToiCandidacy(this);
+	}
+}
+
+void b2Body::SetBullet(bool flag)
+{
+	bool needsToiChecks = IsToiCandidate();
+	if (flag)
+	{
+		m_flags |= e_bulletFlag;
+	}
+	else
+	{
+		m_flags &= ~e_bulletFlag;
+	}
+	if (needsToiChecks != IsToiCandidate())
+	{
+		m_world->m_contactManager.RecalculateToiCandidacy(this);
+	}
+}
+
+bool b2Body::IsToiCandidate() const
+{
+	bool needsToiChecks = IsBullet() || (GetType() != b2_dynamicBody && GetPreferNoCCD() == false);
+
+	return needsToiChecks;
+}
+
 void b2Body::Dump()
 {
 	int32 bodyIndex = GetIslandIndex(0);

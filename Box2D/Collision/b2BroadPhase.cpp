@@ -72,29 +72,27 @@ void b2BroadPhase::UnBufferMove(int32 proxyId)
 {
 	for (int32 i = 0; i < m_moveBuffer.GetCount(); ++i)
 	{
-		if (m_moveBuffer.At(i) == proxyId)
+		if (m_moveBuffer[i] == proxyId)
 		{
-			m_moveBuffer.At(i) = e_nullProxy;
+			m_moveBuffer[i] = e_nullProxy;
 		}
 	}
 }
 
 // This is called from b2DynamicTree::Query when we are gathering pairs.
-bool b2BroadPhase::QueryCallback(int32 proxyId)
+bool b2BroadPhasePerThreadData::QueryCallback(int32 proxyId)
 {
-	b2BroadPhasePerThreadData* td = m_perThreadData + b2GetThreadId();
-
 	// A proxy cannot form a pair with itself.
-	if (proxyId == td->m_queryProxyId)
+	if (proxyId == m_queryProxyId)
 	{
 		return true;
 	}
 
 	b2Pair pair;
-	pair.proxyIdA = b2Min(proxyId, td->m_queryProxyId);
-	pair.proxyIdB = b2Max(proxyId, td->m_queryProxyId);
+	pair.proxyIdA = b2Min(proxyId, m_queryProxyId);
+	pair.proxyIdB = b2Max(proxyId, m_queryProxyId);
 
-	td->m_pairBuffer.Push(pair);
+	m_pairBuffer.Push(pair);
 
 	return true;
 }

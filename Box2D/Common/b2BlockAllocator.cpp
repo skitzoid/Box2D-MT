@@ -21,7 +21,7 @@
 #include <string.h>
 #include <stddef.h>
 
-int32 b2BlockAllocator::s_blockSizes[b2_blockSizes] = 
+int32 b2BlockAllocator::s_blockSizes[b2_blockSizes] =
 {
 	16,		// 0
 	32,		// 1
@@ -37,6 +37,9 @@ int32 b2BlockAllocator::s_blockSizes[b2_blockSizes] =
 	448,	// 11
 	512,	// 12
 	640,	// 13
+	896,	// 14
+	1152,	// 15
+
 };
 uint8 b2BlockAllocator::s_blockSizeLookup[b2_maxBlockSize + 1];
 bool b2BlockAllocator::s_blockSizeLookupInitialized;
@@ -59,7 +62,7 @@ b2BlockAllocator::b2BlockAllocator()
 	m_chunkSpace = b2_chunkArrayIncrement;
 	m_chunkCount = 0;
 	m_chunks = (b2Chunk*)b2Alloc(m_chunkSpace * sizeof(b2Chunk));
-	
+
 	memset(m_chunks, 0, m_chunkSpace * sizeof(b2Chunk));
 	memset(m_freeLists, 0, sizeof(m_freeLists));
 

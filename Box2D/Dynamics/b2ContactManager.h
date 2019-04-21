@@ -22,9 +22,10 @@
 
 #include "Box2D/Collision/b2BroadPhase.h"
 #include "Box2D/Common/b2GrowableArray.h"
+#include "Box2D/Dynamics/Contacts/b2Contact.h"
 #include "Box2D/Dynamics/b2WorldCallbacks.h"
+#include "Box2D/Dynamics/b2TimeStep.h"
 
-class b2Contact;
 class b2ContactFilter;
 class b2ContactListener;
 class b2BlockAllocator;
@@ -33,14 +34,18 @@ struct b2FixtureProxy;
 
 struct b2DeferredContactCreate
 {
-	b2FixtureProxy* proxyA;
-	b2FixtureProxy* proxyB;
+	b2Fixture* fixtureA;
+	b2Fixture* fixtureB;
+	int32 indexA;
+	int32 indexB;
+	b2ContactProxyIds proxyIds;
 };
 
 struct b2DeferredMoveProxy
 {
-	b2FixtureProxy* proxy;
+	b2AABB aabb;
 	b2Vec2 displacement;
+	int32 proxyId;
 };
 
 struct b2DeferredPreSolve
@@ -55,6 +60,13 @@ struct b2DeferredPostSolve
 	b2ContactImpulse impulse;
 };
 
+/// These are used to sort deferred events so their effects are applied in a deterministic order.
+bool b2ContactPointerLessThan(const b2Contact* l, const b2Contact* r);
+bool b2DeferredContactCreateLessThan(const b2DeferredContactCreate& l, const b2DeferredContactCreate& r);
+bool b2DeferredMoveProxyLessThan(const b2DeferredMoveProxy& l, const b2DeferredMoveProxy& r);
+bool b2DeferredPreSolveLessThan(const b2DeferredPreSolve& l, const b2DeferredPreSolve& r);
+bool b2DeferredPostSolveLessThan(const b2DeferredPostSolve& l, const b2DeferredPostSolve& r);
+
 struct b2ContactManagerPerThreadData
 {
 	b2GrowableArray<b2Contact*> m_deferredBeginContacts;
@@ -65,7 +77,7 @@ struct b2ContactManagerPerThreadData
 	b2GrowableArray<b2Contact*> m_deferredDestroys;
 	b2GrowableArray<b2DeferredContactCreate> m_deferredCreates;
 	b2GrowableArray<b2DeferredMoveProxy> m_deferredMoveProxies;
-	b2GrowableArray<int32> m_tempProxyIds;
+	b2Profile m_profile;
 
 	uint8 m_padding[b2_cacheLineSize];
 };
@@ -77,29 +89,36 @@ public:
 	b2ContactManager();
 
 	// Broad-phase callback.
-	void AddPair(void* proxyUserDataA, void* proxyUserDataB, int32 threadId);
+	void AddPair(void* proxyUserDataA, void* proxyUserDataB, uint32 threadId);
 
-	void FindNewContacts(int32 moveBegin, int32 moveEnd, int32 threadId);
+	void FindNewContacts(uint32 moveBegin, uint32 moveEnd, uint32 threadId);
 
-	void Collide(b2Contact** contacts, int32 count, int32 threadId);
+	void Collide(uint32 contactsBegin, uint32 contactsEnd, uint32 threadId);
 
-	void Destroy(b2Contact* c);
+	void Destroy(b2Contact* contact);
 
-	void GenerateDeferredMoveProxies(b2Body** bodies, int32 count, int32 threadId);
+	void GenerateDeferredMoveProxies(b2Body** bodies, uint32 count, uint32 threadId);
 
-	void ConsumeDeferredBeginContacts();
-	void ConsumeDeferredEndContacts();
-	void ConsumeDeferredPreSolves();
-	void ConsumeDeferredPostSolves();
+	void ConsumeDeferredBeginContacts(uint32 threadCount);
+	void ConsumeDeferredEndContacts(uint32 threadCount);
+	void ConsumeDeferredPreSolves(uint32 threadCount);
+	void ConsumeDeferredPostSolves(uint32 threadCount);
 
-	void ConsumeDeferredAwakes();
-	void ConsumeDeferredDestroys();
-	void ConsumeDeferredCreates();
-	void ConsumeDeferredMoveProxies();
+	void ConsumeDeferredAwakes(uint32 threadCount);
+	void ConsumeDeferredDestroys(uint32 threadCount);
+	void ConsumeDeferredCreates(uint32 threadCount);
+	void ConsumeDeferredMoveProxies(uint32 threadCount);
 
-	void OnContactCreate(b2Contact* c);
+	// Contacts are partitioned, with TOI eligible contacts ordered before TOI ineligible
+	// contacts. This speeds up traversal during TOI solving.
+	b2Contact** GetToiBegin();
+	b2Contact** GetNonToiBegin();
+	uint32 GetNonToiCount();
 
-	int32 GetContactCount() const;
+	// Reorder contacts when their TOI eligibility changes.
+	void RecalculateToiCandidacy(b2Body* body);
+	void RecalculateToiCandidacy(b2Fixture* fixture);
+	void RecalculateToiCandidacy(b2Contact* contact);
 
 	b2BroadPhase m_broadPhase;
 	b2Contact* m_contactList;
@@ -107,17 +126,32 @@ public:
 	b2ContactListener* m_contactListener;
 	b2BlockAllocator* m_allocator;
 
-	b2GrowableArray<b2Contact*> m_contactsNonTOI;
-	b2GrowableArray<b2Contact*> m_contactsTOI;
+	b2GrowableArray<b2Contact*> m_contacts;
+	int32 m_toiCount;
 
 	b2ContactManagerPerThreadData m_perThreadData[b2_maxThreads];
 
 	bool m_deferCreates;
+
+private:
+	inline void OnContactCreate(b2Contact* contact, b2ContactProxyIds proxyIds);
+	inline void PushContact(b2Contact* contact);
+	inline void RemoveContact(b2Contact* contact);
 };
 
-inline int32 b2ContactManager::GetContactCount() const
+inline b2Contact** b2ContactManager::GetToiBegin()
 {
-	return m_contactsNonTOI.GetCount() + m_contactsTOI.GetCount();
+	return m_contacts.Data();
+}
+
+inline b2Contact** b2ContactManager::GetNonToiBegin()
+{
+	return m_contacts.Data() + m_toiCount;
+}
+
+inline uint32 b2ContactManager::GetNonToiCount()
+{
+	return m_contacts.GetCount() - m_toiCount;
 }
 
 #endif

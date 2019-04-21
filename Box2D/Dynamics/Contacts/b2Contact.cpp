@@ -160,18 +160,18 @@ b2Contact::b2Contact(b2Fixture* fA, int32 indexA, b2Fixture* fB, int32 indexB)
 
 void b2Contact::Update(b2ContactListener* listener)
 {
-	UpdateImpl<true>(nullptr, listener);
+	UpdateImpl<true>(nullptr, listener, 0);
 }
 
-void b2Contact::Update(b2ContactManagerPerThreadData& td, b2ContactListener* listener)
+void b2Contact::Update(b2ContactManagerPerThreadData& td, b2ContactListener* listener, uint32 threadId)
 {
-	UpdateImpl<false>(&td, listener);
+	UpdateImpl<false>(&td, listener, threadId);
 }
 
 // Update the contact manifold and touching status.
 // Note: do not assume the fixture AABBs are overlapping or are valid.
 template<bool isSingleThread>
-void b2Contact::UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener* listener)
+void b2Contact::UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener* listener, uint32 threadId)
 {
 	b2Manifold oldManifold = m_manifold;
 
@@ -252,7 +252,7 @@ void b2Contact::UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener*
 
 	if (wasTouching == false && touching == true && listener)
 	{
-		if (listener->BeginContactImmediate(this) == b2ImmediateCallbackResult::CALL_DEFERRED)
+		if (listener->BeginContactImmediate(this, threadId) == b2ImmediateCallbackResult::CALL_DEFERRED)
 		{
 			if (isSingleThread)
 			{
@@ -267,7 +267,7 @@ void b2Contact::UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener*
 
 	if (wasTouching == true && touching == false && listener)
 	{
-		if (listener->EndContactImmediate(this) == b2ImmediateCallbackResult::CALL_DEFERRED)
+		if (listener->EndContactImmediate(this, threadId) == b2ImmediateCallbackResult::CALL_DEFERRED)
 		{
 			if (isSingleThread)
 			{
@@ -282,7 +282,7 @@ void b2Contact::UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener*
 
 	if (sensor == false && touching && listener)
 	{
-		if (listener->PreSolveImmediate(this, &oldManifold) == b2ImmediateCallbackResult::CALL_DEFERRED)
+		if (listener->PreSolveImmediate(this, &oldManifold, threadId) == b2ImmediateCallbackResult::CALL_DEFERRED)
 		{
 			if (isSingleThread)
 			{

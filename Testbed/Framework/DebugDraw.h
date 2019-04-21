@@ -58,6 +58,8 @@ public:
 	void Create();
 	void Destroy();
 
+	void SetActive(bool flag);
+
 	void DrawPolygon(const b2Vec2* vertices, int32 vertexCount, const b2Color& color) override;
 
 	void DrawSolidPolygon(const b2Vec2* vertices, int32 vertexCount, const b2Color& color) override;
@@ -86,6 +88,7 @@ private:
 	GLRenderPoints* m_points;
 	GLRenderLines* m_lines;
 	GLRenderTriangles* m_triangles;
+	bool m_active;
 };
 
 extern DebugDraw g_debugDraw;

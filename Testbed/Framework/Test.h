@@ -67,6 +67,11 @@ struct Settings
 		hz = 60.0f;
 		velocityIterations = 8;
 		positionIterations = 3;
+		threadCount = 1;
+		stepsPerProfileUpdate = 4;
+		mtProfileIterations = 4;
+		mtConsistencyIterations = 2;
+		mtCurrentTestOnly = false;
 		drawShapes = true;
 		drawJoints = true;
 		drawAABBs = false;
@@ -76,7 +81,7 @@ struct Settings
 		drawFrictionImpulse = false;
 		drawCOMs = false;
 		drawStats = false;
-		drawProfile = false;
+		drawProfile = true;
 		enableWarmStarting = true;
 		enableContinuous = true;
 		enableSubStepping = false;
@@ -88,6 +93,11 @@ struct Settings
 	float32 hz;
 	int32 velocityIterations;
 	int32 positionIterations;
+	int32 threadCount;
+	int32 stepsPerProfileUpdate;
+	int32 mtProfileIterations;
+	int32 mtConsistencyIterations;
+	bool mtCurrentTestOnly;
 	bool drawShapes;
 	bool drawJoints;
 	bool drawAABBs;
@@ -110,6 +120,7 @@ struct TestEntry
 {
 	const char *name;
 	TestCreateFcn *createFcn;
+	int32 mtStepCount;
 };
 
 extern TestEntry g_testEntries[];
@@ -164,31 +175,41 @@ public:
 	virtual void JointDestroyed(b2Joint* joint) { B2_NOT_USED(joint); }
 
 	// Callbacks for derived classes.
-	b2ImmediateCallbackResult BeginContactImmediate(b2Contact* contact) override
+	virtual b2ImmediateCallbackResult BeginContactImmediate(b2Contact* contact, uint32 threadId) override
 	{
 		B2_NOT_USED(contact);
-		return b2ImmediateCallbackResult::CALL_DEFERRED;
+		B2_NOT_USED(threadId);
+		return b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;
 	}
-	b2ImmediateCallbackResult EndContactImmediate(b2Contact* contact) override
+	virtual b2ImmediateCallbackResult EndContactImmediate(b2Contact* contact, uint32 threadId) override
 	{
 		B2_NOT_USED(contact);
-		return b2ImmediateCallbackResult::CALL_DEFERRED;
+		B2_NOT_USED(threadId);
+		return b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;
 	}
-	b2ImmediateCallbackResult PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold) override
-	{
-		B2_NOT_USED(contact);
-		B2_NOT_USED(oldManifold);
-		return b2ImmediateCallbackResult::CALL_DEFERRED;
-	}
-	b2ImmediateCallbackResult PostSolveImmediate(b2Contact* contact, const b2ContactImpulse* impulse) override
+	virtual b2ImmediateCallbackResult PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold,
+														uint32 threadId) override;
+	virtual b2ImmediateCallbackResult PostSolveImmediate(b2Contact* contact, const b2ContactImpulse* impulse,
+														uint32 threadId) override
 	{
 		B2_NOT_USED(contact);
 		B2_NOT_USED(impulse);
-		return b2ImmediateCallbackResult::CALL_DEFERRED;
+		B2_NOT_USED(threadId);
+		return b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;
 	}
-	virtual void BeginContact(b2Contact* contact)  override { B2_NOT_USED(contact); }
-	virtual void EndContact(b2Contact* contact)  override { B2_NOT_USED(contact); }
-	virtual void PreSolve(b2Contact* contact, const b2Manifold* oldManifold) override;
+	virtual void BeginContact(b2Contact* contact)  override
+	{
+		B2_NOT_USED(contact);
+	}
+	virtual void EndContact(b2Contact* contact)  override
+	{
+		B2_NOT_USED(contact);
+	}
+	virtual void PreSolve(b2Contact* contact, const b2Manifold* oldManifold) override
+	{
+		B2_NOT_USED(contact);
+		B2_NOT_USED(oldManifold);
+	}
 	virtual void PostSolve(b2Contact* contact, const b2ContactImpulse* impulse) override
 	{
 		B2_NOT_USED(contact);
@@ -196,6 +217,11 @@ public:
 	}
 
 	void ShiftOrigin(const b2Vec2& newOrigin);
+
+	b2ThreadPoolTaskExecutor* GetExecutor();
+	b2World* GetWorld();
+	const b2Profile& GetTotalProfile() const;
+	void SetVisible(bool flag);
 
 protected:
 	friend class DestructionListener;
@@ -213,13 +239,36 @@ protected:
 	b2MouseJoint* m_mouseJoint;
 	b2Vec2 m_bombSpawnPoint;
 	bool m_bombSpawning;
+	bool m_visible;
 	b2Vec2 m_mouseWorld;
 	int32 m_stepCount;
+	int32 m_smoothProfileStepCount;
 
 	b2Profile m_maxProfile;
 	b2Profile m_totalProfile;
+	b2Profile m_smoothProfile[2];
 
-	b2ThreadPoolTaskExecutor m_threadPool;
+	b2ThreadPoolTaskExecutor m_threadPoolExec;
 };
+
+inline b2ThreadPoolTaskExecutor* Test::GetExecutor()
+{
+	return &m_threadPoolExec;
+}
+
+inline b2World* Test::GetWorld()
+{
+	return m_world;
+}
+
+inline const b2Profile& Test::GetTotalProfile() const
+{
+	return m_totalProfile;
+}
+
+inline void Test::SetVisible(bool flag)
+{
+	m_visible = flag;
+}
 
 #endif

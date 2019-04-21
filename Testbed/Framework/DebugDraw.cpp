@@ -602,6 +602,7 @@ DebugDraw::DebugDraw()
 	m_points = NULL;
     m_lines = NULL;
     m_triangles = NULL;
+	m_active = true;
 }
 
 //
@@ -640,8 +641,19 @@ void DebugDraw::Destroy()
 }
 
 //
+void DebugDraw::SetActive(bool flag)
+{
+	m_active = flag;
+}
+
+//
 void DebugDraw::DrawPolygon(const b2Vec2* vertices, int32 vertexCount, const b2Color& color)
 {
+	if (m_active == false)
+	{
+		return;
+	}
+
     b2Vec2 p1 = vertices[vertexCount - 1];
 	for (int32 i = 0; i < vertexCount; ++i)
 	{
@@ -655,6 +667,11 @@ void DebugDraw::DrawPolygon(const b2Vec2* vertices, int32 vertexCount, const b2C
 //
 void DebugDraw::DrawSolidPolygon(const b2Vec2* vertices, int32 vertexCount, const b2Color& color)
 {
+	if (m_active == false)
+	{
+		return;
+	}
+
 	b2Color fillColor(0.5f * color.r, 0.5f * color.g, 0.5f * color.b, 0.5f);
 
     for (int32 i = 1; i < vertexCount - 1; ++i)
@@ -677,6 +694,11 @@ void DebugDraw::DrawSolidPolygon(const b2Vec2* vertices, int32 vertexCount, cons
 //
 void DebugDraw::DrawCircle(const b2Vec2& center, float32 radius, const b2Color& color)
 {
+	if (m_active == false)
+	{
+		return;
+	}
+
 	const float32 k_segments = 16.0f;
 	const float32 k_increment = 2.0f * b2_pi / k_segments;
     float32 sinInc = sinf(k_increment);
@@ -700,6 +722,11 @@ void DebugDraw::DrawCircle(const b2Vec2& center, float32 radius, const b2Color& 
 //
 void DebugDraw::DrawSolidCircle(const b2Vec2& center, float32 radius, const b2Vec2& axis, const b2Color& color)
 {
+	if (m_active == false)
+	{
+		return;
+	}
+
 	const float32 k_segments = 16.0f;
 	const float32 k_increment = 2.0f * b2_pi / k_segments;
     float32 sinInc = sinf(k_increment);
@@ -745,6 +772,11 @@ void DebugDraw::DrawSolidCircle(const b2Vec2& center, float32 radius, const b2Ve
 //
 void DebugDraw::DrawSegment(const b2Vec2& p1, const b2Vec2& p2, const b2Color& color)
 {
+	if (m_active == false)
+	{
+		return;
+	}
+
 	m_lines->Vertex(p1, color);
 	m_lines->Vertex(p2, color);
 }
@@ -752,6 +784,11 @@ void DebugDraw::DrawSegment(const b2Vec2& p1, const b2Vec2& p2, const b2Color& c
 //
 void DebugDraw::DrawTransform(const b2Transform& xf)
 {
+	if (m_active == false)
+	{
+		return;
+	}
+
 	const float32 k_axisScale = 0.4f;
     b2Color red(1.0f, 0.0f, 0.0f);
     b2Color green(0.0f, 1.0f, 0.0f);
@@ -769,12 +806,22 @@ void DebugDraw::DrawTransform(const b2Transform& xf)
 //
 void DebugDraw::DrawPoint(const b2Vec2& p, float32 size, const b2Color& color)
 {
+	if (m_active == false)
+	{
+		return;
+	}
+
     m_points->Vertex(p, color, size);
 }
 
 //
 void DebugDraw::DrawString(int x, int y, const char *string, ...)
 {
+	if (m_active == false)
+	{
+		return;
+	}
+
 	va_list arg;
 	va_start(arg, string);
 	ImGui::Begin("Overlay", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar);
@@ -787,6 +834,11 @@ void DebugDraw::DrawString(int x, int y, const char *string, ...)
 //
 void DebugDraw::DrawString(const b2Vec2& pw, const char *string, ...)
 {
+	if (m_active == false)
+	{
+		return;
+	}
+
 	b2Vec2 ps = g_camera.ConvertWorldToScreen(pw);
 
 	va_list arg;
@@ -801,6 +853,11 @@ void DebugDraw::DrawString(const b2Vec2& pw, const char *string, ...)
 //
 void DebugDraw::DrawAABB(b2AABB* aabb, const b2Color& c)
 {
+	if (m_active == false)
+	{
+		return;
+	}
+
     b2Vec2 p1 = aabb->lowerBound;
     b2Vec2 p2 = b2Vec2(aabb->upperBound.x, aabb->lowerBound.y);
     b2Vec2 p3 = aabb->upperBound;
@@ -822,6 +879,11 @@ void DebugDraw::DrawAABB(b2AABB* aabb, const b2Color& c)
 //
 void DebugDraw::Flush()
 {
+	if (m_active == false)
+	{
+		return;
+	}
+
     m_triangles->Flush();
     m_lines->Flush();
     m_points->Flush();
@@ -829,5 +891,10 @@ void DebugDraw::Flush()
 
 void DebugDraw::Finish()
 {
+	if (m_active == false)
+	{
+		return;
+	}
+
 	glFinish();
 }

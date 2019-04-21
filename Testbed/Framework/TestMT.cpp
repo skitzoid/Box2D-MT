@@ -1,34 +1,29 @@
 #include "TestMT.h"
 #include <cstdio>
 
-void AddProfile(b2Profile& dest, const b2Profile& src, float32 scale)
-{
-    dest.step += scale * src.step;
-    dest.collide += scale * src.collide;
-    dest.solve += scale * src.solve;
-    dest.solveTraversal += scale * src.solveTraversal;
-    dest.solveInit += scale * src.solveInit;
-    dest.solveVelocity += scale * src.solveVelocity;
-    dest.solvePosition += scale * src.solvePosition;
-    dest.solveTOI += scale * src.solveTOI;
-    dest.broadphase += scale * src.broadphase;
-    dest.broadphaseSyncFixtures += scale * src.broadphaseSyncFixtures;
-    dest.broadphaseFindContacts += scale * src.broadphaseFindContacts;
-    dest.locking += scale * src.locking;
-}
-
 b2Profile ProfileTest(Settings* settings, int32 testIndex)
 {
+    b2Profile avgProfile{};
+
+    if (settings->mtProfileIterations == 0)
+    {
+        return avgProfile;
+    }
+
+    printf("%s profiling: ", g_testEntries[testIndex].name);
+    fflush(stdout);
+
     int32 stepCount = g_testEntries[testIndex].mtStepCount;
     float32 scale = 1.0f / (settings->mtProfileIterations * stepCount);
 
-    b2Profile avgProfile{};
-
     for (int32 testIteration = 0; testIteration < settings->mtProfileIterations; ++testIteration)
     {
+        const char* s = testIteration == 0 ? "" : ", ";
+        printf("%s%d", s, testIteration + 1);
+        fflush(stdout);
+
         Test* test = g_testEntries[testIndex].createFcn();
         test->SetVisible(false);
-        //test->GetExecutor()->SetContinuousBusyWait(true);
 
         for (int32 i = 0; i < stepCount; ++i)
         {
@@ -37,18 +32,34 @@ b2Profile ProfileTest(Settings* settings, int32 testIndex)
 
         b2Profile totalProfile = test->GetTotalProfile();
 
-        AddProfile(avgProfile, totalProfile, scale);
+        b2AddProfile(avgProfile, totalProfile, scale);
 
         delete test;
     }
+
+    printf("\n");
 
     return avgProfile;
 }
 
 int32 CheckInconsistent(Settings* settings, int32 testIndex)
 {
+    int32 inconsistentStep = -1;
+
+    if (settings->mtConsistencyIterations == 0)
+    {
+        return inconsistentStep;
+    }
+
+    printf("%s consistency checks: ", g_testEntries[testIndex].name);
+    fflush(stdout);
+
     for (int32 testIteration = 0; testIteration < settings->mtConsistencyIterations; ++testIteration)
     {
+        const char* s = testIteration == 0 ? "" : ", ";
+        printf("%s%d", s, testIteration + 1);
+        fflush(stdout);
+
         srand(testIteration);
         Test* testA = g_testEntries[testIndex].createFcn();
         srand(testIteration);
@@ -79,36 +90,39 @@ int32 CheckInconsistent(Settings* settings, int32 testIndex)
                     bodyA->GetAngle() != bodyB->GetAngle() ||
                     bodyA->IsAwake() != bodyB->IsAwake())
                 {
-                    return i;
+                    inconsistentStep = i;
+                    break;
                 }
 
-                bodyA = bodyA->GetNext(worldA->GetContext());
-                bodyB = bodyB->GetNext(worldB->GetContext());
+                bodyA = bodyA->GetNext();
+                bodyB = bodyB->GetNext();
             }
             if (bodyB != nullptr)
             {
-                return i;
+                inconsistentStep = i;
+                break;
             }
+        }
+
+        if (inconsistentStep != -1)
+        {
+            printf("  - *** FAILED on step %d ***\n", inconsistentStep);
+            break;
         }
 
         delete testA;
         delete testB;
     }
 
-    return -1;
+    printf(" - PASS\n");
+
+    return inconsistentStep;
 }
 
 int RunTest(FILE* csv, Settings* settings, int32 testIndex)
 {
-    printf("Starting %s\n", g_testEntries[testIndex].name);
-
     b2Profile profile = ProfileTest(settings, testIndex);
     int32 inconsistentStep = CheckInconsistent(settings, testIndex);
-
-    if (inconsistentStep != -1)
-    {
-        printf("%s: inconsistency detected at step %d\n", g_testEntries[testIndex].name, inconsistentStep);
-    }
 
     fprintf(csv, "%s, %d, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f\n",
         g_testEntries[testIndex].name,
@@ -125,8 +139,6 @@ int RunTest(FILE* csv, Settings* settings, int32 testIndex)
         profile.solveVelocity,
         profile.solveTOI,
         profile.locking);
-
-    printf("Finished %s\n", g_testEntries[testIndex].name);
 
     if (inconsistentStep == -1)
     {

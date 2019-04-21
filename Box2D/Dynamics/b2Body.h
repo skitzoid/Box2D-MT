@@ -396,6 +396,9 @@ public:
 	b2World* GetWorld();
 	const b2World* GetWorld() const;
 
+	/// Are this body's contacts candidates for TOI events?
+	bool IsToiCandidate() const;
+
 	/// Get the island index for the specified thread.
 	int32 GetIslandIndex(int32 threadId) const;
 
@@ -412,7 +415,7 @@ private:
 	friend class b2ContactManager;
 	friend class b2ContactSolver;
 	friend class b2Contact;
-	friend class b2BodyPostSolveResetTask;
+	friend class b2BodyPreSolveTask;
 
 	friend class b2DistanceJoint;
 	friend class b2FrictionJoint;
@@ -638,33 +641,9 @@ inline void b2Body::SetGravityScale(float32 scale)
 	m_gravityScale = scale;
 }
 
-inline void b2Body::SetPreferNoCCD(bool flag)
-{
-	if (flag)
-	{
-		m_flags |= e_preferNoCCDFlag;
-	}
-	else
-	{
-		m_flags &= ~e_preferNoCCDFlag;
-	}
-}
-
 inline bool b2Body::GetPreferNoCCD() const
 {
 	return (m_flags & e_preferNoCCDFlag) == e_preferNoCCDFlag;
-}
-
-inline void b2Body::SetBullet(bool flag)
-{
-	if (flag)
-	{
-		m_flags |= e_bulletFlag;
-	}
-	else
-	{
-		m_flags &= ~e_bulletFlag;
-	}
 }
 
 inline bool b2Body::IsBullet() const

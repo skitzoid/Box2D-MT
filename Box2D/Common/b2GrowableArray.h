@@ -40,7 +40,7 @@ public:
 		m_array = nullptr;
 	}
 
-	void Push(const T& element)
+	void Push(T element)
 	{
 		if (m_count == m_capacity)
 		{
@@ -83,12 +83,12 @@ public:
 		m_array[index] = m_array[--m_count];
 	}
 
-	T& At(size_t i)
+	T& operator[](size_t i)
 	{
 		return m_array[i];
 	}
 
-	const T& At(size_t i) const
+	const T& operator[](size_t i) const
 	{
 		return m_array[i];
 	}
@@ -101,6 +101,16 @@ public:
 	const T* Data() const
 	{
 		return m_array;
+	}
+
+	T* End()
+	{
+		return m_array + m_count;
+	}
+
+	const T* End() const
+	{
+		return m_array + m_count;
 	}
 
 private:

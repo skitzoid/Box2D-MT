@@ -148,56 +148,33 @@ However, we can compute sin+cos of the same angle fast.
 
 b2Island::b2Island()
 {
-	m_allocator = nullptr;
 	m_td = nullptr;
 }
 
-b2Island::b2Island(
-	int32 bodyCapacity,
-	int32 contactCapacity,
-	int32 jointCapacity,
-	b2StackAllocator* allocator,
-	b2ContactListener* listener)
+b2Island::b2Island(b2Body** bodies, b2Contact** contacts,
+		b2Velocity* velocities, b2Position* positions)
 {
-	m_bodyCapacity = bodyCapacity;
-	m_contactCapacity = contactCapacity;
-	m_jointCapacity = jointCapacity;
 	m_bodyCount = 0;
 	m_contactCount = 0;
 	m_jointCount = 0;
 
-	m_allocator = allocator;
-	m_listener = listener;
 	m_td = nullptr;
 
-	m_bodies = (b2Body**)m_allocator->Allocate(bodyCapacity * sizeof(b2Body*));
-	m_contacts = (b2Contact**)m_allocator->Allocate(contactCapacity	 * sizeof(b2Contact*));
-	m_joints = (b2Joint**)m_allocator->Allocate(jointCapacity * sizeof(b2Joint*));
+	m_bodies = bodies;
+	m_contacts = contacts;
 
-	m_velocities = (b2Velocity*)m_allocator->Allocate(m_bodyCapacity * sizeof(b2Velocity));
-	m_positions = (b2Position*)m_allocator->Allocate(m_bodyCapacity * sizeof(b2Position));
+	m_velocities = velocities;
+	m_positions = positions;
 }
 
-b2Island::b2Island(
-	int32 bodyCount,
-	int32 contactCount,
-	int32 jointCount,
-	b2Body** bodies,
-	b2Contact** contacts,
-	b2Joint** joints,
-	b2Velocity* velocities,
-	b2Position* positions,
-	b2ContactListener* listener)
+b2Island::b2Island(int32 bodyCount, int32 contactCount, int32 jointCount,
+	b2Body** bodies, b2Contact** contacts, b2Joint** joints,
+	b2Velocity* velocities, b2Position* positions)
 {
-	m_bodyCapacity = bodyCount;
-	m_contactCapacity = contactCount;
-	m_jointCapacity = jointCount;
 	m_bodyCount = bodyCount;
 	m_contactCount = contactCount;
 	m_jointCount = jointCount;
 
-	m_allocator = nullptr;
-	m_listener = listener;
 	m_td = nullptr;
 
 	m_bodies = bodies;
@@ -208,20 +185,8 @@ b2Island::b2Island(
 	m_positions = positions;
 }
 
-b2Island::~b2Island()
-{
-	if (m_allocator)
-	{
-		// Warning: the order should reverse the constructor order.
-		m_allocator->Free(m_positions);
-		m_allocator->Free(m_velocities);
-		m_allocator->Free(m_joints);
-		m_allocator->Free(m_contacts);
-		m_allocator->Free(m_bodies);
-	}
-}
-
-void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& gravity, int32 threadId, bool allowSleep)
+void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& gravity, b2StackAllocator* allocator,
+		b2ContactListener* listener, uint32 threadId, bool allowSleep)
 {
 	b2Timer timer;
 
@@ -285,7 +250,7 @@ void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& g
 	contactSolverDef.threadId = threadId;
 	contactSolverDef.positions = m_positions;
 	contactSolverDef.velocities = m_velocities;
-	contactSolverDef.allocator = m_allocator;
+	contactSolverDef.allocator = allocator;
 
 	b2ContactSolver contactSolver(&contactSolverDef);
 	contactSolver.InitializeVelocityConstraints();
@@ -300,7 +265,7 @@ void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& g
 		m_joints[i]->InitVelocityConstraints(solverData);
 	}
 
-	profile->solveInit = timer.GetMilliseconds();
+	profile->solveInit += timer.GetMilliseconds();
 
 	// Solve velocity constraints
 	timer.Reset();
@@ -316,7 +281,7 @@ void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& g
 
 	// Store impulses for warm starting
 	contactSolver.StoreImpulses();
-	profile->solveVelocity = timer.GetMilliseconds();
+	profile->solveVelocity += timer.GetMilliseconds();
 
 	// Integrate positions
 	for (int32 i = 0; i < m_bodyCount; ++i)
@@ -387,9 +352,9 @@ void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& g
 		}
 	}
 
-	profile->solvePosition = timer.GetMilliseconds();
+	profile->solvePosition += timer.GetMilliseconds();
 
-	Report<false>(contactSolver.m_velocityConstraints);
+	Report<false>(contactSolver.m_velocityConstraints, listener, threadId);
 
 	if (allowSleep)
 	{
@@ -434,7 +399,8 @@ void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& g
 	}
 }
 
-void b2Island::SolveTOI(const b2TimeStep& subStep, int32 toiIndexA, int32 toiIndexB)
+void b2Island::SolveTOI(const b2TimeStep& subStep, int32 toiIndexA, int32 toiIndexB, b2StackAllocator* allocator,
+		b2ContactListener* listener)
 {
 	b2Assert(toiIndexA < m_bodyCount);
 	b2Assert(toiIndexB < m_bodyCount);
@@ -453,7 +419,7 @@ void b2Island::SolveTOI(const b2TimeStep& subStep, int32 toiIndexA, int32 toiInd
 	contactSolverDef.contacts = m_contacts;
 	contactSolverDef.count = m_contactCount;
 	contactSolverDef.threadId = 0;
-	contactSolverDef.allocator = m_allocator;
+	contactSolverDef.allocator = allocator;
 	contactSolverDef.step = subStep;
 	contactSolverDef.positions = m_positions;
 	contactSolverDef.velocities = m_velocities;
@@ -564,13 +530,13 @@ void b2Island::SolveTOI(const b2TimeStep& subStep, int32 toiIndexA, int32 toiInd
 		body->SynchronizeTransform();
 	}
 
-	Report<true>(contactSolver.m_velocityConstraints);
+	Report<true>(contactSolver.m_velocityConstraints, listener, 0);
 }
 
 template<bool isSingleThread>
-void b2Island::Report(const b2ContactVelocityConstraint* constraints)
+void b2Island::Report(const b2ContactVelocityConstraint* constraints, b2ContactListener* listener, uint32 threadId)
 {
-	if (m_listener == nullptr)
+	if (listener == nullptr)
 	{
 		return;
 	}
@@ -590,15 +556,17 @@ void b2Island::Report(const b2ContactVelocityConstraint* constraints)
 			impulse.tangentImpulses[j] = vc->points[j].tangentImpulse;
 		}
 
-		if (m_listener->PostSolveImmediate(c, &impulse) == b2ImmediateCallbackResult::CALL_DEFERRED)
+		if (listener->PostSolveImmediate(c, &impulse, threadId) == b2ImmediateCallbackResult::CALL_DEFERRED)
 		{
 			if (isSingleThread)
 			{
-				m_listener->PostSolve(c, &impulse);
+				listener->PostSolve(c, &impulse);
 			}
 			else
 			{
-				b2DeferredPostSolve postSolve = {c, impulse};
+				b2DeferredPostSolve postSolve;
+				postSolve.contact = c;
+				postSolve.impulse = impulse;
 				td->m_deferredPostSolves.Push(postSolve);
 			}
 		}

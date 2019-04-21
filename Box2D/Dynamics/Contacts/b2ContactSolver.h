@@ -61,7 +61,7 @@ struct b2ContactSolverDef
 	b2TimeStep step;
 	b2Contact** contacts;
 	int32 count;
-	int32 threadId;
+	uint32 threadId;
 	b2Position* positions;
 	b2Velocity* velocities;
 	b2StackAllocator* allocator;

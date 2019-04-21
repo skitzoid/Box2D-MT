@@ -27,6 +27,7 @@
 #include "Testbed/imgui/imgui_impl_glfw_gl3.h"
 #include "DebugDraw.h"
 #include "Test.h"
+#include "TestMT.h"
 
 #include "Testbed/glfw/glfw3.h"
 #include <stdio.h>
@@ -266,7 +267,7 @@ static void sMouseButton(GLFWwindow* window, int32 button, int32 action, int32 m
 				test->MouseDown(pw);
 			}
 		}
-		
+
 		if (action == GLFW_RELEASE)
 		{
 			test->MouseUp(pw);
@@ -275,7 +276,7 @@ static void sMouseButton(GLFWwindow* window, int32 button, int32 action, int32 m
 	else if (button == GLFW_MOUSE_BUTTON_2)
 	{
 		if (action == GLFW_PRESS)
-		{	
+		{
 			lastp = g_camera.ConvertScreenToWorld(ps);
 			rightMouseDown = true;
 		}
@@ -294,7 +295,7 @@ static void sMouseMotion(GLFWwindow*, double xd, double yd)
 
 	b2Vec2 pw = g_camera.ConvertScreenToWorld(ps);
 	test->MouseMove(pw);
-	
+
 	if (rightMouseDown)
 	{
 		b2Vec2 diff = pw - lastp;
@@ -359,6 +360,26 @@ static bool sTestEntriesGetName(void*, int idx, const char** out_name)
 }
 
 //
+static void sTestMT()
+{
+	glfwHideWindow(mainWindow);
+	delete test;
+	test = nullptr;
+	g_debugDraw.SetActive(false);
+	if (settings.mtCurrentTestOnly)
+	{
+		TestMT(&settings, testIndex);
+	}
+	else
+	{
+		TestMT(&settings);
+	}
+	g_debugDraw.SetActive(true);
+	sRestart();
+	glfwShowWindow(mainWindow);
+}
+
+//
 static void sInterface()
 {
 	int menuWidth = 200;
@@ -381,6 +402,27 @@ static void sInterface()
 		}
 		ImGui::Separator();
 
+		ImGui::Text("Thread Count");
+		ImGui::SliderInt("##Thread Count", &settings.threadCount, 1, b2_maxThreads);
+
+		ImGui::Separator();
+
+		ImVec2 button_sz = ImVec2(-1, 0);
+
+		ImGui::PushItemWidth(-1.0f);
+		ImGui::Text("Profiling Iters");
+		ImGui::SliderInt("##Profiling Iters", &settings.mtProfileIterations, 0, 16);
+
+		ImGui::Text("Consistency Check Iters");
+		ImGui::SliderInt("##Consistency Check Iters", &settings.mtConsistencyIterations, 0, 16);
+
+		ImGui::Checkbox("Current Test Only", &settings.mtCurrentTestOnly);
+
+		if (ImGui::Button("Test MT", button_sz))
+			sTestMT();
+
+		ImGui::Separator();
+
 		ImGui::Text("Vel Iters");
 		ImGui::SliderInt("##Vel Iters", &settings.velocityIterations, 0, 50);
 		ImGui::Text("Pos Iters");
@@ -396,6 +438,10 @@ static void sInterface()
 
 		ImGui::Separator();
 
+		ImGui::Text("Profile Smoothing");
+		ImGui::SliderInt("##Profile Smoothing", &settings.stepsPerProfileUpdate, 1, 60);
+		ImGui::PopItemWidth();
+
 		ImGui::Checkbox("Shapes", &settings.drawShapes);
 		ImGui::Checkbox("Joints", &settings.drawJoints);
 		ImGui::Checkbox("AABBs", &settings.drawAABBs);
@@ -407,7 +453,6 @@ static void sInterface()
 		ImGui::Checkbox("Statistics", &settings.drawStats);
 		ImGui::Checkbox("Profile", &settings.drawProfile);
 
-		ImVec2 button_sz = ImVec2(-1, 0);
 		if (ImGui::Button("Pause (P)", button_sz))
 			settings.pause = !settings.pause;
 
@@ -504,19 +549,20 @@ int main(int, char**)
 
 	entry = g_testEntries + testIndex;
 	test = entry->createFcn();
+	settings.threadCount = test->GetExecutor()->GetThreadCount();
 
 	// Control the frame rate. One draw per monitor refresh.
 	glfwSwapInterval(1);
 
 	double time1 = glfwGetTime();
 	double frameTime = 0.0;
-   
+
 	glClearColor(0.3f, 0.3f, 0.3f, 1.f);
-	
+
 	while (!glfwWindowShouldClose(mainWindow))
 	{
 		glfwGetWindowSize(mainWindow, &g_camera.m_width, &g_camera.m_height);
-        
+
         int bufferWidth, bufferHeight;
         glfwGetFramebufferSize(mainWindow, &bufferWidth, &bufferHeight);
         glViewport(0, 0, bufferWidth, bufferHeight);

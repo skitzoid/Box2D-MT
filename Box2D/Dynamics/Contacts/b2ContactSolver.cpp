@@ -54,7 +54,7 @@ b2ContactSolver::b2ContactSolver(b2ContactSolverDef* def)
 	m_positions = def->positions;
 	m_velocities = def->velocities;
 	m_contacts = def->contacts;
-	int32 threadId = def->threadId;
+	uint32 threadId = def->threadId;
 
 	// Initialize position independent portions of the constraints.
 	for (int32 i = 0; i < m_count; ++i)
@@ -72,7 +72,7 @@ b2ContactSolver::b2ContactSolver(b2ContactSolverDef* def)
 		b2Manifold* manifold = contact->GetManifold();
 
 		int32 pointCount = manifold->pointCount;
-		b2Assert(pointCount > 0);
+		b2Assert(pointCount == 1 || pointCount == 2);
 
 		b2ContactVelocityConstraint* vc = m_velocityConstraints + i;
 		vc->friction = contact->m_friction;
