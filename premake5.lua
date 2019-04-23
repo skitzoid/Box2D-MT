@@ -7,11 +7,11 @@ workspace 'Box2D'
 		trigger     = 'drd',
 		description = 'Make a DRD configuration that prevents false positives from b2ThreadPool (valgrind must be installed).'
 	}
+
+	configurations { 'Debug', 'Release' }
 	filter 'options:drd'
 		configurations { 'drd' }
 	filter {}
-
-	configurations { 'Debug', 'Release' }
 	startproject 'Testbed'
 	location 'Build'
 	warnings 'Extra'
