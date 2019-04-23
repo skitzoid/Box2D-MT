@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -26,13 +26,23 @@ template <typename T>
 class b2GrowableArray
 {
 public:
-	b2GrowableArray(int32 startCapacityHint = 1)
+	b2GrowableArray(uint32 startCapacity = 128)
 	{
-		m_capacity = startCapacityHint > 0 ? startCapacityHint : 1;
+		m_capacity = startCapacity;
 		m_count = 0;
 
 		m_array = (T*)b2Alloc(m_capacity * sizeof(T));
 	}
+
+	b2GrowableArray(b2GrowableArray&& rhs)
+		: m_array(rhs.m_array)
+		, m_count(rhs.m_count)
+	{
+		rhs.m_array = nullptr;
+	}
+
+	b2GrowableArray(const b2GrowableArray&) = delete;
+	b2GrowableArray& operator=(const b2GrowableArray&) = delete;
 
 	~b2GrowableArray()
 	{
@@ -62,7 +72,7 @@ public:
 		return m_array[m_count];
 	}
 
-	T& Peek() const
+	T& Back() const
 	{
 		b2Assert(m_count > 0);
 		return m_array[m_count - 1];

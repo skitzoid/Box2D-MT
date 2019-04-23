@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2019 Justin Hoffman https://github.com/skitzoid/Box2D-MT
+* Copyright (c) 2019 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -15,7 +15,9 @@
 * misrepresented as being the original software.
 * 3. This notice may not be removed or altered from any source distribution.
 */
-#pragma once
+
+#ifndef B2_THREAD_POOL_H
+#define B2_THREAD_POOL_H
 
 #include "Box2D/Common/b2GrowableArray.h"
 #include "Box2D/Common/b2Timer.h"
@@ -78,12 +80,15 @@ public:
 	int32 GetThreadCount() const;
 
 	/// Time spent waiting to lock the mutex.
+	/// @warning must only be called from a single thread while no tasks are being executed.
 	float32 GetLockMilliseconds() const;
 
-	/// Reset lock timer and task start timer.
+	/// Reset the lock timer.
+	/// @warning must only be called from a single thread while no tasks are being executed.
 	void ResetTimers();
 
 	/// Restart with the specified number of threads
+	/// @warning must only be called from a single thread while no tasks are being executed.
 	void Restart(int32 threadCount);
 
 private:
@@ -92,7 +97,7 @@ private:
 	void WorkerMain(uint32 threadId);
 	void Shutdown();
 
-	std::mutex m_mutex;
+	mutable std::mutex m_mutex;
 	std::condition_variable m_workerCond;
 	std::atomic<int32> m_pendingTaskCount;
 	std::atomic<bool> m_busyWait;
@@ -116,25 +121,18 @@ public:
 	/// -1 is interpreted as the number of logical cores.
 	explicit b2ThreadPoolTaskExecutor(int32 threadCount = -1);
 
-	/// Control whether worker threads busy-wait even after a step ends.
-	/// Default is true.
-	void SetContinuousBusyWait(bool flag);
-
-	/// Set the target number of tasks that a range task will be partitioned into.
-	void SetTargetRangeTaskCount(int32 value);
-
 	/// Get the thread pool.
-	b2ThreadPool& GetThreadPool();
-	const b2ThreadPool& GetThreadPool() const;
+	b2ThreadPool* GetThreadPool();
+	const b2ThreadPool* GetThreadPool() const;
 
 	/// Get the number of threads available for execution.
 	uint32 GetThreadCount() const override;
 
 	/// Called when the step begins.
-	void StepBegin() override;
+	void StepBegin(b2World& world) override;
 
 	/// Called when the step ends.
-	void StepEnd(b2Profile& profile) override;
+	void StepEnd(b2World& profile) override;
 
 	/// Create a task group.
 	/// The allocator can provide storage for the task group if needed.
@@ -157,7 +155,6 @@ public:
 
 private:
 	b2ThreadPool m_threadPool;
-	bool m_continuousBusyWait;
 };
 
 inline b2ThreadPoolTaskGroup::~b2ThreadPoolTaskGroup()
@@ -173,34 +170,30 @@ inline int32 b2ThreadPool::GetThreadCount() const
 
 inline float32 b2ThreadPool::GetLockMilliseconds() const
 {
+	std::lock_guard<std::mutex> lk(m_mutex);
 	return m_lockMilliseconds;
 }
 
 inline void b2ThreadPool::ResetTimers()
 {
+	std::lock_guard<std::mutex> lk(m_mutex);
 	m_lockMilliseconds = 0;
 }
 
 inline b2ThreadPoolTaskExecutor::b2ThreadPoolTaskExecutor(int32 threadCount)
 	: m_threadPool(threadCount)
-	, m_continuousBusyWait(false)
 {
 
 }
 
-inline void b2ThreadPoolTaskExecutor::SetContinuousBusyWait(bool flag)
+inline b2ThreadPool* b2ThreadPoolTaskExecutor::GetThreadPool()
 {
-	m_continuousBusyWait = flag;
+	return &m_threadPool;
 }
 
-inline b2ThreadPool& b2ThreadPoolTaskExecutor::GetThreadPool()
+inline const b2ThreadPool* b2ThreadPoolTaskExecutor::GetThreadPool() const
 {
-	return m_threadPool;
-}
-
-inline const b2ThreadPool& b2ThreadPoolTaskExecutor::GetThreadPool() const
-{
-	return m_threadPool;
+	return &m_threadPool;
 }
 
 inline uint32 b2ThreadPoolTaskExecutor::GetThreadCount() const
@@ -208,3 +201,4 @@ inline uint32 b2ThreadPoolTaskExecutor::GetThreadCount() const
 	return m_threadPool.GetThreadCount();
 }
 
+#endif

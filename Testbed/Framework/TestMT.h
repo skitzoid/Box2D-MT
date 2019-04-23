@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2019 Justin Hoffman https://github.com/skitzoid/Box2D-MT
+* Copyright (c) 2019 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages

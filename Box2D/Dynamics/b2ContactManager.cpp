@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -27,31 +27,31 @@
 class b2DefaultContactListener : public b2ContactListener
 {
 public:
-	b2ImmediateCallbackResult BeginContactImmediate(b2Contact* contact, uint32 threadId) override
+	bool BeginContactImmediate(b2Contact* contact, uint32 threadId) override
 	{
 		B2_NOT_USED(contact);
 		B2_NOT_USED(threadId);
-		return b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;
+		return false;
 	}
-	b2ImmediateCallbackResult EndContactImmediate(b2Contact* contact, uint32 threadId) override
+	bool EndContactImmediate(b2Contact* contact, uint32 threadId) override
 	{
 		B2_NOT_USED(contact);
 		B2_NOT_USED(threadId);
-		return b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;
+		return false;
 	}
-	b2ImmediateCallbackResult PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold, uint32 threadId) override
+	bool PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold, uint32 threadId) override
 	{
 		B2_NOT_USED(contact);
 		B2_NOT_USED(oldManifold);
 		B2_NOT_USED(threadId);
-		return b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;
+		return false;
 	}
-	b2ImmediateCallbackResult PostSolveImmediate(b2Contact* contact, const b2ContactImpulse* impulse, uint32 threadId) override
+	bool PostSolveImmediate(b2Contact* contact, const b2ContactImpulse* impulse, uint32 threadId) override
 	{
 		B2_NOT_USED(contact);
 		B2_NOT_USED(impulse);
 		B2_NOT_USED(threadId);
-		return b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;
+		return false;
 	}
 };
 
@@ -106,7 +106,7 @@ bool b2PopPerThreadData(b2ContactManagerPerThreadData* td, T& out, int32 threadC
 	for (int32 i = selectedThread + 1; i < threadCount; ++i)
 	{
 		if ((td[i].*member).GetCount() > 0 &&
-			!compFunc((td[i].*member).Peek(), (td[selectedThread].*member).Peek()))
+			!compFunc((td[i].*member).Back(), (td[selectedThread].*member).Back()))
 		{
 			selectedThread = i;
 		}
@@ -222,7 +222,7 @@ void b2ContactManager::Collide(uint32 contactsBegin, uint32 contactsEnd, uint32 
 			}
 
 			// Check user filtering.
-			if (m_contactFilter && m_contactFilter->ShouldCollide(fixtureA, fixtureB) == false)
+			if (m_contactFilter && m_contactFilter->ShouldCollide(fixtureA, fixtureB, threadId) == false)
 			{
 				td.m_deferredDestroys.Push(c);
 				continue;
@@ -305,7 +305,7 @@ void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB, uint3
 	}
 
 	// Check user filtering.
-	if (m_contactFilter && m_contactFilter->ShouldCollide(fixtureA, fixtureB) == false)
+	if (m_contactFilter && m_contactFilter->ShouldCollide(fixtureA, fixtureB, threadId) == false)
 	{
 		return;
 	}
@@ -489,8 +489,8 @@ void b2ContactManager::ConsumeDeferredCreates(uint32 threadCount)
 
 void b2ContactManager::ConsumeDeferredMoveProxies(uint32 threadCount)
 {
-	b2DeferredMoveProxy moveProxy{};
-	while (b2PopPerThreadData(m_perThreadData,moveProxy, threadCount,
+	b2DeferredMoveProxy moveProxy;
+	while (b2PopPerThreadData(m_perThreadData, moveProxy, threadCount,
 		&b2ContactManagerPerThreadData::m_deferredMoveProxies, b2DeferredMoveProxyLessThan))
 	{
 		m_broadPhase.MoveProxy(moveProxy.proxyId, moveProxy.aabb, moveProxy.displacement);
@@ -501,21 +501,13 @@ void b2ContactManager::OnContactCreate(b2Contact* c, b2ContactProxyIds proxyIds)
 {
 	b2Fixture* fixtureA = c->GetFixtureA();
 	b2Fixture* fixtureB = c->GetFixtureB();
-	b2Body* bodyA = fixtureA->GetBody();
-	b2Body* bodyB = fixtureB->GetBody();
 
 	c->m_proxyIds = proxyIds;
 
 	// Mark for TOI if needed.
-	if (fixtureA->IsSensor() == false && fixtureB->IsSensor() == false)
+	if (b2Contact::IsToiCandidate(fixtureA, fixtureB))
 	{
-		bool aNeedsTOI = bodyA->IsBullet() || (bodyA->GetType() != b2_dynamicBody && !bodyA->GetPreferNoCCD());
-		bool bNeedsTOI = bodyB->IsBullet() || (bodyB->GetType() != b2_dynamicBody && !bodyB->GetPreferNoCCD());
-
-		if (aNeedsTOI || bNeedsTOI)
-		{
-			c->m_flags |= b2Contact::e_toiCandidateFlag;
-		}
+		c->m_flags |= b2Contact::e_toiCandidateFlag;
 	}
 
 	// Insert into the world.
@@ -528,6 +520,8 @@ void b2ContactManager::OnContactCreate(b2Contact* c, b2ContactProxyIds proxyIds)
 	m_contactList = c;
 
 	// Connect to island graph.
+	b2Body* bodyA = fixtureA->GetBody();
+	b2Body* bodyB = fixtureB->GetBody();
 
 	// Connect to body A
 	c->m_nodeA.contact = c;
@@ -591,13 +585,9 @@ void b2ContactManager::RecalculateToiCandidacy(b2Contact* c)
 	b2Fixture* fixtureA = c->GetFixtureA();
 	b2Fixture* fixtureB = c->GetFixtureB();
 
-	b2Body* bodyA = fixtureA->GetBody();
-	b2Body* bodyB = fixtureB->GetBody();
-
 	uint32 flags = c->m_flags;
 
-	if (bodyA->IsToiCandidate() && bodyB->IsToiCandidate() &&
-		fixtureA->IsSensor() == false && fixtureB->IsSensor() == false)
+	if (b2Contact::IsToiCandidate(fixtureA, fixtureB))
 	{
 		flags |= b2Contact::e_toiCandidateFlag;
 	}
@@ -611,7 +601,9 @@ void b2ContactManager::RecalculateToiCandidacy(b2Contact* c)
 		return;
 	}
 
-	c->m_flags = flags;
+	c->m_flags = flags & ~b2Contact::e_toiFlag;
+	c->m_toiCount = 0;
+	c->m_toi = 1.0f;
 
 	if ((c->m_flags & b2Contact::e_toiCandidateFlag) == b2Contact::e_toiCandidateFlag)
 	{
@@ -678,7 +670,7 @@ void b2ContactManager::RemoveContact(b2Contact* c)
 	else
 	{
 		b2Assert((c->m_flags & b2Contact::e_toiCandidateFlag) == 0);
-		m_contacts.Peek()->m_managerIndex = c->m_managerIndex;
+		m_contacts.Back()->m_managerIndex = c->m_managerIndex;
 		m_contacts.RemoveAndSwap(c->m_managerIndex);
 	}
 }

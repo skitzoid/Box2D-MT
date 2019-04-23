@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2015 Justin Hoffman https://github.com/skitzoid/Box2D-MT
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -15,7 +15,9 @@
 * misrepresented as being the original software.
 * 3. This notice may not be removed or altered from any source distribution.
 */
-#pragma once
+
+#ifndef B2_THREADING_H
+#define B2_THREADING_H
 
 #include "Box2D/Common/b2Settings.h"
 
@@ -163,3 +165,5 @@ inline const b2RangeTaskRange& b2RangeTask::GetRange() const
 {
 	return m_range;
 }
+
+#endif

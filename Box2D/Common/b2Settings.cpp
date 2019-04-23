@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -21,6 +21,8 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
+
+b2Version b2_mtVersion = { 0, 1, 0 };
 
 b2Version b2_version = { 2, 3, 2 };
 

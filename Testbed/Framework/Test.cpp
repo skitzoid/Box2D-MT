@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -69,17 +69,17 @@ Test::~Test()
 	m_world = nullptr;
 }
 
-b2ImmediateCallbackResult Test::PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold, uint32 threadId)
+bool Test::PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold, uint32 threadId)
 {
-	// Derived tests must override immediate functions and return CALL_DEFERRED
+	// Derived tests must override immediate functions and return true
 	// if they need the deferred functions to be called.
-	b2ImmediateCallbackResult result = b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;
+	bool callDeferred = false;
 
 	const b2Manifold* manifold = contact->GetManifold();
 
 	if (manifold->pointCount == 0)
 	{
-		return result;
+		return callDeferred;
 	}
 
 	b2Fixture* fixtureA = contact->GetFixtureA();
@@ -105,7 +105,7 @@ b2ImmediateCallbackResult Test::PreSolveImmediate(b2Contact* contact, const b2Ma
 		++m_pointCount[threadId];
 	}
 
-	return result;
+	return callDeferred;
 }
 
 void Test::DrawTitle(const char *string)
@@ -279,7 +279,7 @@ void Test::Step(Settings* settings)
 {
 	if (settings->threadCount != m_threadPoolExec.GetThreadCount())
 	{
-		m_threadPoolExec.GetThreadPool().Restart(settings->threadCount);
+		m_threadPoolExec.GetThreadPool()->Restart(settings->threadCount);
 	}
 
 	float32 timeStep = settings->hz > 0.0f ? 1.0f / settings->hz : float32(0.0f);
@@ -315,7 +315,10 @@ void Test::Step(Settings* settings)
 
 	if (timeStep > 0.0f)
 	{
+		b2ThreadPool* tp = m_threadPoolExec.GetThreadPool();
+		tp->ResetTimers();
 		m_world->Step(timeStep, settings->velocityIterations, settings->positionIterations, m_threadPoolExec);
+		m_world->SetLockingTime(tp->GetLockMilliseconds());
 	}
 
 	if (m_visible)

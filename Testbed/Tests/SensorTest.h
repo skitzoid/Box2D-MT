@@ -81,12 +81,12 @@ public:
 		}
 	}
 
-	// Return CALL_DEFERRED so that BeginContact will be called (from a single thread).
-	b2ImmediateCallbackResult BeginContactImmediate(b2Contact* contact, uint32 threadId) override
+	// Return true so that BeginContact will be called (from a single thread).
+	bool BeginContactImmediate(b2Contact* contact, uint32 threadId) override
 	{
 		B2_NOT_USED(contact);
 		B2_NOT_USED(threadId);
-		return b2ImmediateCallbackResult::CALL_DEFERRED;
+		return true;
 	}
 
 	// Implement contact listener.
@@ -116,12 +116,12 @@ public:
 		}
 	}
 
-	// Return CALL_DEFERRED so that EndContact will be called (from a single thread).
-	b2ImmediateCallbackResult EndContactImmediate(b2Contact* contact, uint32 threadId) override
+	// Return true so that EndContact will be called (from a single thread).
+	bool EndContactImmediate(b2Contact* contact, uint32 threadId) override
 	{
 		B2_NOT_USED(contact);
 		B2_NOT_USED(threadId);
-		return b2ImmediateCallbackResult::CALL_DEFERRED;
+		return true;
 	}
 
 	// Implement contact listener.

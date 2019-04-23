@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2011 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages

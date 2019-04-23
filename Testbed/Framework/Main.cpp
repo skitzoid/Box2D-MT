@@ -428,7 +428,6 @@ static void sInterface()
 		ImGui::SliderInt("##Pos Iters", &settings.positionIterations, 0, 50);
 		ImGui::Text("Hertz");
 		ImGui::SliderFloat("##Hertz", &settings.hz, 5.0f, 120.0f, "%.0f hz");
-		ImGui::PopItemWidth();
 
 		ImGui::Checkbox("Sleep", &settings.enableSleep);
 		ImGui::Checkbox("Warm Starting", &settings.enableWarmStarting);
@@ -439,7 +438,6 @@ static void sInterface()
 
 		ImGui::Text("Profile Smoothing");
 		ImGui::SliderInt("##Profile Smoothing", &settings.stepsPerProfileUpdate, 1, 60);
-		ImGui::PopItemWidth();
 
 		ImGui::Checkbox("Shapes", &settings.drawShapes);
 		ImGui::Checkbox("Joints", &settings.drawJoints);
@@ -463,6 +461,8 @@ static void sInterface()
 
 		if (ImGui::Button("Quit", button_sz))
 			glfwSetWindowShouldClose(mainWindow, GL_TRUE);
+
+		ImGui::PopItemWidth();
 
 		ImGui::PopAllowKeyboardFocus();
 		ImGui::End();
@@ -497,7 +497,7 @@ int main(int, char**)
 	}
 
 	char title[64];
-	sprintf(title, "Box2D Testbed Version %d.%d.%d", b2_version.major, b2_version.minor, b2_version.revision);
+	sprintf(title, "Box2D-MT Testbed Version %d.%d.%d", b2_mtVersion.major, b2_mtVersion.minor, b2_mtVersion.revision);
 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);

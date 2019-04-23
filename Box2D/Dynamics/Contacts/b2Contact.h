@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -215,6 +215,8 @@ protected:
 
 	template <bool isSingleThread>
 	void UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener* listener, uint32 threadId);
+
+	static bool IsToiCandidate(b2Fixture* fA, b2Fixture* fB);
 
 	static b2ContactRegister s_registers[b2Shape::e_typeCount][b2Shape::e_typeCount];
 	static bool s_initialized;

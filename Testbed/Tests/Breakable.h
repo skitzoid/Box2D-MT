@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2008-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -61,14 +61,13 @@ public:
 		m_broke = false;
 	}
 
-	// Here we return CALL_DEFERRED from PostSolveImmediate so that PostSolve will be called (from a single thread).
-	b2ImmediateCallbackResult PostSolveImmediate(b2Contact* contact, const b2ContactImpulse* impulse,
-												uint32 threadId) override
+	// Here we return true so that PostSolve will be called (from a single thread).
+	bool PostSolveImmediate(b2Contact* contact, const b2ContactImpulse* impulse, uint32 threadId) override
 	{
 		B2_NOT_USED(contact);
 		B2_NOT_USED(impulse);
 		B2_NOT_USED(threadId);
-		return b2ImmediateCallbackResult::CALL_DEFERRED;
+		return true;
 	}
 
 	void PostSolve(b2Contact* contact, const b2ContactImpulse* impulse) override

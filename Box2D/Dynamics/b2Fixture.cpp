@@ -152,7 +152,7 @@ void b2Fixture::DestroyProxies(b2BroadPhase* broadPhase)
 void b2Fixture::Synchronize(b2BroadPhase* broadPhase, const b2Transform& transform1, const b2Transform& transform2)
 {
 	if (m_proxyCount == 0)
-	{	
+	{
 		return;
 	}
 
@@ -164,7 +164,7 @@ void b2Fixture::Synchronize(b2BroadPhase* broadPhase, const b2Transform& transfo
 		b2AABB aabb1, aabb2;
 		m_shape->ComputeAABB(&aabb1, transform1, proxy->childIndex);
 		m_shape->ComputeAABB(&aabb2, transform2, proxy->childIndex);
-	
+
 		proxy->aabb.Combine(aabb1, aabb2);
 
 		b2Vec2 displacement = transform2.p - transform1.p;
@@ -209,6 +209,8 @@ void b2Fixture::Refilter()
 		return;
 	}
 
+	b2Assert(world->IsMtLocked() == false);
+
 	// Touch each proxy so that new pairs may be created
 	b2BroadPhase* broadPhase = &world->m_contactManager.m_broadPhase;
 	for (int32 i = 0; i < m_proxyCount; ++i)
@@ -219,10 +221,20 @@ void b2Fixture::Refilter()
 
 void b2Fixture::SetSensor(bool sensor)
 {
+	b2World* world = m_body->GetWorld();
+
+	b2Assert(world->IsMtLocked() == false);
+	if (world->IsMtLocked())
+	{
+		return;
+	}
+
 	if (sensor != m_isSensor)
 	{
 		m_body->SetAwake(true);
 		m_isSensor = sensor;
+
+		world->RecalculateToiCandidacy(m_body);
 	}
 }
 

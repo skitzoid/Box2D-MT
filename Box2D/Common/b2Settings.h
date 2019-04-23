@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015 Justin Hoffman https://github.com/skitzoid/Box2D-MT
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -30,7 +30,12 @@
 #endif
 
 #define B2_NOT_USED(x) ((void)(x))
+
+#if !defined(b2DEBUG)
 #define b2Assert(A) assert(A)
+#else
+#define b2Assert(A) B2_NOT_USED(A)
+#endif
 
 typedef std::int8_t		int8;
 typedef std::int16_t	int16;
@@ -194,7 +199,10 @@ struct b2Version
 	int32 revision;		///< bug fixes
 };
 
-/// Current version.
+/// Box2D-MT version.
+extern b2Version b2_mtVersion;
+
+/// Box2D version.
 extern b2Version b2_version;
 
 #endif

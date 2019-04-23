@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2011 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -165,15 +165,15 @@ class b2ContactPreSolveTask : public b2RangeTask
 {
 public:
 	b2ContactPreSolveTask() {}
-	b2ContactPreSolveTask(const b2RangeTaskRange& range, b2Contact** contacts, bool toiCandidates)
+	b2ContactPreSolveTask(const b2RangeTaskRange& range, b2Contact** contacts, bool toi)
 		: b2RangeTask(range)
 		, m_contacts(contacts)
-		, m_toiCandidates(toiCandidates)
+		, m_toi(toi)
 	{}
 private:
 	virtual void Execute(const b2ThreadContext&, const b2RangeTaskRange& range) override
 	{
-		if (m_toiCandidates)
+		if (m_toi)
 		{
 			for (uint32 i = range.begin; i < range.end; ++i)
 			{
@@ -193,7 +193,7 @@ private:
 		}
 	}
 	b2Contact** m_contacts;
-	bool m_toiCandidates;
+	bool m_toi;
 };
 
 class b2BodyPreSolveTask : public b2RangeTask
@@ -483,12 +483,12 @@ void b2World::DestroyBody(b2Body* b)
 	int32 index = b->m_worldIndex;
 	if (b->m_type != b2_staticBody)
 	{
-		m_nonStaticBodies.Peek()->m_worldIndex = index;
+		m_nonStaticBodies.Back()->m_worldIndex = index;
 		m_nonStaticBodies.RemoveAndSwap(index);
 	}
 	else
 	{
-		m_staticBodies.Peek()->m_worldIndex = index;
+		m_staticBodies.Back()->m_worldIndex = index;
 		m_staticBodies.RemoveAndSwap(index);
 	}
 
@@ -691,6 +691,20 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2
 	// Find TOI events and solve them.
 	for (;;)
 	{
+#if _DEBUG
+		for (int32 i = m_contactManager.m_toiCount; i < m_contactManager.m_contacts.GetCount(); ++i)
+		{
+			b2Contact* c = m_contactManager.m_contacts[i];
+
+			b2Assert((c->m_flags & b2Contact::e_toiCandidateFlag) == 0);
+
+			b2Fixture* fA = c->GetFixtureA();
+			b2Fixture* fB = c->GetFixtureB();
+
+			b2Assert(b2Contact::IsToiCandidate(fA, fB) == false);
+		}
+#endif
+
 		// Find the first TOI.
 		b2Contact* minContact = nullptr;
 		float32 minAlpha = 1.0f;
@@ -698,6 +712,13 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2
 		for (int32 i = 0; i < m_contactManager.m_toiCount; ++i)
 		{
 			b2Contact* c = m_contactManager.m_contacts[i];
+
+			b2Assert((c->m_flags & b2Contact::e_toiCandidateFlag) == b2Contact::e_toiCandidateFlag);
+
+			b2Fixture* fA = c->GetFixtureA();
+			b2Fixture* fB = c->GetFixtureB();
+
+			b2Assert(b2Contact::IsToiCandidate(fA, fB));
 
 			// Is this contact disabled?
 			if (c->IsEnabled() == false)
@@ -719,15 +740,6 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2
 			}
 			else
 			{
-				b2Fixture* fA = c->GetFixtureA();
-				b2Fixture* fB = c->GetFixtureB();
-
-				// Is there a sensor?
-				if (fA->IsSensor() || fB->IsSensor())
-				{
-					continue;
-				}
-
 				b2Body* bA = fA->GetBody();
 				b2Body* bB = fB->GetBody();
 
@@ -742,18 +754,6 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2
 				if (activeA == false && activeB == false)
 				{
 					continue;
-				}
-
-				// These conditions determine whether the contact is in the TOI candidate list
-				// and should be true for all contacts in the list.
-				{
-					bool collideA = bA->IsBullet() || (typeA != b2_dynamicBody && !bA->GetPreferNoCCD());
-					bool collideB = bB->IsBullet() || (typeB != b2_dynamicBody && !bB->GetPreferNoCCD());
-
-					bool isToiCandidate = collideA || collideB;
-
-					b2Assert(isToiCandidate);
-					B2_NOT_USED(isToiCandidate);
 				}
 
 				// Compute the TOI for this contact.
@@ -1005,6 +1005,8 @@ void b2World::FindNewContacts(b2TaskExecutor& executor, b2TaskGroup taskGroup, u
 		return;
 	}
 
+	SetMtLock(e_mtLocked | e_mtCollisionLocked);
+
 	b2BroadphaseFindNewContactsTask tasks[b2_partitionRangeMaxOutput];
 	b2PartitionedRange ranges;
 	executor.PartitionRange(0, m_contactManager.m_broadPhase.GetMoveCount(), ranges);
@@ -1027,6 +1029,7 @@ void b2World::FindNewContacts(b2TaskExecutor& executor, b2TaskGroup taskGroup, u
 
 	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
 
+	SetMtLock(0);
 	m_contactManager.m_broadPhase.ResetBuffers();
 	m_contactManager.ConsumeDeferredCreates(threadCount);
 }
@@ -1037,6 +1040,8 @@ void b2World::Collide(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 th
 	{
 		return;
 	}
+
+	SetMtLock(e_mtLocked | e_mtCollisionLocked);
 
 	b2CollideTask tasks[b2_partitionRangeMaxOutput];
 	b2PartitionedRange ranges;
@@ -1058,6 +1063,7 @@ void b2World::Collide(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 th
 
 	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
 
+	SetMtLock(0);
 	m_contactManager.ConsumeDeferredAwakes(threadCount);
 	m_contactManager.ConsumeDeferredBeginContacts(threadCount);
 	m_contactManager.ConsumeDeferredEndContacts(threadCount);
@@ -1071,6 +1077,8 @@ void b2World::SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup taskGrou
 	{
 		return;
 	}
+
+	SetMtLock(e_mtLocked | e_mtCollisionLocked);
 
 	b2GenerateDeferredMoveProxiesTask moveTasks[b2_partitionRangeMaxOutput];
 	b2PartitionedRange ranges;
@@ -1092,6 +1100,7 @@ void b2World::SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup taskGrou
 
 	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
 
+	SetMtLock(0);
 	m_contactManager.ConsumeDeferredMoveProxies(threadCount);
 }
 
@@ -1126,6 +1135,8 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2Tim
 	int32 bodyCount = 0;
 	int32 contactCount = 0;
 	int32 jointCount = 0;
+
+	SetMtLock(e_mtLocked | e_mtSolveLocked);
 
 	// Clear all the island flags.
 	SolveInit(executor, taskGroup);
@@ -1339,6 +1350,8 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2Tim
 	m_stackAllocator.Free(allBodies);
 
 	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
+
+	SetMtLock(0);
 	m_contactManager.ConsumeDeferredPostSolves(threadCount);
 
 	{
@@ -1364,26 +1377,15 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2Tim
 void b2World::SolveInit(b2TaskExecutor& executor, b2TaskGroup taskGroup)
 {
 	b2ContactPreSolveTask contactsTasks[b2_partitionRangeMaxOutput];
-	if (m_contactManager.GetNonToiCount() > 0)
+	if (m_contactManager.m_contacts.GetCount() > 0)
 	{
 		b2PartitionedRange ranges;
-		executor.PartitionRange(0, m_contactManager.GetNonToiCount(), ranges);
+		executor.PartitionRange(0, m_contactManager.m_contacts.GetCount(), ranges);
 		for (uint32 i = 0; i < ranges.count; ++i)
 		{
-			contactsTasks[i] = b2ContactPreSolveTask(ranges[i], m_contactManager.GetNonToiBegin(), false);
+			contactsTasks[i] = b2ContactPreSolveTask(ranges[i], m_contactManager.m_contacts.Data(), false);
 		}
 		b2SubmitTasks(executor, taskGroup, contactsTasks, ranges.count);
-	}
-	b2ContactPreSolveTask toiContactsTasks[b2_partitionRangeMaxOutput];
-	if (m_contactManager.m_toiCount > 0)
-	{
-		b2PartitionedRange ranges;
-		executor.PartitionRange(0, m_contactManager.m_toiCount, ranges);
-		for (uint32 i = 0; i < ranges.count; ++i)
-		{
-			toiContactsTasks[i] = b2ContactPreSolveTask(ranges[i], m_contactManager.GetToiBegin(), true);
-		}
-		b2SubmitTasks(executor, taskGroup, toiContactsTasks, ranges.count);
 	}
 	b2BodyPreSolveTask bodyTasks[b2_partitionRangeMaxOutput];
 	if (m_nonStaticBodies.GetCount() > 0)
@@ -1408,26 +1410,15 @@ void b2World::SolveInit(b2TaskExecutor& executor, b2TaskGroup taskGroup)
 void b2World::SolveTOIInit(b2TaskExecutor& executor, b2TaskGroup taskGroup)
 {
 	b2ContactPreSolveTask contactsTasks[b2_partitionRangeMaxOutput];
-	if (m_contactManager.GetNonToiCount() > 0)
+	if (m_contactManager.m_contacts.GetCount() > 0)
 	{
 		b2PartitionedRange ranges;
-		executor.PartitionRange(0, m_contactManager.GetNonToiCount(), ranges);
+		executor.PartitionRange(0, m_contactManager.m_contacts.GetCount(), ranges);
 		for (uint32 i = 0; i < ranges.count; ++i)
 		{
-			contactsTasks[i] = b2ContactPreSolveTask(ranges[i], m_contactManager.GetNonToiBegin(), false);
+			contactsTasks[i] = b2ContactPreSolveTask(ranges[i], m_contactManager.m_contacts.Data(), true);
 		}
 		b2SubmitTasks(executor, taskGroup, contactsTasks, ranges.count);
-	}
-	b2ContactPreSolveTask toiContactsTasks[b2_partitionRangeMaxOutput];
-	if (m_contactManager.m_toiCount > 0)
-	{
-		b2PartitionedRange ranges;
-		executor.PartitionRange(0, m_contactManager.m_toiCount, ranges);
-		for (uint32 i = 0; i < ranges.count; ++i)
-		{
-			toiContactsTasks[i] = b2ContactPreSolveTask(ranges[i], m_contactManager.GetToiBegin(), true);
-		}
-		b2SubmitTasks(executor, taskGroup, toiContactsTasks, ranges.count);
 	}
 	b2BodyPreSolveTask bodyTasks[b2_partitionRangeMaxOutput];
 	if (m_nonStaticBodies.GetCount() > 0)
@@ -1453,7 +1444,7 @@ void b2World::SolveTOIInit(b2TaskExecutor& executor, b2TaskGroup taskGroup)
 
 void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIterations, b2TaskExecutor& executor)
 {
-	executor.StepBegin();
+	executor.StepBegin(*this);
 
 	uint32 threadCount = executor.GetThreadCount();
 
@@ -1549,13 +1540,15 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 	m_profile.step = stepTimer.GetMilliseconds();
 	stepTimer.Reset();
 
-	executor.StepEnd(m_profile);
+	executor.StepEnd(*this);
 
 	m_profile.step += stepTimer.GetMilliseconds();
 }
 
 void b2World::RecalculateToiCandidacy(b2Body* b)
 {
+	b2Assert(IsMtLocked() == false);
+
 	m_contactManager.RecalculateToiCandidacy(b);
 }
 

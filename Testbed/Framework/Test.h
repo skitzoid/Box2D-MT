@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -150,6 +150,34 @@ struct ContactPoint
 	float32 separation;
 };
 
+enum class TestResult
+{
+	NONE = 0,
+	PASS,
+	FAIL
+};
+
+inline TestResult operator&=(TestResult& a, TestResult b)
+{
+	if ((int)a < (int)b)
+	{
+		a = b;
+	}
+	return a;
+}
+
+inline const char* TestResultString(TestResult a)
+{
+	switch(a)
+	{
+		case TestResult::NONE:	return "None";
+		case TestResult::PASS:	return "Pass";
+		case TestResult::FAIL:	return "FAIL";
+	}
+	b2Assert(false);
+	return "";
+}
+
 class Test : public b2ContactListener
 {
 public:
@@ -174,28 +202,27 @@ public:
 	// Let derived tests know that a joint was destroyed.
 	virtual void JointDestroyed(b2Joint* joint) { B2_NOT_USED(joint); }
 
-	// Callbacks for derived classes.
-	virtual b2ImmediateCallbackResult BeginContactImmediate(b2Contact* contact, uint32 threadId) override
+	// Contact listener interface.
+	// Derived classes must override the immedaite functions if they need a deferred callback.
+	virtual bool BeginContactImmediate(b2Contact* contact, uint32 threadId) override
 	{
 		B2_NOT_USED(contact);
 		B2_NOT_USED(threadId);
-		return b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;
+		return false;
 	}
-	virtual b2ImmediateCallbackResult EndContactImmediate(b2Contact* contact, uint32 threadId) override
+	virtual bool EndContactImmediate(b2Contact* contact, uint32 threadId) override
 	{
 		B2_NOT_USED(contact);
 		B2_NOT_USED(threadId);
-		return b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;
+		return false;
 	}
-	virtual b2ImmediateCallbackResult PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold,
-														uint32 threadId) override;
-	virtual b2ImmediateCallbackResult PostSolveImmediate(b2Contact* contact, const b2ContactImpulse* impulse,
-														uint32 threadId) override
+	virtual bool PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold, uint32 threadId) override;
+	virtual bool PostSolveImmediate(b2Contact* contact, const b2ContactImpulse* impulse, uint32 threadId) override
 	{
 		B2_NOT_USED(contact);
 		B2_NOT_USED(impulse);
 		B2_NOT_USED(threadId);
-		return b2ImmediateCallbackResult::DO_NOT_CALL_DEFERRED;
+		return false;
 	}
 	virtual void BeginContact(b2Contact* contact)  override
 	{
@@ -215,6 +242,7 @@ public:
 		B2_NOT_USED(contact);
 		B2_NOT_USED(impulse);
 	}
+	virtual TestResult TestPassed() const { return TestResult::NONE; }
 
 	void ShiftOrigin(const b2Vec2& newOrigin);
 

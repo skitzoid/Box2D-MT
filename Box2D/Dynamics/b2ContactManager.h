@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -115,10 +115,8 @@ public:
 	b2Contact** GetNonToiBegin();
 	uint32 GetNonToiCount();
 
-	// Reorder contacts when their TOI eligibility changes.
+	// Reorder contacts when TOI eligibility changes.
 	void RecalculateToiCandidacy(b2Body* body);
-	void RecalculateToiCandidacy(b2Fixture* fixture);
-	void RecalculateToiCandidacy(b2Contact* contact);
 
 	b2BroadPhase m_broadPhase;
 	b2Contact* m_contactList;
@@ -126,6 +124,9 @@ public:
 	b2ContactListener* m_contactListener;
 	b2BlockAllocator* m_allocator;
 
+	// This contacts array makes it easier to assign ranges of contacts to different tasks.
+	// Noe: TOI partitioning is also done in this array rather than in the world's contact
+	// list, but it might be better to do that in the contact list.
 	b2GrowableArray<b2Contact*> m_contacts;
 	int32 m_toiCount;
 
@@ -134,6 +135,8 @@ public:
 	bool m_deferCreates;
 
 private:
+	void RecalculateToiCandidacy(b2Fixture* fixture);
+	void RecalculateToiCandidacy(b2Contact* contact);
 	inline void OnContactCreate(b2Contact* contact, b2ContactProxyIds proxyIds);
 	inline void PushContact(b2Contact* contact);
 	inline void RemoveContact(b2Contact* contact);

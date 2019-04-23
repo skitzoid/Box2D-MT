@@ -660,6 +660,10 @@ struct b2PositionSolverManifold
 				normal = -normal;
 			}
 			break;
+
+		default:
+			b2Assert(false);
+			break;
 		}
 	}
 

@@ -1,22 +1,22 @@
 #include "TestMT.h"
 #include <cstdio>
 
-b2Profile ProfileTest(Settings* settings, int32 testIndex)
+static TestResult ProfileTest(Settings* settings, int testIndex, b2Profile* profile)
 {
-    b2Profile avgProfile{};
+    TestResult testResult = TestResult::NONE;
 
     if (settings->mtProfileIterations == 0)
     {
-        return avgProfile;
+        return testResult;
     }
 
     printf("%s profiling: ", g_testEntries[testIndex].name);
     fflush(stdout);
 
-    int32 stepCount = g_testEntries[testIndex].mtStepCount;
+    int stepCount = g_testEntries[testIndex].mtStepCount;
     float32 scale = 1.0f / (settings->mtProfileIterations * stepCount);
 
-    for (int32 testIteration = 0; testIteration < settings->mtProfileIterations; ++testIteration)
+    for (int testIteration = 0; testIteration < settings->mtProfileIterations; ++testIteration)
     {
         const char* s = testIteration == 0 ? "" : ", ";
         printf("%s%d", s, testIteration + 1);
@@ -25,36 +25,39 @@ b2Profile ProfileTest(Settings* settings, int32 testIndex)
         Test* test = g_testEntries[testIndex].createFcn();
         test->SetVisible(false);
 
-        for (int32 i = 0; i < stepCount; ++i)
+        for (int i = 0; i < stepCount; ++i)
         {
             test->Step(settings);
         }
 
+        testResult &= test->TestPassed();
+
         b2Profile totalProfile = test->GetTotalProfile();
 
-        b2AddProfile(avgProfile, totalProfile, scale);
+        b2AddProfile(*profile, totalProfile, scale);
 
         delete test;
     }
 
     printf("\n");
 
-    return avgProfile;
+    return testResult;
 }
 
-int32 CheckInconsistent(Settings* settings, int32 testIndex)
+static TestResult CheckInconsistent(Settings* settings, int testIndex, int* inconsistentStep)
 {
-    int32 inconsistentStep = -1;
+    *inconsistentStep = -1;
+    TestResult testResult = TestResult::NONE;
 
     if (settings->mtConsistencyIterations == 0)
     {
-        return inconsistentStep;
+        return testResult;
     }
 
     printf("%s consistency checks: ", g_testEntries[testIndex].name);
     fflush(stdout);
 
-    for (int32 testIteration = 0; testIteration < settings->mtConsistencyIterations; ++testIteration)
+    for (int testIteration = 0; testIteration < settings->mtConsistencyIterations; ++testIteration)
     {
         const char* s = testIteration == 0 ? "" : ", ";
         printf("%s%d", s, testIteration + 1);
@@ -71,10 +74,10 @@ int32 CheckInconsistent(Settings* settings, int32 testIndex)
         b2ThreadPoolTaskExecutor* executorA = testA->GetExecutor();
         b2ThreadPoolTaskExecutor* executorB = testB->GetExecutor();
 
-        int32 stepCount = g_testEntries[testIndex].mtStepCount;
-        for (int32 i = 0; i < stepCount; ++i)
+        int stepCount = g_testEntries[testIndex].mtStepCount;
+        for (int i = 0; i < stepCount; ++i)
         {
-            int32 seed = (testIteration + 1) * (i + 1);
+            int seed = (testIteration + 1) * (i + 1);
 
             srand(seed);
             testA->Step(settings);
@@ -90,7 +93,7 @@ int32 CheckInconsistent(Settings* settings, int32 testIndex)
                     bodyA->GetAngle() != bodyB->GetAngle() ||
                     bodyA->IsAwake() != bodyB->IsAwake())
                 {
-                    inconsistentStep = i;
+                    *inconsistentStep = i;
                     break;
                 }
 
@@ -99,33 +102,47 @@ int32 CheckInconsistent(Settings* settings, int32 testIndex)
             }
             if (bodyB != nullptr)
             {
-                inconsistentStep = i;
+                *inconsistentStep = i;
                 break;
             }
         }
 
-        if (inconsistentStep != -1)
-        {
-            printf("  - *** FAILED on step %d ***\n", inconsistentStep);
-            break;
-        }
+        testResult &= testA->TestPassed();
+        testResult &= testB->TestPassed();
 
         delete testA;
         delete testB;
+
+        if (*inconsistentStep != -1)
+        {
+            printf("  - *** FAILURE on step %d ***\n", *inconsistentStep);
+            break;
+        }
     }
 
-    printf(" - PASS\n");
+    if (*inconsistentStep == -1)
+    {
+        printf(" - PASS\n");
+    }
 
-    return inconsistentStep;
+    return testResult;
 }
 
-int RunTest(FILE* csv, Settings* settings, int32 testIndex)
+static void RunTest(FILE* csv, Settings* settings, int testIndex, int* inconsistencyCount, int* failCount)
 {
-    b2Profile profile = ProfileTest(settings, testIndex);
-    int32 inconsistentStep = CheckInconsistent(settings, testIndex);
+    b2Profile profile{};
+    TestResult testResult = ProfileTest(settings, testIndex, &profile);
+    int inconsistentStep;
+    testResult &= CheckInconsistent(settings, testIndex, &inconsistentStep);
 
-    fprintf(csv, "%s, %d, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f\n",
+    if (testResult == TestResult::FAIL)
+    {
+        printf("%s - *** TEST FAILED ***\n", g_testEntries[testIndex].name);
+    }
+
+    fprintf(csv, "%s, %s, %d, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f\n",
         g_testEntries[testIndex].name,
+        TestResultString(testResult),
         inconsistentStep,
         profile.step,
         profile.broadphase,
@@ -140,13 +157,14 @@ int RunTest(FILE* csv, Settings* settings, int32 testIndex)
         profile.solveTOI,
         profile.locking);
 
-    if (inconsistentStep == -1)
+    if (inconsistentStep != -1)
     {
-        return 0;
+        *inconsistencyCount += 1;
     }
-    else
+
+    if (testResult == TestResult::FAIL)
     {
-        return 1;
+        *failCount += 1;
     }
 }
 
@@ -160,36 +178,50 @@ void TestMT(Settings* settings, int testIndex)
     strftime(filename, 80, "mt_test_%Y%m%d%H%M%S.csv", now);
     FILE* csv = fopen(filename, "w");
 
-    fputs("Name, First Inconsistent Step, Step, Broadphase, Broadphase Find Contacts, Broadphase Sync Fixtures, Collide, "
+    fputs("Name, Test Result, Inconsistent Index, Step, Broadphase, Broadphase Find Contacts, Broadphase Sync Fixtures, Collide, "
         "Solve, Solve Traversal, Solve Init, Solve Position, Solve Velocity, Solve TOI, Locking\n", csv);
 
     int inconsistencyCount = 0;
+    int failCount = 0;
 
     if (testIndex != -1)
     {
-        inconsistencyCount |= RunTest(csv, settings, testIndex);
+        RunTest(csv, settings, testIndex, &inconsistencyCount, &failCount);
     }
     else
     {
-        for (int32 testIndex = 0; g_testEntries[testIndex].createFcn != nullptr; ++testIndex)
+        for (int testIndex = 0; g_testEntries[testIndex].createFcn != nullptr; ++testIndex)
         {
-            inconsistencyCount |= RunTest(csv, settings, testIndex);
+            RunTest(csv, settings, testIndex, &inconsistencyCount, &failCount);
         }
     }
 
     fclose(csv);
 
-    printf("Tests finished. See %s for results\n", filename);
+    printf("----------------------------------------------------------------\n");
+
+    printf("Tests finished. See %s for details\n", filename);
+
+    if (failCount == 0)
+    {
+        printf("Test result: Success - all tests passed\n");
+    }
+    else
+    {
+        printf("Test result: *** FAILURE *** - %d tests failed\n", failCount);
+    }
 
     if (settings->mtConsistencyIterations > 0)
     {
         if (inconsistencyCount == 0)
         {
-            printf("Success: no inconsistencies found.\n");
+            printf("Consistency result: Success - no inconsistencies found\n");
         }
         else
         {
-            printf("Failure: inconsistencies found in %d tests.\n", inconsistencyCount);
+            printf("Consistency result: *** FAILURE *** - inconsistencies found in %d tests\n", inconsistencyCount);
         }
     }
+
+    printf("----------------------------------------------------------------\n");
 }

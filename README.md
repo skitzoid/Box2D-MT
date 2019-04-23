@@ -1,54 +1,100 @@
 
 # Box2D-MT
-**Box2D-MT is an experimental library that adds multi-threading to Box2D.**
 
-It has no external dependencies and aims to be no less deterministic than Box2D.
+**Box2D with multithreading.**
 
-Before using Box2D-MT you should be familiar with Box2D and multi-threading.
+This project improves performance of Box2D by executing the world's step function on multiple threads.
 
-# Quick Start
-To enable multi-threading, create a thread-pool and pass it to your world's constructor.
+## Usage
+
+Familiarity with Box2D is assumed.
+
+### Task Executor
+
+A task executor runs the tasks submitted to it by the world. You can use your game engine's thread pool by
+implementing b2TaskExecutor, or you can use the provided b2ThreadPoolTaskExecutor.
 
 ```
-b2ThreadPool tp;
-b2World world(gravity, &tp);
+// Create a task executor
+b2ThreadPoolTaskExecutor executor;
+
+// Pass the executor to the world's step function
+world.Step(timeStep, velocityIterations, positionIterations, executor);
 ```
 
-Now when you step the world, the work will be split among all of your cpu's cores.
-The thread pool must remain in scope until the world is destroyed.
+### Multithreaded Callbacks
 
-If you were doing anything interesting in your callbacks, things probably got a little crashy. This is discussed below.
+Box2D-MT adds 4 pure virtual functions to b2ContactListener, which correspond to the Box2D functions.
 
-# Callback Thread-Safety
-Box2D uses various callback functions to let the user respond to events. In Box2D-MT, some of these functions
-are called from multiple threads at the same time, so your callback implementations must practice thread-safety.
+```
+virtual bool BeginContactImmediate(b2Contact* contact, uint32 threadIndex) = 0;
+virtual bool EndContactImmediate(b2Contact* contact, uint32 threadIndex) = 0;
+virtual bool PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold, uint32 threadIndex) = 0;
+virtual bool PostSolveImmediate(b2Contact* contact, const b2ContactImpulse* impulse, uint32 threadIndex) = 0;
+```
 
-Here are some guidelines for relevant callbacks (these are a work in progress and probably not 100% accurate):
+These are called by multiple threads simultaneously, so your implementation must be thread-safe. If your function
+returns true then the arguments will be saved and used to invoke the corresponding non-immediate function after the
+multithreaded work is finished.
 
-**b2ContactFilter::ShouldCollide**: Treat all bodies and joints as read-only. Don't access any contacts.
+Immediate functions can filter events to avoid the overhead of a deferred call. This is more important for PreSolve
+and PostSolve because more contacts receive those calls every step. However, you should start with an implementation
+that returns true for callbacks that you use and false for callbacks you don't use. For example:
 
-**b2ContactListener::BeginContact, b2ContactListener::EndContact, b2ContactListener::Presolve**:
-Treat all bodies and joints as read-only. The provided contact is safe for reads and writes. Don't access any
-other contacts.
+```
+virtual bool BeginContactImmediate(b2Contact* contact, uint32 threadIndex) override
+{
+    // Call BeginContact for every contact.
+    return true;
+}
+virtual bool EndContactImmediate(b2Contact* contact, uint32 threadIndex) override
+{
+    // Call EndContact for every contact.
+    return true;
+}
+virtual bool PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold, uint32 threadIndex) override
+{
+    // Never call PreSolve
+    return false;
+}
+virtual bool PostSolveImmediate(b2Contact* contact, const b2ContactImpulse* impulse, uint32 threadIndex) override
+{
+    // Never call PostSolve
+    return false;
+}
+```
 
-**b2ContactListener::PostSolve**: The provided contact is safe for reads and writes. A dynamic body that is part of
-the provided contact is safe for reads and writes, except for the body's flags, which are read-only. Joints
-attached to the dynamic body are safe for reads and writes. A static body that is part of the provided contact
-is read-only, except for it's flags, which must not be accessed at all. Don't access any other bodies, joints,
-or contacts.
+If your performance is acceptable then you should leave it like that. Otherwise, if profiling shows significant time
+spent in deferred callbacks then you can move work into immediate callbacks, but only if you can do so without causing
+data races. Read the function documentation to see what data is safe to access.
 
-A simple way of avoiding these dangers is to queue up events and process them on a single thread when the world
-is done stepping. There's no need for thread-safe data-structures or mutexes (aqcuiring a mutex in a callback can
-kill performance <sup>[*citation needed*]</sup>). You can use an array of per thread data of size b2_maxThreads, and use b2GetThreadId() to index
-the array.
+## Reproducibility
 
-A later version of Box2D-MT should provide an option to automatically defer callbacks.
+With Box2D, running the same build on the same machine with the same floating point environment will produce the
+same results every time. This is also true for Box2D-MT, but the order of multithreaded callbacks is indeterminate.
+If you rely on reproducibility for features like game replays or multiplayer, then you must ensure that your
+immediate callbacks produce consistent results regardless of the order in which they're called. An easy solution
+is to do all order-dependent work in deferred callbacks.
 
+Box2D-MT is tested for reproducibility on every test in the testbed, but you still might discover inconsistencies;
+if so, please file an issue.
+
+## Thread Error Detection
+
+I use valgrind DRD to test for data races. These kind of tools can't detect atomic variables so they generate false
+positives on conflicting atomic loads and stores. Box2D-MT can be configured to make DRD ignore specific atomic
+variables, which eliminates the false positives. This can help when testing the thread-safety of your program with
+DRD while using b2ThreadPoolTaskExecutor. The DRD configuration also enables symbols, to identify the source of any
+problems in Box2D-MT.
+
+See [Building.md](https://github.com/jhoffman0x/Box2D-MT/blob/master/Building.md) for details on using the DRD configurtion.
+
+Please file an issue if DRD detects any errors in Box2D-MT while running a DRD build, even if they're false positives.
 
 
 ![Box2D Logo](http://box2d.org/images/icon.gif)
 
-# Box2D 
+# Box2D
 
 **Box2D is a 2D physics engine for games.**
 

@@ -74,21 +74,21 @@ public:
 		}
 	}
 
-	b2ImmediateCallbackResult PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold, uint32 threadId) override
+	bool PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold, uint32 threadId) override
 	{
-		b2ImmediateCallbackResult result = Test::PreSolveImmediate(contact, oldManifold, threadId);
+		bool callDeferred = Test::PreSolveImmediate(contact, oldManifold, threadId);
 
 		b2Fixture* fixtureA = contact->GetFixtureA();
 		b2Fixture* fixtureB = contact->GetFixtureB();
 
 		if (fixtureA != m_platform && fixtureA != m_character)
 		{
-			return result;
+			return callDeferred;
 		}
 
 		if (fixtureB != m_platform && fixtureB != m_character)
 		{
-			return result;
+			return callDeferred;
 		}
 
 #if 1
@@ -108,7 +108,7 @@ public:
             contact->SetEnabled(false);
         }
 #endif
-		return result;
+		return callDeferred;
 	}
 
 	void Step(Settings* settings)

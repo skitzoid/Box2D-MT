@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2019 Justin Hoffman https://github.com/skitzoid/Box2D-MT
+* Copyright (c) 2019 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -15,11 +15,13 @@
 * misrepresented as being the original software.
 * 3. This notice may not be removed or altered from any source distribution.
 */
-#pragma once
+
+#ifndef B2_TASK_EXECUTOR_H
+#define B2_TASK_EXECUTOR_H
 
 #include "Box2D/MT/b2Threading.h"
 
-struct b2Profile;
+class b2World;
 
 /// The base class for task executors.
 class b2TaskExecutor
@@ -30,16 +32,16 @@ public:
 	/// Must be between 1 and b2_maxThreads.
 	virtual uint32 GetThreadCount() const = 0;
 
-	/// Called when the step begins.
-	virtual void StepBegin()
+	/// Called when a world's step begins.
+	virtual void StepBegin(b2World& world)
 	{
-
+		B2_NOT_USED(world);
 	}
 
-	/// Called when the step ends.
-	virtual void StepEnd(b2Profile& profile)
+	/// Called when a world's step ends.
+	virtual void StepEnd(b2World& world)
 	{
-		B2_NOT_USED(profile);
+		B2_NOT_USED(world);
 	}
 
 	/// Create a task group.
@@ -88,3 +90,5 @@ public:
 		B2_NOT_USED(ctx);
 	}
 };
+
+#endif

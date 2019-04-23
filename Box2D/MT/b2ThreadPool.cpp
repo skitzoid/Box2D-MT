@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2019 Justin Hoffman https://github.com/skitzoid/Box2D-MT
+* Copyright (c) 2019 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -21,6 +21,7 @@
 #include "Box2D/Common/b2Math.h"
 #include "Box2D/Common/b2StackAllocator.h"
 #include "Box2D/Dynamics/b2TimeStep.h"
+#include "Box2D/Dynamics/b2World.h"
 
 // Prevent false positives when testing with DRD.
 #ifdef b2_drd
@@ -312,20 +313,16 @@ void b2ThreadPool::Shutdown()
 	}
 }
 
-void b2ThreadPoolTaskExecutor::StepBegin()
+void b2ThreadPoolTaskExecutor::StepBegin(b2World& world)
 {
+	B2_NOT_USED(world);
 	m_threadPool.StartBusyWaiting();
-	m_threadPool.ResetTimers();
 }
 
-void b2ThreadPoolTaskExecutor::StepEnd(b2Profile& profile)
+void b2ThreadPoolTaskExecutor::StepEnd(b2World& world)
 {
-	profile.locking = m_threadPool.GetLockMilliseconds();
-
-	if (m_continuousBusyWait == false)
-	{
-		m_threadPool.StopBusyWaiting();
-	}
+	B2_NOT_USED(world);
+	m_threadPool.StopBusyWaiting();
 }
 
 b2TaskGroup b2ThreadPoolTaskExecutor::CreateTaskGroup(b2StackAllocator& allocator)

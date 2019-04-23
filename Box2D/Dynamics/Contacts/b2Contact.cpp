@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -252,7 +252,7 @@ void b2Contact::UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener*
 
 	if (wasTouching == false && touching == true && listener)
 	{
-		if (listener->BeginContactImmediate(this, threadId) == b2ImmediateCallbackResult::CALL_DEFERRED)
+		if (listener->BeginContactImmediate(this, threadId))
 		{
 			if (isSingleThread)
 			{
@@ -267,7 +267,7 @@ void b2Contact::UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener*
 
 	if (wasTouching == true && touching == false && listener)
 	{
-		if (listener->EndContactImmediate(this, threadId) == b2ImmediateCallbackResult::CALL_DEFERRED)
+		if (listener->EndContactImmediate(this, threadId))
 		{
 			if (isSingleThread)
 			{
@@ -282,7 +282,7 @@ void b2Contact::UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener*
 
 	if (sensor == false && touching && listener)
 	{
-		if (listener->PreSolveImmediate(this, &oldManifold, threadId) == b2ImmediateCallbackResult::CALL_DEFERRED)
+		if (listener->PreSolveImmediate(this, &oldManifold, threadId))
 		{
 			if (isSingleThread)
 			{
@@ -295,4 +295,30 @@ void b2Contact::UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener*
 			}
 		}
 	}
+}
+
+bool b2Contact::IsToiCandidate(b2Fixture* fA, b2Fixture* fB)
+{
+	if (fA->IsSensor() == false && fB->IsSensor() == false)
+	{
+		b2Body* bA = fA->GetBody();
+		b2Body* bB = fB->GetBody();
+
+		if (bA->IsBullet() || bB->IsBullet())
+		{
+			return true;
+		}
+		else
+		{
+			bool includesNonDynamic = bA->GetType() != b2_dynamicBody || bB->GetType() != b2_dynamicBody;
+			bool bothPreferCCD = bA->GetPreferNoCCD() == false && bB->GetPreferNoCCD() == false;
+
+			if (includesNonDynamic && bothPreferCCD)
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
 }

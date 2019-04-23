@@ -67,6 +67,7 @@
 #include "TheoJansen.h"
 #include "Tiles.h"
 #include "TimeOfImpact.h"
+#include "TunnelingTest.h"
 #include "Tumbler.h"
 #include "VaryingFriction.h"
 #include "VaryingRestitution.h"
@@ -76,6 +77,7 @@
 TestEntry g_testEntries[] =
 {
 	{"Multithread Demo", MultithreadDemo::Create, 1800},
+	{"Tunneling Test", TunnelingTest::Create, 1800},
 	{"Shape Cast", ShapeCast::Create, 60},
 	{"Time of Impact", TimeOfImpact::Create, 60},
 	{"Character Collision", CharacterCollision::Create, 240},
@@ -86,7 +88,7 @@ TestEntry g_testEntries[] =
 	{"Basic Slider Crank", BasicSliderCrank::Create, 480},
 	{"Slider Crank", SliderCrank::Create, 480},
 	{"Sphere Stack", SphereStack::Create, 480},
-	{"Convex Hull", ConvexHull::Create, 1},
+	{"Convex Hull", ConvexHull::Create, 60},
 	{"Tumbler", Tumbler::Create, 1800},
 	{"Ray-Cast", RayCast::Create, 240},
 	{"Dump Shell", DumpShell::Create, 240},

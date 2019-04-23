@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2011 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -194,6 +194,9 @@ public:
 	/// Is the world locked (in the middle of a time step).
 	bool IsLocked() const;
 
+	/// Is the world multithreaded-locked (in the middle of a multithreaded portion of the time step).
+	bool IsMtLocked() const;
+
 	/// Is multi-threaded stepping enabled?
 	bool IsMultithreadedStepEnabled() const;
 
@@ -214,6 +217,10 @@ public:
 	/// Get the current profile.
 	const b2Profile& GetProfile() const;
 
+	/// Set the amount of time (milliseconds) an executor spent locking during the last step.
+	/// This is used in the testbed but custom executors aren't required to call this.
+	void SetLockingTime(float32 ms);
+
 	/// Dump the world into the log file.
 	/// @warning this should be called outside of a time step.
 	void Dump();
@@ -223,9 +230,12 @@ private:
 	// m_flags
 	enum
 	{
-		e_newFixture	= 0x0001,
-		e_locked		= 0x0002,
-		e_clearForces	= 0x0004
+		e_newFixture			= 0x0001,
+		e_locked				= 0x0002,
+		e_clearForces			= 0x0004,
+		e_mtLocked				= 0x0008,
+		e_mtCollisionLocked		= 0x0010,
+		e_mtSolveLocked			= 0x0020,
 	};
 
 	friend class b2Body;
@@ -261,6 +271,10 @@ private:
 
 	void DrawJoint(b2Joint* joint);
 	void DrawShape(b2Fixture* shape, const b2Transform& xf, const b2Color& color);
+
+	void SetMtLock(int32 lockFlags);
+	bool IsMtCollisionLocked() const;
+	bool IsMtSolveLocked() const;
 
 	b2BlockAllocator m_blockAllocator;
 	b2StackAllocator m_stackAllocator;
@@ -358,6 +372,11 @@ inline bool b2World::IsLocked() const
 	return (m_flags & e_locked) == e_locked;
 }
 
+inline bool b2World::IsMtLocked() const
+{
+	return (m_flags & e_mtLocked) == e_mtLocked;
+}
+
 inline void b2World::SetAutoClearForces(bool flag)
 {
 	if (flag)
@@ -384,6 +403,30 @@ inline const b2ContactManager& b2World::GetContactManager() const
 inline const b2Profile& b2World::GetProfile() const
 {
 	return m_profile;
+}
+
+inline void b2World::SetLockingTime(float32 ms)
+{
+	m_profile.locking = ms;
+}
+
+inline void b2World::SetMtLock(int32 lockFlags)
+{
+	constexpr int32 mask = (e_mtLocked | e_mtCollisionLocked | e_mtSolveLocked);
+	b2Assert((lockFlags & mask) == lockFlags);
+
+	m_flags &= ~mask;
+	m_flags |= lockFlags & mask;
+}
+
+inline bool b2World::IsMtCollisionLocked() const
+{
+	return (m_flags & e_mtCollisionLocked) == e_mtCollisionLocked;
+}
+
+inline bool b2World::IsMtSolveLocked() const
+{
+	return (m_flags & e_mtSolveLocked) == e_mtSolveLocked;
 }
 
 #endif

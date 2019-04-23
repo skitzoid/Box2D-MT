@@ -30,6 +30,9 @@ int main(int argc, char** argv)
 	B2_NOT_USED(argc);
 	B2_NOT_USED(argv);
 
+	// Construct the thread pool that will execute the world's step tasks.
+	b2ThreadPoolTaskExecutor threadPoolExecutor;
+
 	// Define the gravity vector.
 	b2Vec2 gravity(0.0f, -10.0f);
 
@@ -83,9 +86,6 @@ int main(int argc, char** argv)
 	float32 timeStep = 1.0f / 60.0f;
 	int32 velocityIterations = 6;
 	int32 positionIterations = 2;
-
-	// Construct the thread pool that will execute the world's step tasks.
-	b2ThreadPoolTaskExecutor threadPoolExecutor;
 
 	// This is our little game loop.
 	for (int32 i = 0; i < 60; ++i)

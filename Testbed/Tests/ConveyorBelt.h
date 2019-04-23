@@ -64,9 +64,9 @@ public:
 		}
 	}
 
-	b2ImmediateCallbackResult PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold, uint32 threadId) override
+	bool PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold, uint32 threadId) override
 	{
-		b2ImmediateCallbackResult result = Test::PreSolveImmediate(contact, oldManifold, threadId);
+		bool callDeferred = Test::PreSolveImmediate(contact, oldManifold, threadId);
 
 		b2Fixture* fixtureA = contact->GetFixtureA();
 		b2Fixture* fixtureB = contact->GetFixtureB();
@@ -81,7 +81,7 @@ public:
 			contact->SetTangentSpeed(-5.0f);
 		}
 
-		return result;
+		return callDeferred;
 	}
 
 	void Step(Settings* settings)
