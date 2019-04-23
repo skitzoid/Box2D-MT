@@ -328,7 +328,7 @@ public:
 	b2BodyType GetType() const;
 
 	/// Should this body only use continuous collision detection when colliding
-	/// with bullet bodies? This can be applied to any type of body.
+	/// with bullet bodies?
 	/// @warning This function is locked during multithreaded callbacks.
 	void SetPreferNoCCD(bool flag);
 
