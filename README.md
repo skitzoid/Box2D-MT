@@ -165,18 +165,18 @@ Without this you would typically have one static body that has fixtures for your
 world's geometry. If you use this feature, then you'll have an extra static body
 with the PreferNoCCD flag applied, and you'll add your thick geometry to this body.
 
-(The names of those functions and their exact functionality are subject to change.
-Suggestions are welcome.)
+The names of those functions and their exact functionality are subject to change.
+Suggestions are welcome.
 
 ### Partitioning Contacts Based on TOI Eligibility
 
-In Box2D, when you have a lot of contacts it can be expensive even when few (or
-none) of them are actually eligible for TOI (because both bodies are non-bullet
-dynamic, or one of the fixtures is a sensor). This can be seen in the Tumber
+In Box2D, TOI can be expensive when there's many contacts, even when few or
+none of them are actually eligible for TOI (because both bodies are non-bullet
+dynamic, or one of the fixtures is a sensor). This can be seen in the Tumbler
 test, where on my system SolveTOI accounts for roughly 10% of the step time
 despite all contacts being between non-bullet dynamic bodies and thus ineligible
-for TOI. (Of course in that case you could just disable TOI, but in practice
-it's common to have many ineligible contacts when you still need TOI.)
+for TOI. Of course in that case you could just disable TOI, but in practice
+it's common to have many ineligible contacts when you still need TOI.
 
 In Box2D's SolveTOI, in order to determine that a contact is ineligible due to
 both bodies being dynamic, you need to first read the contact pointer, then read
