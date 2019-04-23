@@ -12,9 +12,7 @@ Familiarity with Box2D is assumed. These are the main differences.
 
 ### Task Executor
 
-A task executor runs the tasks submitted to it by the world. Box2D-MT comes with
-a thread pool task executor, but you could use your game engine's thread pool
-instead by implementing b2TaskExecutor.
+A task executor runs the tasks submitted to it by the world.
 
 ```
 // Create a task executor
@@ -23,6 +21,9 @@ b2ThreadPoolTaskExecutor executor;
 // Pass the executor to the world's step function
 world.Step(timeStep, velocityIterations, positionIterations, executor);
 ```
+
+Box2D-MT comes with a thread pool task executor, but you could use your
+game engine's thread pool instead by implementing b2TaskExecutor
 
 ### Multithreaded Callbacks
 
@@ -115,31 +116,6 @@ b2WorldCallbacks.h to see what data is safe to access.
 I'm open to suggestions on changes to the contact listener interface, so create
 an issue if you want to discuss it.
 
-## Thread Error Detection
-
-I use valgrind DRD to test for data races. These kind of tools can't detect
-atomic variables so they generate false positives on conflicting atomic loads
-and stores. Box2D-MT can be configured to make DRD ignore specific atomic
-variables, which eliminates the false positives. This can help when testing the
-thread-safety of your program with DRD while using b2ThreadPoolTaskExecutor. The
-DRD configuration also enables symbols, to identify the source of any problems
-in Box2D-MT.
-
-See [Building.md](https://github.com/jhoffman0x/Box2D-MT/blob/master/Building.md) for details on using the DRD configurtion.
-
-## Reproducibility
-
-With Box2D, running the same build on the same machine with the same floating
-point environment will produce the same results every time. This is also true
-for Box2D-MT*, but the order of multithreaded callbacks is indeterminate. If
-you rely on reproducibility for features like game replays or multiplayer, then
-you must ensure that your immediate callbacks produce consistent results
-regardless of the order in which they're called. An easy solution is to do all
-order-dependent work in deferred callbacks.
-
-*It's tested for reproducibility on every test in the testbed, but that's still
-a small subset of use cases. Create an issue if you identify any inconsistencies.
-
 ## Time of Impact (TOI) Changes
 
 Since TOI is still processed on a single thread, it's important that it doesn't
@@ -191,6 +167,31 @@ infrequently; b2Fixture::SetSensor, b2Body::SetBullet, and b2Body::SetPreferNoCC
 must traverse the body's contacts to re-evaluate TOI eligibility, however, in
 typical use cases the added cost to these functions is negligible compared to the
 savings in SolveTOI.
+
+## Thread Error Detection
+
+I use valgrind DRD to test for data races. These kind of tools can't detect
+atomic variables so they generate false positives on conflicting atomic loads
+and stores. Box2D-MT can be configured to make DRD ignore specific atomic
+variables, which eliminates the false positives. This can help when testing the
+thread-safety of your program with DRD while using b2ThreadPoolTaskExecutor. The
+DRD configuration also enables symbols, to identify the source of any problems
+in Box2D-MT.
+
+See [Building.md](https://github.com/jhoffman0x/Box2D-MT/blob/master/Building.md) for details on using the DRD configurtion.
+
+## Reproducibility
+
+With Box2D, running the same build on the same machine with the same floating
+point environment will produce the same results every time. This is also true
+for Box2D-MT*, but the order of multithreaded callbacks is indeterminate. If
+you rely on reproducibility for features like game replays or multiplayer, then
+you must ensure that your immediate callbacks produce consistent results
+regardless of the order in which they're called. An easy solution is to do all
+order-dependent work in deferred callbacks.
+
+*It's tested for reproducibility on every test in the testbed, but that's still
+a small subset of use cases. Create an issue if you identify any inconsistencies.
 
 ## License
 
