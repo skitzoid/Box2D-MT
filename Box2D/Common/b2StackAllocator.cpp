@@ -51,6 +51,11 @@ void* b2StackAllocator::Allocate(int32 size)
 		m_index += size;
 	}
 
+#if defined(b2_assertStackAllocatorNoMalloc)
+	// Increase b2_stackSize or undefine b2_assertStackAllocatorNoMalloc in b2Settings.h
+	b2Assert(entry->usedMalloc == false);
+#endif
+
 	m_allocation += size;
 	m_maxAllocation = b2Max(m_maxAllocation, m_allocation);
 	++m_entryCount;

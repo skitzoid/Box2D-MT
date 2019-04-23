@@ -21,7 +21,7 @@
 
 #include "Box2D/Common/b2Settings.h"
 
-const int32 b2_stackSize = 100 * 1024;	// 100k
+const int32 b2_stackSize = 1024 * 1024;
 const int32 b2_maxStackEntries = 32;
 
 struct b2StackEntry

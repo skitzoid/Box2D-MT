@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2008-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -61,7 +61,16 @@ public:
 		m_broke = false;
 	}
 
-	void PostSolve(b2Contact* contact, const b2ContactImpulse* impulse)
+	// Here we return true so that PostSolve will be called (from a single thread).
+	bool PostSolveImmediate(b2Contact* contact, const b2ContactImpulse* impulse, uint32 threadId) override
+	{
+		B2_NOT_USED(contact);
+		B2_NOT_USED(impulse);
+		B2_NOT_USED(threadId);
+		return true;
+	}
+
+	void PostSolve(b2Contact* contact, const b2ContactImpulse* impulse) override
 	{
 		if (m_broke)
 		{
@@ -106,7 +115,7 @@ public:
 		// cached velocity.
 		b2Vec2 center1 = body1->GetWorldCenter();
 		b2Vec2 center2 = body2->GetWorldCenter();
-		
+
 		b2Vec2 velocity1 = m_velocity + b2Cross(m_angularVelocity, center1 - center);
 		b2Vec2 velocity2 = m_velocity + b2Cross(m_angularVelocity, center2 - center);
 
@@ -150,7 +159,7 @@ public:
 	b2Fixture* m_piece2;
 
 	bool m_broke;
-	std::atomic<bool> m_break;
+	bool m_break;
 };
 
 #endif

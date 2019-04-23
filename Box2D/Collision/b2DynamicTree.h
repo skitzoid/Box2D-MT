@@ -166,7 +166,7 @@ inline const b2AABB& b2DynamicTree::GetFatAABB(int32 proxyId) const
 }
 
 template <typename T>
-inline void b2DynamicTree::Query(T* callback, const b2AABB& aabb) const
+b2_forceInline void b2DynamicTree::Query(T* callback, const b2AABB& aabb) const
 {
 	b2GrowableStack<int32, 256> stack;
 	stack.Push(m_root);

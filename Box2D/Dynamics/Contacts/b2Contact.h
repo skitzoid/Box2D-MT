@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -23,6 +23,7 @@
 #include "Box2D/Common/b2Math.h"
 #include "Box2D/Collision/b2Collision.h"
 #include "Box2D/Collision/Shapes/b2Shape.h"
+#include "Box2D/Collision/b2BroadPhase.h"
 #include "Box2D/Dynamics/b2Fixture.h"
 
 class b2Body;
@@ -32,6 +33,7 @@ class b2World;
 class b2BlockAllocator;
 class b2StackAllocator;
 class b2ContactListener;
+struct b2ContactManagerPerThreadData;
 
 /// Friction mixing law. The idea is to allow either fixture to drive the friction to zero.
 /// For example, anything slides on ice.
@@ -57,6 +59,21 @@ struct b2ContactRegister
 	b2ContactCreateFcn* createFcn;
 	b2ContactDestroyFcn* destroyFcn;
 	bool primary;
+};
+
+/// Stores the proxy ids of a contact's fixtures in a consistent order.
+struct b2ContactProxyIds
+{
+	b2ContactProxyIds()
+		: low(b2BroadPhase::e_nullProxy)
+		, high(b2BroadPhase::e_nullProxy)
+	{}
+	b2ContactProxyIds(int32 proxyIdA, int32 proxyIdB)
+		: low(proxyIdA < proxyIdB ? proxyIdA : proxyIdB)
+		, high(proxyIdA < proxyIdB ? proxyIdB : proxyIdA)
+	{}
+	int32 low;
+	int32 high;
 };
 
 /// A contact edge is used to connect bodies and contacts together
@@ -151,7 +168,8 @@ protected:
 	friend class b2ContactSolver;
 	friend class b2Body;
 	friend class b2Fixture;
-	friend class b2ClearContactIslandFlagsTask;
+	friend class b2ContactPreSolveTask;
+	friend bool b2ContactPointerLessThan(const b2Contact* l, const b2Contact* r);
 
 	// Flags stored in m_flags
 	enum
@@ -192,16 +210,20 @@ protected:
 	b2Contact(b2Fixture* fixtureA, int32 indexA, b2Fixture* fixtureB, int32 indexB);
 	virtual ~b2Contact() {}
 
-	bool Update(b2ContactListener* listener, bool canWakeBodies);
+	void Update(b2ContactManagerPerThreadData& td, b2ContactListener* listener, uint32 threadId);
+	void Update(b2ContactListener* listener);
+
+	template <bool isSingleThread>
+	void UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener* listener, uint32 threadId);
+
+	static bool IsToiCandidate(b2Fixture* fA, b2Fixture* fB);
 
 	static b2ContactRegister s_registers[b2Shape::e_typeCount][b2Shape::e_typeCount];
 	static bool s_initialized;
 
 	uint32 m_flags;
 
-	// World pool and list pointers.
-	b2Contact* m_prev;
-	b2Contact* m_next;
+	int32 m_managerIndex;
 
 	// Nodes for connecting bodies.
 	b2ContactEdge m_nodeA;
@@ -213,6 +235,8 @@ protected:
 	int32 m_indexA;
 	int32 m_indexB;
 
+	b2ContactProxyIds m_proxyIds;
+
 	b2Manifold m_manifold;
 
 	int32 m_toiCount;
@@ -223,8 +247,30 @@ protected:
 
 	float32 m_tangentSpeed;
 
-	int32 m_managerIndex;
+	// World pool and list pointers.
+	b2Contact* m_prev;
+	b2Contact* m_next;
 };
+
+inline bool operator==(const b2ContactProxyIds& lhs, const b2ContactProxyIds& rhs)
+{
+	return lhs.low == rhs.low && lhs.high == rhs.high;
+}
+
+inline bool operator<(const b2ContactProxyIds& lhs, const b2ContactProxyIds& rhs)
+{
+	if (lhs.low < rhs.low)
+	{
+		return true;
+	}
+
+	if (lhs.low == rhs.low)
+	{
+		return lhs.high < rhs.high;
+	}
+
+	return false;
+}
 
 inline b2Manifold* b2Contact::GetManifold()
 {

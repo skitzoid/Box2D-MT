@@ -2,29 +2,42 @@
 -- https://premake.github.io/
 
 workspace 'Box2D'
+	newoption
+	{
+		trigger     = 'drd',
+		description = 'Make a DRD configuration that prevents false positives from b2ThreadPool (valgrind must be installed).'
+	}
+	filter 'options:drd'
+		configurations { 'drd' }
+	filter {}
+
 	configurations { 'Debug', 'Release' }
 	startproject 'Testbed'
 	location 'Build'
-	symbols 'On'
 	warnings 'Extra'
-    cppdialect 'C++11'
+	cppdialect 'C++11'
 
-    filter 'system:linux'
-        platforms { 'x86_64' }
-    filter 'system:macosx'
-        platforms { 'x86_64' }
-    filter 'system:windows'
-        platforms { 'x86', 'x86_64' }
-        defaultplatform 'x86_64'
+	filter 'system:linux'
+		platforms { 'x86_64' }
+	filter 'system:macosx'
+		platforms { 'x86_64' }
+	filter 'system:windows'
+		platforms { 'x86', 'x86_64' }
+		defaultplatform 'x86_64'
 		defines { '_CRT_SECURE_NO_WARNINGS' }
 	filter {}
 
 	filter 'configurations:Debug'
 	 	defines { 'DEBUG' }
 		optimize 'Off'
+		symbols 'On'
 	filter 'configurations:Release'
 		defines { 'NDEBUG' }
 		optimize 'On'
+	filter 'configurations:drd'
+		defines { 'NDEBUG', 'b2_drd' }
+		optimize 'On'
+		symbols 'On'
 	filter {}
 
 project 'Box2D'
@@ -37,7 +50,7 @@ project 'HelloWorld'
 	files { 'HelloWorld/HelloWorld.cpp' }
 	includedirs { '.' }
 	links { 'Box2D' }
-    filter { 'system:linux' }
+	filter { 'system:linux' }
 	links { 'pthread' }
 
 project 'Testbed'
@@ -64,10 +77,10 @@ project 'Testbed'
 		'Testbed/imgui/*'
 	}
 
-    filter { 'system:windows' }
-    	files
-    	{ 
-    		'Testbed/glad/*',
+	filter { 'system:windows' }
+		files
+		{
+			'Testbed/glad/*',
 			'Testbed/glfw/win32_platform.h',
 			'Testbed/glfw/win32_joystick.h',
 			'Testbed/glfw/wgl_context.h',
@@ -81,10 +94,10 @@ project 'Testbed'
 			'Testbed/glfw/wgl_context.c',
 			'Testbed/glfw/egl_context.c'
 		}
-    	links { 'Box2D', 'opengl32', 'winmm' }
+		links { 'Box2D', 'opengl32', 'winmm' }
 
-    filter { 'system:macosx' }
-    	files
+	filter { 'system:macosx' }
+		files
 		{
 			'Testbed/glfw/cocoa_platform.h',
 			'Testbed/glfw/iokit_joystick.h',
@@ -110,12 +123,12 @@ project 'Testbed'
 			'CoreFoundation.framework',
 			'CoreVideo.framework'
 		}
-    
-    filter { 'system:linux' }
-    	files
-    	{
-    		'Testbed/glad/*',
-    		'Testbed/glfw/x11_platform.h',
+
+	filter { 'system:linux' }
+		files
+		{
+			'Testbed/glad/*',
+			'Testbed/glfw/x11_platform.h',
 			'Testbed/glfw/xkb_unicode.h',
 			'Testbed/glfw/linux_joystick.h',
 			'Testbed/glfw/posix_time.h',
@@ -146,5 +159,5 @@ project 'Testbed'
 			'pthread',
 			'dl'
 		}
-	
+
 	filter {}

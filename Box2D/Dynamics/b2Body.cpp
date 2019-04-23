@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2007 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -131,7 +131,7 @@ void b2Body::SetType(b2BodyType type)
 	if (m_type == b2_staticBody)
 	{
 		// Remove from static bodies.
-		m_world->m_staticBodies.Peek()->m_worldIndex = m_worldIndex;
+		m_world->m_staticBodies.Back()->m_worldIndex = m_worldIndex;
 		m_world->m_staticBodies.RemoveAndSwap(m_worldIndex);
 
 		// Add to non static bodies.
@@ -152,7 +152,7 @@ void b2Body::SetType(b2BodyType type)
 		SynchronizeFixtures();
 
 		// Remove from non static bodies.
-		m_world->m_nonStaticBodies.Peek()->m_worldIndex = m_worldIndex;
+		m_world->m_nonStaticBodies.Back()->m_worldIndex = m_worldIndex;
 		m_world->m_nonStaticBodies.RemoveAndSwap(m_worldIndex);
 
 		// Add to static bodies.
@@ -237,7 +237,7 @@ b2Fixture* b2Body::CreateFixture(const b2Shape* shape, float32 density)
 
 void b2Body::DestroyFixture(b2Fixture* fixture)
 {
-	if (fixture == NULL)
+	if (fixture == nullptr)
 	{
 		return;
 	}
@@ -309,6 +309,11 @@ void b2Body::DestroyFixture(b2Fixture* fixture)
 
 void b2Body::ResetMassData()
 {
+	if (VerifyMtUnlocked() == false)
+	{
+		return;
+	}
+
 	// Compute mass data from shapes. Each shape has its own density.
 	m_mass = 0.0f;
 	m_invMass = 0.0f;
@@ -469,6 +474,8 @@ void b2Body::SetTransform(const b2Vec2& position, float32 angle)
 
 void b2Body::SynchronizeFixtures()
 {
+	b2Assert(m_world->IsMtLocked() == false);
+
 	b2Transform xf1;
 	xf1.q.Set(m_sweep.a0);
 	xf1.p = m_sweep.c0 - b2Mul(xf1.q, m_sweep.localCenter);
@@ -485,6 +492,11 @@ void b2Body::SetActive(bool flag)
 	b2Assert(m_world->IsLocked() == false);
 
 	if (flag == IsActive())
+	{
+		return;
+	}
+
+	if (m_world->IsLocked() == true)
 	{
 		return;
 	}
@@ -533,6 +545,13 @@ void b2Body::SetFixedRotation(bool flag)
 		return;
 	}
 
+	// This isn't safe to call from a multithreaded callback.
+	b2Assert(m_world->IsMtLocked() == false);
+	if (m_world->IsMtLocked())
+	{
+		return;
+	}
+
 	if (flag)
 	{
 		m_flags |= e_fixedRotationFlag;
@@ -547,9 +566,93 @@ void b2Body::SetFixedRotation(bool flag)
 	ResetMassData();
 }
 
+void b2Body::SetPreferNoCCD(bool flag)
+{
+	bool status = (m_flags & e_preferNoCCDFlag) == e_preferNoCCDFlag;
+	if (status == flag)
+	{
+		return;
+	}
+
+	// This isn't safe to call from a multithreaded callback.
+	b2Assert(m_world->IsMtLocked() == false);
+	if (m_world->IsMtLocked())
+	{
+		return;
+	}
+
+	if (flag)
+	{
+		m_flags |= e_preferNoCCDFlag;
+	}
+	else
+	{
+		m_flags &= ~e_preferNoCCDFlag;
+	}
+
+	m_world->RecalculateToiCandidacy(this);
+}
+
+void b2Body::SetBullet(bool flag)
+{
+	b2Assert (m_world->IsMtLocked() == false);
+
+	bool status = (m_flags & e_bulletFlag) == e_bulletFlag;
+	if (status == flag)
+	{
+		return;
+	}
+
+	// This isn't safe to call from a multithreaded callback.
+	b2Assert(m_world->IsMtLocked() == false);
+	if (m_world->IsMtLocked())
+	{
+		return;
+	}
+
+	if (flag)
+	{
+		m_flags |= e_bulletFlag;
+	}
+	else
+	{
+		m_flags &= ~e_bulletFlag;
+	}
+
+	m_world->RecalculateToiCandidacy(this);
+}
+
+bool b2Body::VerifyMtUnlocked()
+{
+	if (m_type != b2_staticBody)
+	{
+		// Non-static bodies can't be modified while multithread is locked for collision.
+		// They're safe to modify while locked for solve, assuming they're within the same
+		// island as the PostSolve contact.
+		return VerifyMtCollisionUnlocked();
+	}
+	// Static bodies can't be modified while multithread is locked.
+	b2Assert(m_world->IsMtLocked() == false);
+	if (m_world->IsMtLocked())
+	{
+		return false;
+	}
+	return true;
+}
+
+bool b2Body::VerifyMtCollisionUnlocked()
+{
+	b2Assert(m_world->IsMtCollisionLocked() == false);
+	if (m_world->IsMtCollisionLocked())
+	{
+		return false;
+	}
+	return true;
+}
+
 void b2Body::Dump()
 {
-	int32 bodyIndex = GetIslandIndex();
+	int32 bodyIndex = GetIslandIndex(0);
 
 	b2Log("{\n");
 	b2Log("  b2BodyDef bd;\n");

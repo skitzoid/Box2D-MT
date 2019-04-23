@@ -1,5 +1,4 @@
 /*
-* Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
 * Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
@@ -17,36 +16,40 @@
 * 3. This notice may not be removed or altered from any source distribution.
 */
 
-#include "Box2D/Common/b2Settings.h"
-#include <stdio.h>
-#include <stdarg.h>
-#include <stdlib.h>
+#include "Box2D/Dynamics/b2TimeStep.h"
+#include "Box2D/MT/b2Threading.h"
 
-b2Version b2_mtVersion = { 0, 1, 0 };
-
-b2Version b2_version = { 2, 3, 2 };
-
-int32 b2GetIslandCost(int32 bodyCount, int32 contactCount, int32 jointCount)
+void b2PartitionRange(uint32 begin, uint32 end, uint32 targetOutputCount, b2PartitionedRange& output)
 {
-	return bodyCount + contactCount * 10 + jointCount * 10;
-}
+	b2Assert(targetOutputCount <= b2_partitionRangeMaxOutput);
+	b2Assert(begin < end);
 
-// Memory allocators. Modify these to use your own allocator.
-void* b2Alloc(int32 size)
-{
-	return malloc(size);
-}
+	uint32 elementCount = end - begin;
 
-void b2Free(void* mem)
-{
-	free(mem);
-}
+	uint32 elementsPerTask = elementCount / targetOutputCount;
+	uint32 elementsRemainder = elementCount % targetOutputCount;
 
-// You can modify this to use your logging facility.
-void b2Log(const char* string, ...)
-{
-	va_list args;
-	va_start(args, string);
-	vprintf(string, args);
-	va_end(args);
+	uint32 beginIndex = begin;
+	uint32 endIndex = 0;
+	for (uint32 i = 0; i < targetOutputCount; ++i)
+	{
+		uint32 rangeSize = elementsPerTask;
+		if (i < elementsRemainder)
+		{
+			rangeSize += 1;
+		}
+		endIndex = beginIndex + rangeSize;
+		if (endIndex > elementCount)
+		{
+			endIndex = elementCount;
+		}
+		output[output.count].begin = beginIndex;
+		output[output.count].end = endIndex;
+		output.count += 1;
+		if (endIndex == elementCount)
+		{
+			break;
+		}
+		beginIndex = endIndex;
+	}
 }

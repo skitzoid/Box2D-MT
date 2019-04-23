@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -65,40 +65,34 @@ void b2BroadPhase::TouchProxy(int32 proxyId)
 
 void b2BroadPhase::BufferMove(int32 proxyId)
 {
-	int32 threadId = b2GetThreadId();
-
-	m_perThreadData[threadId].m_moveBuffer.Push(proxyId);
+	m_moveBuffer.Push(proxyId);
 }
 
 void b2BroadPhase::UnBufferMove(int32 proxyId)
 {
-	b2BroadPhasePerThreadData* td = m_perThreadData + b2GetThreadId();
-
-	for (int32 i = 0; i < td->m_moveBuffer.GetCount(); ++i)
+	for (int32 i = 0; i < m_moveBuffer.GetCount(); ++i)
 	{
-		if (td->m_moveBuffer.At(i) == proxyId)
+		if (m_moveBuffer[i] == proxyId)
 		{
-			td->m_moveBuffer.At(i) = e_nullProxy;
+			m_moveBuffer[i] = e_nullProxy;
 		}
 	}
 }
 
 // This is called from b2DynamicTree::Query when we are gathering pairs.
-bool b2BroadPhase::QueryCallback(int32 proxyId)
+bool b2BroadPhasePerThreadData::QueryCallback(int32 proxyId)
 {
-	b2BroadPhasePerThreadData* td = m_perThreadData + b2GetThreadId();
-
 	// A proxy cannot form a pair with itself.
-	if (proxyId == td->m_queryProxyId)
+	if (proxyId == m_queryProxyId)
 	{
 		return true;
 	}
 
 	b2Pair pair;
-	pair.proxyIdA = b2Min(proxyId, td->m_queryProxyId);
-	pair.proxyIdB = b2Max(proxyId, td->m_queryProxyId);
+	pair.proxyIdA = b2Min(proxyId, m_queryProxyId);
+	pair.proxyIdB = b2Max(proxyId, m_queryProxyId);
 
-	td->m_pairBuffer.Push(pair);
+	m_pairBuffer.Push(pair);
 
 	return true;
 }

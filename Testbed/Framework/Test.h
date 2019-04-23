@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -67,6 +67,11 @@ struct Settings
 		hz = 60.0f;
 		velocityIterations = 8;
 		positionIterations = 3;
+		threadCount = 1;
+		stepsPerProfileUpdate = 4;
+		mtProfileIterations = 4;
+		mtConsistencyIterations = 2;
+		mtCurrentTestOnly = false;
 		drawShapes = true;
 		drawJoints = true;
 		drawAABBs = false;
@@ -76,7 +81,7 @@ struct Settings
 		drawFrictionImpulse = false;
 		drawCOMs = false;
 		drawStats = false;
-		drawProfile = false;
+		drawProfile = true;
 		enableWarmStarting = true;
 		enableContinuous = true;
 		enableSubStepping = false;
@@ -88,6 +93,11 @@ struct Settings
 	float32 hz;
 	int32 velocityIterations;
 	int32 positionIterations;
+	int32 threadCount;
+	int32 stepsPerProfileUpdate;
+	int32 mtProfileIterations;
+	int32 mtConsistencyIterations;
+	bool mtCurrentTestOnly;
 	bool drawShapes;
 	bool drawJoints;
 	bool drawAABBs;
@@ -110,6 +120,7 @@ struct TestEntry
 {
 	const char *name;
 	TestCreateFcn *createFcn;
+	int32 mtStepCount;
 };
 
 extern TestEntry g_testEntries[];
@@ -139,6 +150,34 @@ struct ContactPoint
 	float32 separation;
 };
 
+enum class TestResult
+{
+	NONE = 0,
+	PASS,
+	FAIL
+};
+
+inline TestResult operator&=(TestResult& a, TestResult b)
+{
+	if ((int)a < (int)b)
+	{
+		a = b;
+	}
+	return a;
+}
+
+inline const char* TestResultString(TestResult a)
+{
+	switch(a)
+	{
+		case TestResult::NONE:	return "None";
+		case TestResult::PASS:	return "Pass";
+		case TestResult::FAIL:	return "FAIL";
+	}
+	b2Assert(false);
+	return "";
+}
+
 class Test : public b2ContactListener
 {
 public:
@@ -156,24 +195,61 @@ public:
 	void MouseMove(const b2Vec2& p);
 	void LaunchBomb();
 	void LaunchBomb(const b2Vec2& position, const b2Vec2& velocity);
-	
+
 	void SpawnBomb(const b2Vec2& worldPt);
 	void CompleteBombSpawn(const b2Vec2& p);
 
 	// Let derived tests know that a joint was destroyed.
 	virtual void JointDestroyed(b2Joint* joint) { B2_NOT_USED(joint); }
 
-	// Callbacks for derived classes.
-	virtual void BeginContact(b2Contact* contact)  override { B2_NOT_USED(contact); }
-	virtual void EndContact(b2Contact* contact)  override { B2_NOT_USED(contact); }
-	virtual void PreSolve(b2Contact* contact, const b2Manifold* oldManifold) override;
+	// Contact listener interface.
+	// Derived classes must override the immedaite functions if they need a deferred callback.
+	virtual bool BeginContactImmediate(b2Contact* contact, uint32 threadId) override
+	{
+		B2_NOT_USED(contact);
+		B2_NOT_USED(threadId);
+		return false;
+	}
+	virtual bool EndContactImmediate(b2Contact* contact, uint32 threadId) override
+	{
+		B2_NOT_USED(contact);
+		B2_NOT_USED(threadId);
+		return false;
+	}
+	virtual bool PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold, uint32 threadId) override;
+	virtual bool PostSolveImmediate(b2Contact* contact, const b2ContactImpulse* impulse, uint32 threadId) override
+	{
+		B2_NOT_USED(contact);
+		B2_NOT_USED(impulse);
+		B2_NOT_USED(threadId);
+		return false;
+	}
+	virtual void BeginContact(b2Contact* contact)  override
+	{
+		B2_NOT_USED(contact);
+	}
+	virtual void EndContact(b2Contact* contact)  override
+	{
+		B2_NOT_USED(contact);
+	}
+	virtual void PreSolve(b2Contact* contact, const b2Manifold* oldManifold) override
+	{
+		B2_NOT_USED(contact);
+		B2_NOT_USED(oldManifold);
+	}
 	virtual void PostSolve(b2Contact* contact, const b2ContactImpulse* impulse) override
 	{
 		B2_NOT_USED(contact);
 		B2_NOT_USED(impulse);
 	}
+	virtual TestResult TestPassed() const { return TestResult::NONE; }
 
 	void ShiftOrigin(const b2Vec2& newOrigin);
+
+	b2ThreadPoolTaskExecutor* GetExecutor();
+	b2World* GetWorld();
+	const b2Profile& GetTotalProfile() const;
+	void SetVisible(bool flag);
 
 protected:
 	friend class DestructionListener;
@@ -191,13 +267,36 @@ protected:
 	b2MouseJoint* m_mouseJoint;
 	b2Vec2 m_bombSpawnPoint;
 	bool m_bombSpawning;
+	bool m_visible;
 	b2Vec2 m_mouseWorld;
 	int32 m_stepCount;
+	int32 m_smoothProfileStepCount;
 
 	b2Profile m_maxProfile;
 	b2Profile m_totalProfile;
+	b2Profile m_smoothProfile[2];
 
-	b2ThreadPool m_threadPool;
+	b2ThreadPoolTaskExecutor m_threadPoolExec;
 };
+
+inline b2ThreadPoolTaskExecutor* Test::GetExecutor()
+{
+	return &m_threadPoolExec;
+}
+
+inline b2World* Test::GetWorld()
+{
+	return m_world;
+}
+
+inline const b2Profile& Test::GetTotalProfile() const
+{
+	return m_totalProfile;
+}
+
+inline void Test::SetVisible(bool flag)
+{
+	m_visible = flag;
+}
 
 #endif

@@ -58,6 +58,8 @@ public:
 	void Create();
 	void Destroy();
 
+	void SetActive(bool flag);
+
 	void DrawPolygon(const b2Vec2* vertices, int32 vertexCount, const b2Color& color) override;
 
 	void DrawSolidPolygon(const b2Vec2* vertices, int32 vertexCount, const b2Color& color) override;
@@ -72,7 +74,7 @@ public:
 
 	void DrawPoint(const b2Vec2& p, float32 size, const b2Color& color) override;
 
-	void DrawString(int x, int y, const char* string, ...); 
+	void DrawString(int x, int y, const char* string, ...);
 
 	void DrawString(const b2Vec2& p, const char* string, ...);
 
@@ -80,10 +82,13 @@ public:
 
 	void Flush();
 
+	void Finish();
+
 private:
 	GLRenderPoints* m_points;
 	GLRenderLines* m_lines;
 	GLRenderTriangles* m_triangles;
+	bool m_active;
 };
 
 extern DebugDraw g_debugDraw;

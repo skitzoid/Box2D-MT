@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -24,7 +24,7 @@ void DestructionListener::SayGoodbye(b2Joint* joint)
 {
 	if (test->m_mouseJoint == joint)
 	{
-		test->m_mouseJoint = NULL;
+		test->m_mouseJoint = nullptr;
 	}
 	else
 	{
@@ -33,46 +33,53 @@ void DestructionListener::SayGoodbye(b2Joint* joint)
 }
 
 Test::Test()
-: m_threadPool(/*thread count*/)
+	: m_threadPoolExec(/*thread count*/)
 {
 	b2Vec2 gravity;
 	gravity.Set(0.0f, -10.0f);
-    m_world = new b2World(gravity, &m_threadPool);
-	m_bomb = NULL;
+	m_world = new b2World(gravity);
+	m_bomb = nullptr;
 	m_textLine = 30;
-	m_mouseJoint = NULL;
+	m_mouseJoint = nullptr;
 	memset(&m_pointCount, 0, sizeof(m_pointCount));
 
 	m_destructionListener.test = this;
 	m_world->SetDestructionListener(&m_destructionListener);
 	m_world->SetContactListener(this);
 	m_world->SetDebugDraw(&g_debugDraw);
-	
+
 	m_bombSpawning = false;
+	m_visible = true;
 
 	m_stepCount = 0;
+	m_smoothProfileStepCount = 0;
 
 	b2BodyDef bodyDef;
 	m_groundBody = m_world->CreateBody(&bodyDef);
 
-	memset(&m_maxProfile, 0, sizeof(b2Profile));
-	memset(&m_totalProfile, 0, sizeof(b2Profile));
+	memset(&m_maxProfile, 0, sizeof(m_maxProfile));
+	memset(&m_totalProfile, 0, sizeof(m_totalProfile));
+	memset(&m_smoothProfile, 0, sizeof(m_smoothProfile));
 }
 
 Test::~Test()
 {
 	// By deleting the world, we delete the bomb, mouse joint, etc.
 	delete m_world;
-	m_world = NULL;
+	m_world = nullptr;
 }
 
-void Test::PreSolve(b2Contact* contact, const b2Manifold* oldManifold)
+bool Test::PreSolveImmediate(b2Contact* contact, const b2Manifold* oldManifold, uint32 threadId)
 {
+	// Derived tests must override immediate functions and return true
+	// if they need the deferred functions to be called.
+	bool callDeferred = false;
+
 	const b2Manifold* manifold = contact->GetManifold();
 
 	if (manifold->pointCount == 0)
 	{
-		return;
+		return callDeferred;
 	}
 
 	b2Fixture* fixtureA = contact->GetFixtureA();
@@ -83,8 +90,6 @@ void Test::PreSolve(b2Contact* contact, const b2Manifold* oldManifold)
 
 	b2WorldManifold worldManifold;
 	contact->GetWorldManifold(&worldManifold);
-
-	int32 threadId = b2GetThreadId();
 
 	for (int32 i = 0; i < manifold->pointCount && m_pointCount[threadId] < k_maxContactPoints; ++i)
 	{
@@ -99,6 +104,8 @@ void Test::PreSolve(b2Contact* contact, const b2Manifold* oldManifold)
 		cp->separation = worldManifold.separations[i];
 		++m_pointCount[threadId];
 	}
+
+	return callDeferred;
 }
 
 void Test::DrawTitle(const char *string)
@@ -113,7 +120,7 @@ public:
 	QueryCallback(const b2Vec2& point)
 	{
 		m_point = point;
-		m_fixture = NULL;
+		m_fixture = nullptr;
 	}
 
 	bool ReportFixture(b2Fixture* fixture) override
@@ -142,8 +149,8 @@ public:
 void Test::MouseDown(const b2Vec2& p)
 {
 	m_mouseWorld = p;
-	
-	if (m_mouseJoint != NULL)
+
+	if (m_mouseJoint != nullptr)
 	{
 		return;
 	}
@@ -177,7 +184,7 @@ void Test::SpawnBomb(const b2Vec2& worldPt)
 	m_bombSpawnPoint = worldPt;
 	m_bombSpawning = true;
 }
-    
+
 void Test::CompleteBombSpawn(const b2Vec2& p)
 {
 	if (m_bombSpawning == false)
@@ -195,8 +202,8 @@ void Test::CompleteBombSpawn(const b2Vec2& p)
 void Test::ShiftMouseDown(const b2Vec2& p)
 {
 	m_mouseWorld = p;
-	
-	if (m_mouseJoint != NULL)
+
+	if (m_mouseJoint != nullptr)
 	{
 		return;
 	}
@@ -209,9 +216,9 @@ void Test::MouseUp(const b2Vec2& p)
 	if (m_mouseJoint)
 	{
 		m_world->DestroyJoint(m_mouseJoint);
-		m_mouseJoint = NULL;
+		m_mouseJoint = nullptr;
 	}
-	
+
 	if (m_bombSpawning)
 	{
 		CompleteBombSpawn(p);
@@ -221,7 +228,7 @@ void Test::MouseUp(const b2Vec2& p)
 void Test::MouseMove(const b2Vec2& p)
 {
 	m_mouseWorld = p;
-	
+
 	if (m_mouseJoint)
 	{
 		m_mouseJoint->SetTarget(p);
@@ -240,7 +247,7 @@ void Test::LaunchBomb(const b2Vec2& position, const b2Vec2& velocity)
 	if (m_bomb)
 	{
 		m_world->DestroyBody(m_bomb);
-		m_bomb = NULL;
+		m_bomb = nullptr;
 	}
 
 	b2BodyDef bd;
@@ -249,7 +256,7 @@ void Test::LaunchBomb(const b2Vec2& position, const b2Vec2& velocity)
 	bd.bullet = true;
 	m_bomb = m_world->CreateBody(&bd);
 	m_bomb->SetLinearVelocity(velocity);
-	
+
 	b2CircleShape circle;
 	circle.m_radius = 0.3f;
 
@@ -257,10 +264,10 @@ void Test::LaunchBomb(const b2Vec2& position, const b2Vec2& velocity)
 	fd.shape = &circle;
 	fd.density = 20.0f;
 	fd.restitution = 0.0f;
-	
+
 	b2Vec2 minV = position - b2Vec2(0.3f,0.3f);
 	b2Vec2 maxV = position + b2Vec2(0.3f,0.3f);
-	
+
 	b2AABB aabb;
 	aabb.lowerBound = minV;
 	aabb.upperBound = maxV;
@@ -270,6 +277,11 @@ void Test::LaunchBomb(const b2Vec2& position, const b2Vec2& velocity)
 
 void Test::Step(Settings* settings)
 {
+	if (settings->threadCount != m_threadPoolExec.GetThreadCount())
+	{
+		m_threadPoolExec.GetThreadPool()->Restart(settings->threadCount);
+	}
+
 	float32 timeStep = settings->hz > 0.0f ? 1.0f / settings->hz : float32(0.0f);
 
 	if (settings->pause)
@@ -301,17 +313,31 @@ void Test::Step(Settings* settings)
 
 	memset(&m_pointCount, 0, sizeof(m_pointCount));
 
-	m_world->Step(timeStep, settings->velocityIterations, settings->positionIterations);
+	if (timeStep > 0.0f)
+	{
+		b2ThreadPool* tp = m_threadPoolExec.GetThreadPool();
+		tp->ResetTimers();
+		m_world->Step(timeStep, settings->velocityIterations, settings->positionIterations, m_threadPoolExec);
+		m_world->SetLockingTime(tp->GetLockMilliseconds());
+	}
 
-	m_world->DrawDebugData();
-	g_debugDraw.Flush();
+	if (m_visible)
+	{
+		m_world->DrawDebugData();
+		g_debugDraw.Flush();
+
+		// Calling glFinish is not ideal for rendering performance but without this our step profile
+		// is pretty inconsistent (on Ubuntu with compiz at least).
+		g_debugDraw.Finish();
+	}
 
 	if (timeStep > 0.0f)
 	{
 		++m_stepCount;
+		++m_smoothProfileStepCount;
 	}
 
-	if (settings->drawStats)
+	if (settings->drawStats && m_visible)
 	{
 		int32 bodyCount = m_world->GetBodyCount();
 		int32 contactCount = m_world->GetContactCount();
@@ -328,6 +354,7 @@ void Test::Step(Settings* settings)
 	}
 
 	// Track maximum profile times
+	if (timeStep > 0.0f)
 	{
 		const b2Profile& p = m_world->GetProfile();
 		m_maxProfile.step = b2Max(m_maxProfile.step, p.step);
@@ -341,26 +368,24 @@ void Test::Step(Settings* settings)
 		m_maxProfile.broadphase = b2Max(m_maxProfile.broadphase, p.broadphase);
 		m_maxProfile.broadphaseSyncFixtures = b2Max(m_maxProfile.broadphaseSyncFixtures, p.broadphaseSyncFixtures);
 		m_maxProfile.broadphaseFindContacts = b2Max(m_maxProfile.broadphaseFindContacts, p.broadphaseFindContacts);
+		m_maxProfile.locking = b2Max(m_maxProfile.locking, p.locking);
 
-		m_totalProfile.step += p.step;
-		m_totalProfile.collide += p.collide;
-		m_totalProfile.solve += p.solve;
-		m_totalProfile.solveTraversal += p.solveTraversal;
-		m_totalProfile.solveInit += p.solveInit;
-		m_totalProfile.solveVelocity += p.solveVelocity;
-		m_totalProfile.solvePosition += p.solvePosition;
-		m_totalProfile.solveTOI += p.solveTOI;
-		m_totalProfile.broadphase += p.broadphase;
-		m_totalProfile.broadphaseSyncFixtures += p.broadphaseSyncFixtures;
-		m_totalProfile.broadphaseFindContacts += p.broadphaseFindContacts;
+		b2AddProfile(m_totalProfile, p, 1.0f);
+
+		float32 scale = 1.0f / settings->stepsPerProfileUpdate;
+		b2AddProfile(m_smoothProfile[1], p, scale);
+
+		if (m_smoothProfileStepCount >= settings->stepsPerProfileUpdate)
+		{
+			m_smoothProfile[0] = m_smoothProfile[1];
+			m_smoothProfile[1] = b2Profile{};
+			m_smoothProfileStepCount = 0;
+		}
 	}
 
-	if (settings->drawProfile)
+	if (settings->drawProfile && m_visible)
 	{
-		const b2Profile& p = m_world->GetProfile();
-
-		b2Profile aveProfile;
-		memset(&aveProfile, 0, sizeof(b2Profile));
+		b2Profile aveProfile{};
 		if (m_stepCount > 0)
 		{
 			float32 scale = 1.0f / m_stepCount;
@@ -375,7 +400,10 @@ void Test::Step(Settings* settings)
 			aveProfile.broadphase = scale * m_totalProfile.broadphase;
 			aveProfile.broadphaseSyncFixtures = scale * m_totalProfile.broadphaseSyncFixtures;
 			aveProfile.broadphaseFindContacts = scale * m_totalProfile.broadphaseFindContacts;
+			aveProfile.locking = scale * m_totalProfile.locking;
 		}
+
+		b2Profile p = m_smoothProfile[0];
 
 		g_debugDraw.DrawString(5, m_textLine, "step [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.step, aveProfile.step, m_maxProfile.step);
 		m_textLine += DRAW_STRING_NEW_LINE;
@@ -399,11 +427,13 @@ void Test::Step(Settings* settings)
 		m_textLine += DRAW_STRING_NEW_LINE;
 		g_debugDraw.DrawString(5, m_textLine, "|-solveTOI [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.solveTOI, aveProfile.solveTOI, m_maxProfile.solveTOI);
 		m_textLine += DRAW_STRING_NEW_LINE;
+		g_debugDraw.DrawString(5, m_textLine, "locking [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.locking, aveProfile.locking, m_maxProfile.locking);
+		m_textLine += DRAW_STRING_NEW_LINE;
 		g_debugDraw.DrawString(5, m_textLine, "* sum of per-thread times");
 		m_textLine += DRAW_STRING_NEW_LINE;
 	}
 
-	if (m_bombSpawning)
+	if (m_bombSpawning && m_visible)
 	{
 		b2Color c;
 		c.Set(0.0f, 0.0f, 1.0f);
@@ -413,7 +443,7 @@ void Test::Step(Settings* settings)
 		g_debugDraw.DrawSegment(m_mouseWorld, m_bombSpawnPoint, c);
 	}
 
-	if (settings->drawContactPoints)
+	if (settings->drawContactPoints && m_visible)
 	{
 		const float32 k_impulseScale = 0.1f;
 		const float32 k_axisScale = 0.3f;

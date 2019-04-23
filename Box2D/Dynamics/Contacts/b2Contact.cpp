@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -32,6 +32,7 @@
 #include "Box2D/Collision/Shapes/b2Shape.h"
 #include "Box2D/Common/b2BlockAllocator.h"
 #include "Box2D/Dynamics/b2Body.h"
+#include "Box2D/Dynamics/b2ContactManager.h"
 #include "Box2D/Dynamics/b2Fixture.h"
 #include "Box2D/Dynamics/b2World.h"
 
@@ -54,7 +55,7 @@ void b2Contact::AddType(b2ContactCreateFcn* createFcn, b2ContactDestroyFcn* dest
 {
 	b2Assert(0 <= type1 && type1 < b2Shape::e_typeCount);
 	b2Assert(0 <= type2 && type2 < b2Shape::e_typeCount);
-	
+
 	s_registers[type1][type2].createFcn = createFcn;
 	s_registers[type1][type2].destroyFcn = destoryFcn;
 	s_registers[type1][type2].primary = true;
@@ -80,7 +81,7 @@ b2Contact* b2Contact::Create(b2Fixture* fixtureA, int32 indexA, b2Fixture* fixtu
 
 	b2Assert(0 <= type1 && type1 < b2Shape::e_typeCount);
 	b2Assert(0 <= type2 && type2 < b2Shape::e_typeCount);
-	
+
 	b2ContactCreateFcn* createFcn = s_registers[type1][type2].createFcn;
 	if (createFcn)
 	{
@@ -157,12 +158,21 @@ b2Contact::b2Contact(b2Fixture* fA, int32 indexA, b2Fixture* fB, int32 indexB)
 	m_tangentSpeed = 0.0f;
 }
 
+void b2Contact::Update(b2ContactListener* listener)
+{
+	UpdateImpl<true>(nullptr, listener, 0);
+}
+
+void b2Contact::Update(b2ContactManagerPerThreadData& td, b2ContactListener* listener, uint32 threadId)
+{
+	UpdateImpl<false>(&td, listener, threadId);
+}
+
 // Update the contact manifold and touching status.
 // Note: do not assume the fixture AABBs are overlapping or are valid.
-bool b2Contact::Update(b2ContactListener* listener, bool canWakeBodies)
+template<bool isSingleThread>
+void b2Contact::UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener* listener, uint32 threadId)
 {
-	bool needsAwake = false;
-
 	b2Manifold oldManifold = m_manifold;
 
 	// Re-enable this contact.
@@ -219,14 +229,14 @@ bool b2Contact::Update(b2ContactListener* listener, bool canWakeBodies)
 
 		if (touching != wasTouching)
 		{
-			if (canWakeBodies)
+			if (isSingleThread)
 			{
 				bodyA->SetAwake(true);
 				bodyB->SetAwake(true);
 			}
 			else
 			{
-				needsAwake = true;
+				td->m_deferredAwakes.Push(this);
 			}
 		}
 	}
@@ -242,18 +252,73 @@ bool b2Contact::Update(b2ContactListener* listener, bool canWakeBodies)
 
 	if (wasTouching == false && touching == true && listener)
 	{
-		listener->BeginContact(this);
+		if (listener->BeginContactImmediate(this, threadId))
+		{
+			if (isSingleThread)
+			{
+				listener->BeginContact(this);
+			}
+			else
+			{
+				td->m_deferredBeginContacts.Push(this);
+			}
+		}
 	}
 
 	if (wasTouching == true && touching == false && listener)
 	{
-		listener->EndContact(this);
+		if (listener->EndContactImmediate(this, threadId))
+		{
+			if (isSingleThread)
+			{
+				listener->EndContact(this);
+			}
+			else
+			{
+				td->m_deferredEndContacts.Push(this);
+			}
+		}
 	}
 
 	if (sensor == false && touching && listener)
 	{
-		listener->PreSolve(this, &oldManifold);
+		if (listener->PreSolveImmediate(this, &oldManifold, threadId))
+		{
+			if (isSingleThread)
+			{
+				listener->PreSolve(this, &oldManifold);
+			}
+			else
+			{
+				b2DeferredPreSolve presolve = { this, oldManifold };
+				td->m_deferredPreSolves.Push(presolve);
+			}
+		}
+	}
+}
+
+bool b2Contact::IsToiCandidate(b2Fixture* fA, b2Fixture* fB)
+{
+	if (fA->IsSensor() == false && fB->IsSensor() == false)
+	{
+		b2Body* bA = fA->GetBody();
+		b2Body* bB = fB->GetBody();
+
+		if (bA->IsBullet() || bB->IsBullet())
+		{
+			return true;
+		}
+		else
+		{
+			bool includesNonDynamic = bA->GetType() != b2_dynamicBody || bB->GetType() != b2_dynamicBody;
+			bool bothPreferCCD = bA->GetPreferNoCCD() == false && bB->GetPreferNoCCD() == false;
+
+			if (includesNonDynamic && bothPreferCCD)
+			{
+				return true;
+			}
+		}
 	}
 
-	return needsAwake;
+	return false;
 }

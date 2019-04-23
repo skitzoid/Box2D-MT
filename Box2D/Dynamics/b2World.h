@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2011 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -22,12 +22,12 @@
 
 #include "Box2D/Common/b2Math.h"
 #include "Box2D/Common/b2BlockAllocator.h"
+#include "Box2D/Common/b2GrowableArray.h"
 #include "Box2D/Common/b2StackAllocator.h"
 #include "Box2D/Dynamics/b2ContactManager.h"
 #include "Box2D/Dynamics/b2WorldCallbacks.h"
 #include "Box2D/Dynamics/b2TimeStep.h"
-#include "Box2D/Common/b2GrowableArray.h"
-
+#include "Box2D/MT/b2Threading.h"
 
 struct b2AABB;
 struct b2BodyDef;
@@ -37,7 +37,7 @@ class b2Body;
 class b2Draw;
 class b2Fixture;
 class b2Joint;
-class b2ThreadPool;
+class b2TaskExecutor;
 
 /// The world class manages all physics entities, dynamic simulation,
 /// and asynchronous queries. The world also contains efficient memory
@@ -47,8 +47,7 @@ class b2World
 public:
 	/// Construct a world object.
 	/// @param gravity the world gravity vector.
-	/// @param threadPool a thread pool that will enable multi-threaded stepping if provided.
-	b2World(const b2Vec2& gravity, b2ThreadPool* threadPool = NULL);
+	b2World(const b2Vec2& gravity);
 
 	/// Destruct the world. All physics entities are destroyed and all heap memory is released.
 	~b2World();
@@ -59,7 +58,7 @@ public:
 
 	/// Register a contact filter to provide specific control over collision.
 	/// Otherwise the default filter is used (b2_defaultFilter). The listener is
-	/// owned by you and must remain in scope. 
+	/// owned by you and must remain in scope.
 	void SetContactFilter(b2ContactFilter* filter);
 
 	/// Register a contact event listener. The listener is owned by you and must
@@ -96,9 +95,11 @@ public:
 	/// @param timeStep the amount of time to simulate, this should not vary.
 	/// @param velocityIterations for the velocity constraint solver.
 	/// @param positionIterations for the position constraint solver.
+	/// @param executor the object that will execute the world's task.
 	void Step(	float32 timeStep,
 				int32 velocityIterations,
-				int32 positionIterations);
+				int32 positionIterations,
+				b2TaskExecutor& executor);
 
 	/// Manually clear the force buffer on all bodies. By default, forces are cleared automatically
 	/// after each call to Step. The default behavior is modified by calling SetAutoClearForces.
@@ -186,12 +187,15 @@ public:
 
 	/// Change the global gravity vector.
 	void SetGravity(const b2Vec2& gravity);
-	
+
 	/// Get the global gravity vector.
 	b2Vec2 GetGravity() const;
 
 	/// Is the world locked (in the middle of a time step).
 	bool IsLocked() const;
+
+	/// Is the world multithreaded-locked (in the middle of a multithreaded portion of the time step).
+	bool IsMtLocked() const;
 
 	/// Is multi-threaded stepping enabled?
 	bool IsMultithreadedStepEnabled() const;
@@ -213,6 +217,10 @@ public:
 	/// Get the current profile.
 	const b2Profile& GetProfile() const;
 
+	/// Set the amount of time (milliseconds) an executor spent locking during the last step.
+	/// This is used in the testbed but custom executors aren't required to call this.
+	void SetLockingTime(float32 ms);
+
 	/// Dump the world into the log file.
 	/// @warning this should be called outside of a time step.
 	void Dump();
@@ -222,9 +230,12 @@ private:
 	// m_flags
 	enum
 	{
-		e_newFixture	= 0x0001,
-		e_locked		= 0x0002,
-		e_clearForces	= 0x0004
+		e_newFixture			= 0x0001,
+		e_locked				= 0x0002,
+		e_clearForces			= 0x0004,
+		e_mtLocked				= 0x0008,
+		e_mtCollisionLocked		= 0x0010,
+		e_mtSolveLocked			= 0x0020,
 	};
 
 	friend class b2Body;
@@ -232,17 +243,38 @@ private:
 	friend class b2ContactManager;
 	friend class b2Controller;
 
-	void Solve(const b2TimeStep& step);
-	void SolveTOI(const b2TimeStep& step);
+	void SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2TimeStep& step);
 
-	void SynchronizeFixturesMT();
-	void FindNewContactsMT();
-	void CollideMT();
-	void SolveMT(const b2TimeStep& step);
-	void ClearIslandFlagsMT();
+	// Destroy contacts that aren't overlapping in the broadphase.
+	void DestroyNonOverlappingContacts(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 threadCount);
+
+	// Synchronize broadphase proxies with their fixtures.
+	void SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 threadCount);
+
+	// Run find new contacts tasks.
+	void FindNewContacts(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 threadCount);
+
+	// Start collision tasks for existing contacts.
+	void Collide(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 threadCount);
+
+	// Traverse the graph of bodies, contacts, and joints to create solve tasks.
+	// Wait for all solve tasks to finish.
+	// Synchronize fixtures.
+	// Find new contacts.
+	void Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2TimeStep& step, uint32 threadCount);
+
+	// Run tasks for clearing all island flags on bodies, contacts, and joints.
+	void SolveInit(b2TaskExecutor& executor, b2TaskGroup taskGroup);
+	void SolveTOIInit(b2TaskExecutor& executor, b2TaskGroup taskGroup);
+
+	void RecalculateToiCandidacy(b2Body* b);
 
 	void DrawJoint(b2Joint* joint);
 	void DrawShape(b2Fixture* shape, const b2Transform& xf, const b2Color& color);
+
+	void SetMtLock(int32 lockFlags);
+	bool IsMtCollisionLocked() const;
+	bool IsMtSolveLocked() const;
 
 	b2BlockAllocator m_blockAllocator;
 	b2StackAllocator m_stackAllocator;
@@ -278,10 +310,6 @@ private:
 	bool m_stepComplete;
 
 	b2Profile m_profile;
-
-	b2ThreadPool* m_threadPool;
-
-	int32 m_threadCount;
 };
 
 inline b2Body* b2World::GetBodyList()
@@ -326,7 +354,7 @@ inline int32 b2World::GetJointCount() const
 
 inline int32 b2World::GetContactCount() const
 {
-	return m_contactManager.GetContactCount();
+	return m_contactManager.m_contacts.GetCount();
 }
 
 inline void b2World::SetGravity(const b2Vec2& gravity)
@@ -344,9 +372,9 @@ inline bool b2World::IsLocked() const
 	return (m_flags & e_locked) == e_locked;
 }
 
-inline bool b2World::IsMultithreadedStepEnabled() const
+inline bool b2World::IsMtLocked() const
 {
-	return m_threadPool != NULL;
+	return (m_flags & e_mtLocked) == e_mtLocked;
 }
 
 inline void b2World::SetAutoClearForces(bool flag)
@@ -375,6 +403,30 @@ inline const b2ContactManager& b2World::GetContactManager() const
 inline const b2Profile& b2World::GetProfile() const
 {
 	return m_profile;
+}
+
+inline void b2World::SetLockingTime(float32 ms)
+{
+	m_profile.locking = ms;
+}
+
+inline void b2World::SetMtLock(int32 lockFlags)
+{
+	constexpr int32 mask = (e_mtLocked | e_mtCollisionLocked | e_mtSolveLocked);
+	b2Assert((lockFlags & mask) == lockFlags);
+
+	m_flags &= ~mask;
+	m_flags |= lockFlags & mask;
+}
+
+inline bool b2World::IsMtCollisionLocked() const
+{
+	return (m_flags & e_mtCollisionLocked) == e_mtCollisionLocked;
+}
+
+inline bool b2World::IsMtSolveLocked() const
+{
+	return (m_flags & e_mtSolveLocked) == e_mtSolveLocked;
 }
 
 #endif

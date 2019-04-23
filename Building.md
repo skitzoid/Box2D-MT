@@ -24,11 +24,24 @@ Here are the steps for Xcode:
 - Press <kbd>Command</kbd>-<kbd>R</kbd> to build and run the Testbed
 
 ### Linux
-Here are the steps for Linux:
-- Command line: `premake gmake`
+Debug build:
+- Command line: `premake5 gmake`
 - Command line: `make -C Build`
 - Command line: `cd Testbed`
 - Command line: `../Build/bin/x86_64/Debug/Testbed`
+
+Realese build:
+- Command line: `premake5 gmake`
+- Command line: `make -C Build config=release_x86_64`
+- Command line: `cd Testbed`
+- Command line: `../Build/bin/x86_64/Release/Testbed`
+
+DRD compatible build (http://valgrind.org/docs/manual/drd-manual.html):
+- Command Line: `sudo apt-get install valgrind`
+- Command line: `premake5 gmake --drd`
+- Command line: `make -C Build config=drd_x86_64`
+- Command line: `cd Testbed`
+- Command line: `valgrind --tool=drd ../Build/bin/x86_64/drd/Testbed`
 
 If using Mesa, you may need to override the OpenGL version.
 - Command line: `MESA_GL_VERSION_OVERRIDE=3.3COMPAT ../Build/bin/x86_64/Debug/Testbed`

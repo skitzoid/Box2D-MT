@@ -80,7 +80,7 @@ public:
         b2Transform transformB2;
         transformB2.q = transformB.q;
         transformB2.p = transformB.p + output.lambda * input.translationB;
-        
+
         b2DistanceInput distanceInput;
         distanceInput.proxyA.Set(m_vAs, m_countA, m_radiusA);
         distanceInput.proxyB.Set(m_vBs, m_countB, m_radiusB);
@@ -90,7 +90,7 @@ public:
         b2SimplexCache simplexCache;
         simplexCache.count = 0;
         b2DistanceOutput distanceOutput;
-        
+
         b2Distance(&distanceOutput, &simplexCache, &distanceInput);
 
 		g_debugDraw.DrawString(5, m_textLine, "hit = %s, iters = %d, lambda = %g, distance = %g",

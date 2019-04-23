@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -18,29 +18,39 @@
 
 #ifndef B2_GROWABLE_ARRAY_H
 #define B2_GROWABLE_ARRAY_H
-#include <Box2D/Common/b2Settings.h>
-#include <string.h>
+#include "Box2D/Common/b2Settings.h"
+#include <cstring>
 
 /// This is a growable array, meant for internal use only.
 template <typename T>
 class b2GrowableArray
 {
 public:
-	b2GrowableArray(int32 startCapacityHint = 16)
+	b2GrowableArray(uint32 startCapacity = 128)
 	{
-		m_capacity = startCapacityHint > 0 ? startCapacityHint : 1;
+		m_capacity = startCapacity;
 		m_count = 0;
 
 		m_array = (T*)b2Alloc(m_capacity * sizeof(T));
 	}
 
+	b2GrowableArray(b2GrowableArray&& rhs)
+		: m_array(rhs.m_array)
+		, m_count(rhs.m_count)
+	{
+		rhs.m_array = nullptr;
+	}
+
+	b2GrowableArray(const b2GrowableArray&) = delete;
+	b2GrowableArray& operator=(const b2GrowableArray&) = delete;
+
 	~b2GrowableArray()
 	{
 		b2Free(m_array);
-		m_array = NULL;
+		m_array = nullptr;
 	}
 
-	void Push(const T& element)
+	void Push(T element)
 	{
 		if (m_count == m_capacity)
 		{
@@ -62,7 +72,7 @@ public:
 		return m_array[m_count];
 	}
 
-	T& Peek() const
+	T& Back() const
 	{
 		b2Assert(m_count > 0);
 		return m_array[m_count - 1];
@@ -83,12 +93,12 @@ public:
 		m_array[index] = m_array[--m_count];
 	}
 
-	T& At(size_t i)
+	T& operator[](size_t i)
 	{
 		return m_array[i];
 	}
 
-	const T& At(size_t i) const
+	const T& operator[](size_t i) const
 	{
 		return m_array[i];
 	}
@@ -101,6 +111,16 @@ public:
 	const T* Data() const
 	{
 		return m_array;
+	}
+
+	T* End()
+	{
+		return m_array + m_count;
+	}
+
+	const T* End() const
+	{
+		return m_array + m_count;
 	}
 
 private:

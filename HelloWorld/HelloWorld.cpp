@@ -30,6 +30,9 @@ int main(int argc, char** argv)
 	B2_NOT_USED(argc);
 	B2_NOT_USED(argv);
 
+	// Construct the thread pool that will execute the world's step tasks.
+	b2ThreadPoolTaskExecutor threadPoolExecutor;
+
 	// Define the gravity vector.
 	b2Vec2 gravity(0.0f, -10.0f);
 
@@ -89,7 +92,7 @@ int main(int argc, char** argv)
 	{
 		// Instruct the world to perform a single step of simulation.
 		// It is generally best to keep the time step and iterations fixed.
-		world.Step(timeStep, velocityIterations, positionIterations);
+		world.Step(timeStep, velocityIterations, positionIterations, threadPoolExecutor);
 
 		// Now print the position and angle of the body.
 		b2Vec2 position = body->GetPosition();

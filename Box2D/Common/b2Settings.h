@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2006-2009 Erin Catto http://www.box2d.org
-* Copyright (c) 2015, Justin Hoffman https://github.com/skitzoid
+* Copyright (c) 2015 Justin Hoffman https://github.com/jhoffman0x/Box2D-MT
 *
 * This software is provided 'as-is', without any express or implied
 * warranty.  In no event will the authors be held liable for any damages
@@ -20,28 +20,36 @@
 #ifndef B2_SETTINGS_H
 #define B2_SETTINGS_H
 
-#include <stddef.h>
-#include <assert.h>
-#include <float.h>
+#include <cstddef>
+#include <cassert>
+#include <cstdint>
+#include <limits>
 
 #if !defined(NDEBUG)
 	#define b2DEBUG
 #endif
 
 #define B2_NOT_USED(x) ((void)(x))
+
+#if !defined(b2DEBUG)
 #define b2Assert(A) assert(A)
+#else
+#define b2Assert(A) B2_NOT_USED(A)
+#endif
 
-typedef signed char	int8;
-typedef signed short int16;
-typedef signed int int32;
-typedef unsigned char uint8;
-typedef unsigned short uint16;
-typedef unsigned int uint32;
-typedef float float32;
-typedef double float64;
+typedef std::int8_t		int8;
+typedef std::int16_t	int16;
+typedef std::int32_t	int32;
+typedef std::int64_t	int64;
+typedef std::uint8_t	uint8;
+typedef std::uint16_t	uint16;
+typedef std::uint32_t	uint32;
+typedef std::uint64_t	uint64;
+typedef float			float32;
+typedef double			float64;
 
-#define	b2_maxFloat		FLT_MAX
-#define	b2_epsilon		FLT_EPSILON
+#define	b2_maxFloat		std::numeric_limits<float32>::max()
+#define	b2_epsilon		std::numeric_limits<float32>::epsilon()
 #define b2_pi			3.14159265359f
 
 /// @file
@@ -131,39 +139,44 @@ typedef double float64;
 #define b2_angularSleepTolerance	(2.0f / 180.0f * b2_pi)
 
 
-// Threading
+// Performance
 
-/// Thread local storage (thread_local isn't supported by some otherwise compatible compilers).
-// TODO: Check version numbers and other platforms. Adjust as needed.
-#if defined(_MSC_VER)
-#define b2ThreadLocal __declspec(thread)
+/// Force inline of larger functions that tend to not be inlined by default.
+#ifdef _MSC_VER
+    #define b2_forceInline __forceinline
+#elif defined(__GNUC__)
+    #define b2_forceInline inline __attribute__((__always_inline__))
+#elif defined(__CLANG__)
+    #if __has_attribute(__always_inline__)
+        #define b2_forceInline inline __attribute__((__always_inline__))
+    #else
+        #define b2_forceInline inline
+    #endif
 #else
-#define b2ThreadLocal __thread
+    #define b2_forceInline inline
 #endif
 
 /// The size of a cache line.
-#define b2_cacheLineSize			64
+#define b2_cacheLineSize						64
 
 /// The maximum number of thread pool threads.
-#define b2_maxThreadPoolThreads		7
+#define b2_maxThreadPoolThreads					7
 
 /// The maximum number of threads.
-#define b2_maxThreads				(b2_maxThreadPoolThreads + 1)
+#define b2_maxThreads							(b2_maxThreadPoolThreads + 1)
 
 /// The world may continue gathering bodies for solving until this estimated cost is reached.
-#define b2_solveBatchTargetCost         100
+#define b2_solveBatchTargetCost					100
 
 /// The world may continue gathering bodies for solving until it gathers this many.
-#define b2_solveBatchTargetBodyCount    16
+#define b2_solveBatchTargetBodyCount			16
+
+/// The maximum number of subtasks that a range task can be split into.
+/// Custom executors must not exceed this value.
+#define b2_partitionRangeMaxOutput				2 * b2_maxThreads
 
 /// Get the estimated cost of solving an island with the specified attributes
 int32 b2GetIslandCost(int32 bodyCount, int32 contactCount, int32 jointCount);
-
-/// Set the calling thread's ID.
-void b2SetThreadId(int32 threadId);
-
-/// Get the calling thread's ID.
-int32 b2GetThreadId();
 
 
 // Memory Allocation
@@ -186,7 +199,10 @@ struct b2Version
 	int32 revision;		///< bug fixes
 };
 
-/// Current version.
+/// Box2D-MT version.
+extern b2Version b2_mtVersion;
+
+/// Box2D version.
 extern b2Version b2_version;
 
 #endif
