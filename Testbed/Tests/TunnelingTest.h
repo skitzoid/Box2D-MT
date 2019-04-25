@@ -100,24 +100,24 @@ struct TunnelingCell
 		uint32 ballMask = m_toiState / statesPerNode;
 
 		constexpr uint32 sensorFlag = 0x1;
-		constexpr uint32 bulletFlag = 0x2;
-		constexpr uint32 preferNoCCDFlag = 0x4;
+		constexpr uint32 thickWallFlag = 0x2;
+		constexpr uint32 bulletFlag = 0x4;
 
 		bool isSensor = (wallMask & sensorFlag) == sensorFlag;
+		bool isThickWall = (wallMask & thickWallFlag) == thickWallFlag;
 		bool isBullet = (wallMask & bulletFlag) == bulletFlag;
-		bool preferNoCCD = (wallMask & preferNoCCDFlag) == preferNoCCDFlag;
 
 		m_wallFixture->SetSensor(isSensor);
+		m_wallFixture->SetThickWall(isThickWall);
 		m_wallBody->SetBullet(isBullet);
-		m_wallBody->SetPreferNoCCD(preferNoCCD);
 
 		isSensor = (ballMask & sensorFlag) == sensorFlag;
+		isThickWall = (ballMask & thickWallFlag) == thickWallFlag;
 		isBullet = (ballMask & bulletFlag) == bulletFlag;
-		preferNoCCD = (ballMask & preferNoCCDFlag) == preferNoCCDFlag;
 
 		m_ballFixture->SetSensor(isSensor);
+		m_ballFixture->SetThickWall(isThickWall);
 		m_ballBody->SetBullet(isBullet);
-		m_ballBody->SetPreferNoCCD(preferNoCCD);
 	}
 
 	// Should the ball reach its target?
@@ -126,12 +126,8 @@ struct TunnelingCell
 	{
 		if (m_wallFixture->IsSensor() == false && m_ballFixture->IsSensor() == false)
 		{
-			// In Box2D the bullet flag has no effect on a static body because static bodies always
-			// have CCD. Box2D-MT adds a prefer no CCD flag, which makes a body only collide with bullets.
-			// When a dynamic body has the prefer no CCD flag it will only use CCD with static bodies if
-			// they're "bullets." So the term loses its meaning, but I haven't decided how to address
-			// that yet.
-			// Anyway, that's why we check IsBullet on the wall body here.
+			// Technically a static body can be a bullet and a fixture on a dynamic body can be a thick wall,
+			// which is linguistically strange but it doesn't cause any actual problems.
 			if (m_wallBody->IsBullet() || m_ballBody->IsBullet())
 			{
 				return false;
@@ -140,9 +136,7 @@ struct TunnelingCell
 			{
 				b2Assert(m_wallBody->GetType() != b2_dynamicBody);
 
-				bool bothPreferCCD = m_wallBody->GetPreferNoCCD() == false && m_ballBody->GetPreferNoCCD() == false;
-
-				if (bothPreferCCD)
+				if (m_wallFixture->IsThickWall() == false && m_ballFixture->IsThickWall() == false)
 				{
 					return false;
 				}
@@ -299,15 +293,7 @@ public:
 
 		if (m_visible)
 		{
-			g_debugDraw.DrawString(5, m_textLine, "These circles are being pulled to the bottom side of their walls by a weld joint.");
-			m_textLine += DRAW_STRING_NEW_LINE;
-			g_debugDraw.DrawString(5, m_textLine, "The bodies and fixtures cycle through every combination of settings that can affect TOI eligibility.");
-			m_textLine += DRAW_STRING_NEW_LINE;
-			g_debugDraw.DrawString(5, m_textLine, "From left to right, settings are changed from: after Step, BeginContact, EndContact, PreSolve, and PostSolve.");
-			m_textLine += DRAW_STRING_NEW_LINE;
-			g_debugDraw.DrawString(5, m_textLine, "Tunneling is expected to occur when the contact is not eligible for TOI, and to not occur when the contact is");
-			m_textLine += DRAW_STRING_NEW_LINE;
-			g_debugDraw.DrawString(5, m_textLine, "eligible for TOI. The status represents whether the expected outcome occurred every time.");
+			g_debugDraw.DrawString(5, m_textLine, "This cycles through settings that affect TOI and tests whether tunneling occurred as expected.");
 			m_textLine += DRAW_STRING_NEW_LINE;
 			g_debugDraw.DrawString(5, m_textLine, "Status: %s", m_testPassed ? "PASSING" : "FAILED");
 			m_textLine += DRAW_STRING_NEW_LINE;

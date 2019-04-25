@@ -36,6 +36,8 @@ b2Fixture::b2Fixture()
 	m_proxyCount = 0;
 	m_shape = nullptr;
 	m_density = 0.0f;
+	m_isSensor = false;
+	m_isThickWall = false;
 }
 
 void b2Fixture::Create(b2BlockAllocator* allocator, b2Body* body, const b2FixtureDef* def)
@@ -50,6 +52,8 @@ void b2Fixture::Create(b2BlockAllocator* allocator, b2Body* body, const b2Fixtur
 	m_filter = def->filter;
 
 	m_isSensor = def->isSensor;
+
+	m_isThickWall = def->isThickWall;
 
 	m_shape = def->shape->Clone(allocator);
 
@@ -234,7 +238,25 @@ void b2Fixture::SetSensor(bool sensor)
 		m_body->SetAwake(true);
 		m_isSensor = sensor;
 
-		world->RecalculateToiCandidacy(m_body);
+		world->RecalculateToiCandidacy(this);
+	}
+}
+
+void b2Fixture::SetThickWall(bool thickWall)
+{
+	b2World* world = m_body->GetWorld();
+
+	b2Assert(world->IsMtLocked() == false);
+	if (world->IsMtLocked())
+	{
+		return;
+	}
+
+	if (thickWall != m_isThickWall)
+	{
+		m_isThickWall = thickWall;
+
+		world->RecalculateToiCandidacy(this);
 	}
 }
 

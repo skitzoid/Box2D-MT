@@ -1552,6 +1552,13 @@ void b2World::RecalculateToiCandidacy(b2Body* b)
 	m_contactManager.RecalculateToiCandidacy(b);
 }
 
+void b2World::RecalculateToiCandidacy(b2Fixture* f)
+{
+	b2Assert(IsMtLocked() == false);
+
+	m_contactManager.RecalculateToiCandidacy(f);
+}
+
 void b2World::ClearForces()
 {
 	for (b2Body* body = m_bodyList; body; body = body->GetNext())

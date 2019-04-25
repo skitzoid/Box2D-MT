@@ -567,33 +567,6 @@ void b2Body::SetFixedRotation(bool flag)
 	ResetMassData();
 }
 
-void b2Body::SetPreferNoCCD(bool flag)
-{
-	bool status = (m_flags & e_preferNoCCDFlag) == e_preferNoCCDFlag;
-	if (status == flag)
-	{
-		return;
-	}
-
-	// This isn't safe to call from a multithreaded callback.
-	b2Assert(m_world->IsMtLocked() == false);
-	if (m_world->IsMtLocked())
-	{
-		return;
-	}
-
-	if (flag)
-	{
-		m_flags |= e_preferNoCCDFlag;
-	}
-	else
-	{
-		m_flags &= ~e_preferNoCCDFlag;
-	}
-
-	m_world->RecalculateToiCandidacy(this);
-}
-
 void b2Body::SetBullet(bool flag)
 {
 	b2Assert (m_world->IsMtLocked() == false);
