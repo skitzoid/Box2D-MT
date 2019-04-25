@@ -118,12 +118,10 @@ public:
 			return;
 		}
 
-		//b2Timer timer;
 		for (b2ContactEdge* ce = m_uppers->GetContactList(); ce; ce = ce->next)
 		{
 			ce->other->ApplyForceToCenter(b2Vec2(0, 1.25f), true);
 		}
-		//printf("Apply forces: %f\n", timer.GetMilliseconds());
 
 		float32 x[9] = { -16.0f, -12.0f, -8.0f, -4.0f, 0.0f, 4.0f, 8.0f, 12.0f, 16.0f };
 		for (int32 i = 0; i < 9 && m_boxCount < e_boxcount; ++i)

@@ -139,7 +139,7 @@ typedef double			float64;
 #define b2_angularSleepTolerance	(2.0f / 180.0f * b2_pi)
 
 
-// Performance
+// MT Defines
 
 /// Force inline of larger functions that tend to not be inlined by default.
 #ifdef _MSC_VER
@@ -165,15 +165,15 @@ typedef double			float64;
 /// The maximum number of threads.
 #define b2_maxThreads							(b2_maxThreadPoolThreads + 1)
 
+/// The maximum number of subtasks that a range task can be split into.
+/// Custom executors must not exceed this value.
+#define b2_partitionRangeMaxOutput				2 * b2_maxThreads
+
 /// The world may continue gathering bodies for solving until this estimated cost is reached.
 #define b2_solveBatchTargetCost					100
 
 /// The world may continue gathering bodies for solving until it gathers this many.
 #define b2_solveBatchTargetBodyCount			16
-
-/// The maximum number of subtasks that a range task can be split into.
-/// Custom executors must not exceed this value.
-#define b2_partitionRangeMaxOutput				2 * b2_maxThreads
 
 /// Get the estimated cost of solving an island with the specified attributes
 int32 b2GetIslandCost(int32 bodyCount, int32 contactCount, int32 jointCount);

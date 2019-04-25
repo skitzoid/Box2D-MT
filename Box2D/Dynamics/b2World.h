@@ -195,6 +195,8 @@ public:
 	bool IsLocked() const;
 
 	/// Is the world multithreaded-locked (in the middle of a multithreaded portion of the time step).
+	/// Note: if an assert fails based on this, it means you're doing something that's probably not
+	/// thread safe in a multithreaded callback. You should move that work to a deferred callback.
 	bool IsMtLocked() const;
 
 	/// Is multi-threaded stepping enabled?

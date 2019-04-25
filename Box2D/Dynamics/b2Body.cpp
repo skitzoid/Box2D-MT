@@ -474,6 +474,7 @@ void b2Body::SetTransform(const b2Vec2& position, float32 angle)
 
 void b2Body::SynchronizeFixtures()
 {
+	// This can only be called internally so we don't expect this to be possible.
 	b2Assert(m_world->IsMtLocked() == false);
 
 	b2Transform xf1;
