@@ -101,8 +101,8 @@ do more work than necessary. I found two ways to address that.
 
 ### Finer-grained Continuous Collision Detection (CCD) Control
 
-In Box2D, enabling CCD means you get TOI events for all contacts between static
-and non-static bodies, which can be expensive.
+In Box2D, enabling CCD means you get TOI events for all contacts between dynamic
+and non-dynamic bodies, which can be expensive.
 
 If your static body only has a few thin shapes that are subject to tunneling, and
 many thick shapes that are not, then most of that expense is unnecessary.
