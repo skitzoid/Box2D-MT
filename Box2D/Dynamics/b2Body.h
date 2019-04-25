@@ -557,7 +557,7 @@ inline void b2Body::SetLinearVelocity(const b2Vec2& v)
 		return;
 	}
 
-	if (VerifyMtUnlocked() == false)
+	if (VerifyMtCollisionUnlocked() == false)
 	{
 		return;
 	}
@@ -577,12 +577,12 @@ inline const b2Vec2& b2Body::GetLinearVelocity() const
 
 inline void b2Body::SetAngularVelocity(float32 w)
 {
-	if (VerifyMtCollisionUnlocked() == false)
+	if (m_type == b2_staticBody)
 	{
 		return;
 	}
 
-	if (m_type == b2_staticBody)
+	if (VerifyMtCollisionUnlocked() == false)
 	{
 		return;
 	}

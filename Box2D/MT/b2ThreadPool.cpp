@@ -54,7 +54,7 @@ inline b2ThreadPoolTaskGroup* b2GetThreadPoolTaskGroup(b2TaskGroup taskGroup)
 	return (b2ThreadPoolTaskGroup*)taskGroup.userData;
 }
 
-// Compare the cost of two tasks.
+// Compare the cost of two tasks. Currently only b2SolveTask sets a cost.
 inline bool b2TaskCostLessThan(const b2Task* a, const b2Task* b)
 {
 	return a->GetCost() < b->GetCost();

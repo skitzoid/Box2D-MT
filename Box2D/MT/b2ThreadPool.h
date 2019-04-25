@@ -92,15 +92,17 @@ public:
 	void Restart(int32 threadCount);
 
 private:
-	friend class b2TaskGroup;
 
 	void WorkerMain(uint32 threadId);
 	void Shutdown();
 
 	mutable std::mutex m_mutex;
+
 	std::condition_variable m_workerCond;
+
 	std::atomic<int32> m_pendingTaskCount;
 	std::atomic<bool> m_busyWait;
+
 	b2GrowableArray<b2Task*> m_pendingTasks;
 
 	std::thread m_threads[b2_maxThreadPoolThreads];
