@@ -117,6 +117,7 @@ public:
 
 	// Reorder contacts when TOI eligibility changes.
 	void RecalculateToiCandidacy(b2Body* body);
+	void RecalculateToiCandidacy(b2Fixture* fixture);
 
 	b2BroadPhase m_broadPhase;
 	b2Contact* m_contactList;
@@ -135,7 +136,6 @@ public:
 	bool m_deferCreates;
 
 private:
-	void RecalculateToiCandidacy(b2Fixture* fixture);
 	void RecalculateToiCandidacy(b2Contact* contact);
 	inline void OnContactCreate(b2Contact* contact, b2ContactProxyIds proxyIds);
 	inline void PushContact(b2Contact* contact);

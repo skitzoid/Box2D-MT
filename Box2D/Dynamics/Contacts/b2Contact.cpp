@@ -311,9 +311,9 @@ bool b2Contact::IsToiCandidate(b2Fixture* fA, b2Fixture* fB)
 		else
 		{
 			bool includesNonDynamic = bA->GetType() != b2_dynamicBody || bB->GetType() != b2_dynamicBody;
-			bool bothPreferCCD = bA->GetPreferNoCCD() == false && bB->GetPreferNoCCD() == false;
+			bool neitherIsThickWall = fA->IsThickWall() == false && fB->IsThickWall() == false;
 
-			if (includesNonDynamic && bothPreferCCD)
+			if (includesNonDynamic && neitherIsThickWall)
 			{
 				return true;
 			}

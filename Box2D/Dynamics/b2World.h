@@ -270,6 +270,7 @@ private:
 	void SolveTOIInit(b2TaskExecutor& executor, b2TaskGroup taskGroup);
 
 	void RecalculateToiCandidacy(b2Body* b);
+	void RecalculateToiCandidacy(b2Fixture* f);
 
 	void DrawJoint(b2Joint* joint);
 	void DrawShape(b2Fixture* shape, const b2Transform& xf, const b2Color& color);

@@ -65,6 +65,7 @@ struct b2FixtureDef
 		restitution = 0.0f;
 		density = 0.0f;
 		isSensor = false;
+		isThickWall = false;
 	}
 
 	/// The shape, this must be set. The shape will be cloned, so you
@@ -86,6 +87,10 @@ struct b2FixtureDef
 	/// A sensor shape collects contact information but never generates a collision
 	/// response.
 	bool isSensor;
+
+	/// A thick wall is not prone to tunneling so it only generates TOI events for
+	/// contacts with bullet bodies. Use this to reduce the performance cost of TOI.
+	bool isThickWall;
 
 	/// Contact filtering data.
 	b2Filter filter;
@@ -193,6 +198,14 @@ public:
 	/// the body transform.
 	const b2AABB& GetAABB(int32 childIndex) const;
 
+	/// Set whether this fixture is treated like a thick wall for continuous collision detection.
+	/// Note: thick walls only get TOI events for contacts with bullet bodies.
+	/// @warning This function is locked during multithreaded callbacks.
+	void SetThickWall(bool flag);
+
+	/// Is this fixture treated like a thick wall for continuous collision detection?
+	bool IsThickWall() const;
+
 	/// Dump this fixture to the log file.
 	void Dump(int32 bodyIndex);
 
@@ -234,6 +247,7 @@ protected:
 	b2Filter m_filter;
 
 	bool m_isSensor;
+	bool m_isThickWall;
 
 	void* m_userData;
 };
@@ -343,6 +357,11 @@ inline const b2AABB& b2Fixture::GetAABB(int32 childIndex) const
 {
 	b2Assert(0 <= childIndex && childIndex < m_proxyCount);
 	return m_proxies[childIndex].aabb;
+}
+
+inline bool b2Fixture::IsThickWall() const
+{
+	return m_isThickWall;
 }
 
 #endif

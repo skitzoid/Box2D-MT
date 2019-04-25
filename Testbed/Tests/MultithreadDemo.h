@@ -33,17 +33,8 @@ public:
 
 		// Ground
 		{
-			// This world has been designed with large overlapping static bodies so tunneling is not an issue.
-			// We can disable automatic TOI checks between the static ground body and the other dynamic bodies.
-			// This helps because all CCD/TOI is done on a single thread.
-			// With this flag the body will only use CCD against bodies that have the bullet flag set.
-			b2BodyDef bodyDef;
-			m_groundBodyNoCCD = m_world->CreateBody(&bodyDef);
-			m_groundBodyNoCCD->SetPreferNoCCD(true);
-
 			b2EdgeShape edgeShape;
 
-			// We can still create fixtures that require CCD on a different body.
 			edgeShape.Set(b2Vec2(-15.0f, 60.0f), b2Vec2(-10.0f, 55.0f));
 			m_groundBody->CreateFixture(&edgeShape, 0.0f);
 
@@ -52,47 +43,53 @@ public:
 
 			b2PolygonShape shape;
 
+			b2FixtureDef fd;
+			fd.shape = &shape;
+			// Fixtures marked as thick walls will only generate TOI events with bullet bodies.
+			// This reduces the performance cost of TOI.
+			fd.isThickWall = true;
+
 			shape.SetAsBox(25.0f, 2.5f, b2Vec2(0.0f, -2.5f), 0.0f);
-			m_groundBodyNoCCD->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&fd);
 
 			shape.SetAsBox(2.5f, 47.5f, b2Vec2(-22.5f, 42.5f), 0.0f);
-			m_groundBodyNoCCD->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&fd);
 
 			shape.SetAsBox(2.5f, 47.5f, b2Vec2(22.5f, 42.5f), 0.0f);
-			m_groundBodyNoCCD->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&fd);
 
 			shape.SetAsBox(2.5f, 2.0f, b2Vec2(-7.5f, 5.0f), 0.0f);
-			m_groundBodyNoCCD->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&fd);
 
 			shape.SetAsBox(2.5f, 2.0f, b2Vec2(7.5f, 5.0f), 0.0f);
-			m_groundBodyNoCCD->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&fd);
 
 			shape.SetAsBox(5.0f, 2.0f, b2Vec2(0.0f, 12.0f), 0.0f);
-			m_groundBodyNoCCD->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&fd);
 
 			shape.SetAsBox(3.5f, 2.0f, b2Vec2(-7.5f, 45.0f), 0.0f);
-			m_groundBodyNoCCD->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&fd);
 
 			shape.SetAsBox(3.5f, 2.0f, b2Vec2(7.5f, 45.0f), 0.0f);
-			m_groundBodyNoCCD->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&fd);
 
 			shape.SetAsBox(2.5f, 2.0f, b2Vec2(-6.5f, 63.0f), 0.0f);
-			m_groundBodyNoCCD->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&fd);
 
 			shape.SetAsBox(2.5f, 2.0f, b2Vec2(6.5f, 63.0f), 0.0f);
-			m_groundBodyNoCCD->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&fd);
 
 			shape.SetAsBox(5.0f, 2.0f, b2Vec2(0.0f, 72.0f), 0.0f);
-			m_groundBodyNoCCD->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&fd);
 
 			shape.SetAsBox(25.0f, 2.5f, b2Vec2(0.0f, 87.5f), 0.0f);
-			m_groundBodyNoCCD->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&fd);
 
 			shape.SetAsBox(4.0f, 2.5f, b2Vec2(-20.0f, 85.0f), b2_pi / 4);
-			m_groundBodyNoCCD->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&fd);
 
 			shape.SetAsBox(4.0f, 2.5f, b2Vec2(20.0f, 85.0f), -b2_pi / 4);
-			m_groundBodyNoCCD->CreateFixture(&shape, 0.0f);
+			m_groundBody->CreateFixture(&fd);
 		}
 
 		CreateUppers();
@@ -177,7 +174,7 @@ public:
 		body->CreateFixture(&fd);
 
 		b2RevoluteJointDef jd;
-		jd.bodyA = m_groundBodyNoCCD;
+		jd.bodyA = m_groundBody;
 		jd.bodyB = body;
 		jd.localAnchorA = position;
 		jd.localAnchorB.Set(0.0f, 0.0f);
@@ -224,7 +221,7 @@ public:
 
 		b2PrismaticJointDef pjd;
 
-		pjd.Initialize(m_groundBodyNoCCD, body, b2Vec2(0.0f, 0.0f), b2Vec2(1.0f, 0.0f));
+		pjd.Initialize(m_groundBody, body, b2Vec2(0.0f, 0.0f), b2Vec2(1.0f, 0.0f));
 		pjd.motorSpeed = 8.0f;
 		pjd.maxMotorForce = 10000.0f;
 		pjd.enableMotor = true;
@@ -235,7 +232,6 @@ public:
 		m_slider = (b2PrismaticJoint*)m_world->CreateJoint(&pjd);
 	}
 
-	b2Body* m_groundBodyNoCCD;
 	b2Body* m_uppers;
 	b2PrismaticJoint* m_slider;
 

@@ -327,15 +327,6 @@ public:
 	/// Get the type of this body.
 	b2BodyType GetType() const;
 
-	/// Should this body only use continuous collision detection when colliding
-	/// with bullet bodies?
-	/// @warning This function is locked during multithreaded callbacks.
-	void SetPreferNoCCD(bool flag);
-
-	/// Does this body only use continuous collision detection when colliding
-	/// with bullet bodies?
-	bool GetPreferNoCCD() const;
-
 	/// Should this body be treated like a bullet for continuous collision detection?
 	/// @warning This function is locked during multithreaded callbacks.
 	void SetBullet(bool flag);
@@ -452,8 +443,7 @@ private:
 		e_autoSleepFlag		= 0x0004,
 		e_bulletFlag		= 0x0008,
 		e_fixedRotationFlag	= 0x0010,
-		e_activeFlag		= 0x0020,
-		e_preferNoCCDFlag	= 0x0040
+		e_activeFlag		= 0x0020
 	};
 
 	b2Body(const b2BodyDef* bd, b2World* world);
@@ -687,11 +677,6 @@ inline void b2Body::SetGravityScale(float32 scale)
 		return;
 	}
 	m_gravityScale = scale;
-}
-
-inline bool b2Body::GetPreferNoCCD() const
-{
-	return (m_flags & e_preferNoCCDFlag) == e_preferNoCCDFlag;
 }
 
 inline bool b2Body::IsBullet() const
