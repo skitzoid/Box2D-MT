@@ -232,8 +232,8 @@ void b2ContactManager::Collide(uint32 contactsBegin, uint32 contactsEnd, uint32 
 			c->m_flags &= ~b2Contact::e_filterFlag;
 		}
 
-		bool activeA = bodyA->IsAwake() && bodyA->m_type != b2_staticBody;
-		bool activeB = bodyB->IsAwake() && bodyB->m_type != b2_staticBody;
+		bool activeA = bodyA->IsAwake() && bodyA->GetType() != b2_staticBody;
+		bool activeB = bodyB->IsAwake() && bodyB->GetType() != b2_staticBody;
 
 		// At least one body must be awake and it must be dynamic or kinematic.
 		if (activeA == false && activeB == false)
@@ -247,6 +247,7 @@ void b2ContactManager::Collide(uint32 contactsBegin, uint32 contactsEnd, uint32 
 		if (overlap == false)
 		{
 			td.m_deferredDestroys.Push(c);
+			continue;
 		}
 
 		// The contact persists.
@@ -497,7 +498,7 @@ void b2ContactManager::ConsumeDeferredMoveProxies(uint32 threadCount)
 	}
 }
 
-void b2ContactManager::OnContactCreate(b2Contact* c, b2ContactProxyIds proxyIds)
+inline void b2ContactManager::OnContactCreate(b2Contact* c, b2ContactProxyIds proxyIds)
 {
 	b2Fixture* fixtureA = c->GetFixtureA();
 	b2Fixture* fixtureB = c->GetFixtureB();
@@ -625,7 +626,7 @@ void b2ContactManager::RecalculateToiCandidacy(b2Contact* c)
 	}
 }
 
-void b2ContactManager::PushContact(b2Contact* c)
+inline void b2ContactManager::PushContact(b2Contact* c)
 {
 	if (c->m_flags & b2Contact::e_toiCandidateFlag)
 	{
@@ -652,7 +653,7 @@ void b2ContactManager::PushContact(b2Contact* c)
 	}
 }
 
-void b2ContactManager::RemoveContact(b2Contact* c)
+inline void b2ContactManager::RemoveContact(b2Contact* c)
 {
 	if (c->m_managerIndex < m_toiCount)
 	{

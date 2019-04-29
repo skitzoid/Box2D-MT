@@ -137,9 +137,9 @@ public:
 
 private:
 	void RecalculateToiCandidacy(b2Contact* contact);
-	inline void OnContactCreate(b2Contact* contact, b2ContactProxyIds proxyIds);
-	inline void PushContact(b2Contact* contact);
-	inline void RemoveContact(b2Contact* contact);
+	void OnContactCreate(b2Contact* contact, b2ContactProxyIds proxyIds);
+	void PushContact(b2Contact* contact);
+	void RemoveContact(b2Contact* contact);
 };
 
 inline b2Contact** b2ContactManager::GetToiBegin()

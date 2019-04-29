@@ -464,11 +464,11 @@ private:
 	bool VerifyMtUnlocked();
 	bool VerifyMtCollisionUnlocked();
 
-	b2BodyType m_type;
+	b2ContactEdge* m_contactList;
+	b2JointEdge* m_jointList;
 
+	uint16 m_type;
 	uint16 m_flags;
-
-	int32 m_islandIndex[b2_maxThreads];
 
 	b2Transform m_xf;		// the body origin transform
 	b2Sweep m_sweep;		// the swept motion for CCD
@@ -478,16 +478,6 @@ private:
 
 	b2Vec2 m_force;
 	float32 m_torque;
-
-	b2World* m_world;
-	b2Body* m_prev;
-	b2Body* m_next;
-
-	b2Fixture* m_fixtureList;
-	int32 m_fixtureCount;
-
-	b2JointEdge* m_jointList;
-	b2ContactEdge* m_contactList;
 
 	float32 m_mass, m_invMass;
 
@@ -500,7 +490,16 @@ private:
 
 	float32 m_sleepTime;
 
+	int32 m_islandIndex[b2_maxThreads];
+
 	int32 m_worldIndex;
+
+	int32 m_fixtureCount;
+	b2Fixture* m_fixtureList;
+
+	b2World* m_world;
+	b2Body* m_prev;
+	b2Body* m_next;
 
 	void* m_userData;
 };
@@ -512,7 +511,7 @@ inline bool b2BodyPointerLessThan(const b2Body* lhs, const b2Body* rhs)
 
 inline b2BodyType b2Body::GetType() const
 {
-	return m_type;
+	return (b2BodyType)m_type;
 }
 
 inline const b2Transform& b2Body::GetTransform() const
@@ -542,7 +541,7 @@ inline const b2Vec2& b2Body::GetLocalCenter() const
 
 inline void b2Body::SetLinearVelocity(const b2Vec2& v)
 {
-	if (m_type == b2_staticBody)
+	if (GetType() == b2_staticBody)
 	{
 		return;
 	}
@@ -567,7 +566,7 @@ inline const b2Vec2& b2Body::GetLinearVelocity() const
 
 inline void b2Body::SetAngularVelocity(float32 w)
 {
-	if (m_type == b2_staticBody)
+	if (GetType() == b2_staticBody)
 	{
 		return;
 	}
@@ -801,7 +800,7 @@ inline void* b2Body::GetUserData() const
 
 inline void b2Body::ApplyForce(const b2Vec2& force, const b2Vec2& point, bool wake)
 {
-	if (m_type != b2_dynamicBody)
+	if (GetType() != b2_dynamicBody)
 	{
 		return;
 	}
@@ -826,7 +825,7 @@ inline void b2Body::ApplyForce(const b2Vec2& force, const b2Vec2& point, bool wa
 
 inline void b2Body::ApplyForceToCenter(const b2Vec2& force, bool wake)
 {
-	if (m_type != b2_dynamicBody)
+	if (GetType() != b2_dynamicBody)
 	{
 		return;
 	}
@@ -850,7 +849,7 @@ inline void b2Body::ApplyForceToCenter(const b2Vec2& force, bool wake)
 
 inline void b2Body::ApplyTorque(float32 torque, bool wake)
 {
-	if (m_type != b2_dynamicBody)
+	if (GetType() != b2_dynamicBody)
 	{
 		return;
 	}
@@ -874,7 +873,7 @@ inline void b2Body::ApplyTorque(float32 torque, bool wake)
 
 inline void b2Body::ApplyLinearImpulse(const b2Vec2& impulse, const b2Vec2& point, bool wake)
 {
-	if (m_type != b2_dynamicBody)
+	if (GetType() != b2_dynamicBody)
 	{
 		return;
 	}
@@ -899,7 +898,7 @@ inline void b2Body::ApplyLinearImpulse(const b2Vec2& impulse, const b2Vec2& poin
 
 inline void b2Body::ApplyLinearImpulseToCenter(const b2Vec2& impulse, bool wake)
 {
-	if (m_type != b2_dynamicBody)
+	if (GetType() != b2_dynamicBody)
 	{
 		return;
 	}
@@ -923,7 +922,7 @@ inline void b2Body::ApplyLinearImpulseToCenter(const b2Vec2& impulse, bool wake)
 
 inline void b2Body::ApplyAngularImpulse(float32 impulse, bool wake)
 {
-	if (m_type != b2_dynamicBody)
+	if (GetType() != b2_dynamicBody)
 	{
 		return;
 	}

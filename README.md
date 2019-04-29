@@ -3,7 +3,7 @@
 
 **Box2D with multithreading.**
 
-This project improves performance of Box2D by executing the world's step
+This project improves performance of [Box2D](https://github.com/erincatto/Box2D) by executing the world's step
 function on multiple threads.
 
 ## Usage
@@ -107,7 +107,8 @@ and non-dynamic bodies, which can be expensive.
 If your static body only has a few thin shapes that are subject to tunneling, and
 many thick shapes that are not, then most of that expense is unnecessary.
 
-Box2D-MT lets you avoid that expense by marking specific fixtures as thick walls.
+Box2D-MT lets you avoid that expense by marking specific fixtures as thick walls,
+which means they only generate TOI events for contacts with bullet bodies.
 
 ```
 /// Set whether this fixture is treated like a thick wall for continuous collision detection.
@@ -131,7 +132,6 @@ Visiting these contacts can take up a significant portion of the step.
 Box2D-MT avoids this overhead by evaluating TOI eligibility when the contact is
 created, and partitioning the contact list so that TOI eligible contacts come
 before ineligible contacts. Then SolveTOI only iterates over eligible contacts.
-
 This shifts the cost into functions that are called infrequently;
 b2Fixture::SetSensor, b2Fixture::SetThickWall, and b2Body::SetBullet must
 traverse the body's contacts to reevaluate TOI eligibility.

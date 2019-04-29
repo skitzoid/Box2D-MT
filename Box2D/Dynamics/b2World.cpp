@@ -481,7 +481,7 @@ void b2World::DestroyBody(b2Body* b)
 
 	// Remove from bodies array.
 	int32 index = b->m_worldIndex;
-	if (b->m_type != b2_staticBody)
+	if (b->GetType() != b2_staticBody)
 	{
 		m_nonStaticBodies.Back()->m_worldIndex = index;
 		m_nonStaticBodies.RemoveAndSwap(index);
@@ -743,8 +743,8 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2
 				b2Body* bA = fA->GetBody();
 				b2Body* bB = fB->GetBody();
 
-				b2BodyType typeA = bA->m_type;
-				b2BodyType typeB = bB->m_type;
+				b2BodyType typeA = bA->GetType();
+				b2BodyType typeB = bB->GetType();
 				b2Assert(typeA == b2_dynamicBody || typeB == b2_dynamicBody);
 
 				bool activeA = bA->IsAwake() && typeA != b2_staticBody;
@@ -864,7 +864,7 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2
 		for (int32 i = 0; i < 2; ++i)
 		{
 			b2Body* body = bodies[i];
-			if (body->m_type == b2_dynamicBody)
+			if (body->GetType() == b2_dynamicBody)
 			{
 				for (b2ContactEdge* ce = body->m_contactList; ce; ce = ce->next)
 				{
@@ -888,7 +888,7 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2
 
 					// Only add static, kinematic, or bullet bodies.
 					b2Body* other = ce->other;
-					if (other->m_type == b2_dynamicBody &&
+					if (other->GetType() == b2_dynamicBody &&
 						body->IsBullet() == false && other->IsBullet() == false)
 					{
 						continue;
@@ -941,7 +941,7 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2
 					// Add the other body to the island.
 					other->m_flags |= b2Body::e_islandFlag;
 
-					if (other->m_type != b2_staticBody)
+					if (other->GetType() != b2_staticBody)
 					{
 						other->SetAwake(true);
 					}
@@ -966,7 +966,7 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2
 			b2Body* body = island.m_bodies[i];
 			body->m_flags &= ~b2Body::e_islandFlag;
 
-			if (body->m_type != b2_dynamicBody)
+			if (body->GetType() != b2_dynamicBody)
 			{
 				continue;
 			}

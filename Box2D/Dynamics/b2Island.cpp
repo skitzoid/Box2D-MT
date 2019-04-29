@@ -204,13 +204,13 @@ void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& g
 		float32 w = b->m_angularVelocity;
 
 		// Store positions for continuous collision.
-		if (b->m_type != b2_staticBody)
+		if (b->GetType() != b2_staticBody)
 		{
 			b->m_sweep.c0 = b->m_sweep.c;
 			b->m_sweep.a0 = b->m_sweep.a;
 		}
 
-		if (b->m_type == b2_dynamicBody)
+		if (b->GetType() == b2_dynamicBody)
 		{
 			// Integrate velocities.
 			v += h * (b->m_gravityScale * gravity + b->m_invMass * b->m_force);

@@ -86,7 +86,7 @@ b2Body::b2Body(const b2BodyDef* bd, b2World* world)
 
 	m_type = bd->type;
 
-	if (m_type == b2_dynamicBody)
+	if (GetType() == b2_dynamicBody)
 	{
 		m_mass = 1.0f;
 		m_invMass = 1.0f;
@@ -123,12 +123,12 @@ void b2Body::SetType(b2BodyType type)
 		return;
 	}
 
-	if (m_type == type)
+	if (GetType() == type)
 	{
 		return;
 	}
 
-	if (m_type == b2_staticBody)
+	if (GetType() == b2_staticBody)
 	{
 		// Remove from static bodies.
 		m_world->m_staticBodies.Back()->m_worldIndex = m_worldIndex;
@@ -139,11 +139,11 @@ void b2Body::SetType(b2BodyType type)
 		m_world->m_nonStaticBodies.Push(this);
 	}
 
-	m_type = type;
+	m_type = (uint16)type;
 
 	ResetMassData();
 
-	if (m_type == b2_staticBody)
+	if (GetType() == b2_staticBody)
 	{
 		m_linearVelocity.SetZero();
 		m_angularVelocity = 0.0f;
@@ -322,7 +322,7 @@ void b2Body::ResetMassData()
 	m_sweep.localCenter.SetZero();
 
 	// Static and kinematic bodies have zero mass.
-	if (m_type == b2_staticBody || m_type == b2_kinematicBody)
+	if (GetType() == b2_staticBody || GetType() == b2_kinematicBody)
 	{
 		m_sweep.c0 = m_xf.p;
 		m_sweep.c = m_xf.p;
@@ -330,7 +330,7 @@ void b2Body::ResetMassData()
 		return;
 	}
 
-	b2Assert(m_type == b2_dynamicBody);
+	b2Assert(GetType() == b2_dynamicBody);
 
 	// Accumulate mass over all fixtures.
 	b2Vec2 localCenter = b2Vec2_zero;
@@ -392,7 +392,7 @@ void b2Body::SetMassData(const b2MassData* massData)
 		return;
 	}
 
-	if (m_type != b2_dynamicBody)
+	if (GetType() != b2_dynamicBody)
 	{
 		return;
 	}
@@ -428,7 +428,7 @@ void b2Body::SetMassData(const b2MassData* massData)
 bool b2Body::ShouldCollide(const b2Body* other) const
 {
 	// At least one body should be dynamic.
-	if (m_type != b2_dynamicBody && other->m_type != b2_dynamicBody)
+	if (GetType() != b2_dynamicBody && other->GetType() != b2_dynamicBody)
 	{
 		return false;
 	}
@@ -598,7 +598,7 @@ void b2Body::SetBullet(bool flag)
 
 bool b2Body::VerifyMtUnlocked()
 {
-	if (m_type != b2_staticBody)
+	if (GetType() != b2_staticBody)
 	{
 		// Non-static bodies can't be modified while multithread is locked for collision.
 		// They're safe to modify while locked for solve, assuming they're within the same
