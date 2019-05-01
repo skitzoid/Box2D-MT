@@ -22,8 +22,11 @@ b2ThreadPoolTaskExecutor executor;
 world.Step(timeStep, velocityIterations, positionIterations, executor);
 ```
 
-Box2D-MT comes with a thread pool task executor, but you could use your
-game engine's thread pool instead by implementing b2TaskExecutor.
+Box2D-MT comes with a thread pool task executor, but you could use your game
+engine's thread pool instead by implementing b2TaskExecutor.
+
+Spawning worker threads is relatively expensive so you should reuse the same
+executor across steps.
 
 ### Multithreaded Callbacks
 
@@ -97,7 +100,10 @@ an issue if you want to discuss it.
 ## Time of Impact (TOI) Changes
 
 Since TOI is still processed on a single thread, it's important that it doesn't
-do more work than necessary. I found two ways to address that.
+do more work than necessary.
+
+SolveTOI was accounting for 66% of the step time on the multithread demo, but
+these changes brought that down to 3%.
 
 ### Finer-grained Continuous Collision Detection (CCD) Control
 
@@ -131,10 +137,9 @@ Visiting these contacts can take up a significant portion of the step.
 
 Box2D-MT avoids this overhead by evaluating TOI eligibility when the contact is
 created, and partitioning the contact list so that TOI eligible contacts come
-before ineligible contacts. Then SolveTOI only iterates over eligible contacts.
-This shifts the cost into functions that are called infrequently;
-b2Fixture::SetSensor, b2Fixture::SetThickWall, and b2Body::SetBullet must
-traverse the body's contacts to reevaluate TOI eligibility.
+before ineligible contacts. This shifts the cost into functions that are called
+infrequently; b2Fixture::SetSensor, b2Fixture::SetThickWall, and b2Body::SetBullet
+must traverse the body's contacts to reevaluate TOI eligibility.
 
 ## Thread Error Detection
 
