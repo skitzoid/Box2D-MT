@@ -126,7 +126,7 @@ public:
 	b2BlockAllocator* m_allocator;
 
 	// This contacts array makes it easier to assign ranges of contacts to different tasks.
-	// Noe: TOI partitioning is also done in this array rather than in the world's contact
+	// Note: TOI partitioning is also done in this array rather than in the world's contact
 	// list, but it might be better to do that in the contact list.
 	b2GrowableArray<b2Contact*> m_contacts;
 	int32 m_toiCount;

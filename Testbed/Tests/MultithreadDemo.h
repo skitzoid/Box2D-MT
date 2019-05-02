@@ -45,8 +45,10 @@ public:
 
 			b2FixtureDef fd;
 			fd.shape = &shape;
-			// Fixtures marked as thick walls will only generate TOI events with bullet bodies.
-			// This reduces the performance cost of TOI.
+
+			// Marking fixtures as thick walls avoids expensive TOI checks for non-bullet
+			// contacts with those fixtures. This should only be applied to walls that are
+			// thick enough to prevent tunneling on their own, without TOI.
 			fd.isThickWall = true;
 
 			shape.SetAsBox(25.0f, 2.5f, b2Vec2(0.0f, -2.5f), 0.0f);
