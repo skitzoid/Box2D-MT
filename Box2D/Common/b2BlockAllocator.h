@@ -48,6 +48,8 @@ public:
 
 private:
 
+	static bool InitializeBlockSizeLookup();
+
 	b2Chunk* m_chunks;
 	int32 m_chunkCount;
 	int32 m_chunkSpace;
@@ -56,7 +58,6 @@ private:
 
 	static int32 s_blockSizes[b2_blockSizes];
 	static uint8 s_blockSizeLookup[b2_maxBlockSize + 1];
-	static bool s_blockSizeLookupInitialized;
 };
 
 #endif
