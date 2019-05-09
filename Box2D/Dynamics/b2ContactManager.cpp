@@ -358,7 +358,7 @@ void b2ContactManager::SynchronizeFixtures(b2Body** bodies, uint32 count, uint32
 	}
 }
 
-void b2ContactManager::FinishFindNewContacts(b2TaskExecutor& executor, b2TaskGroup& taskGroup, b2StackAllocator& allocator)
+void b2ContactManager::FinishFindNewContacts(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator)
 {
 	m_broadPhase.ResetBuffers();
 	auto creates = b2MakeStackAllocThreadDataSorter<b2DeferredContactCreate>(m_perThreadData,
@@ -404,7 +404,7 @@ void b2ContactManager::FinishFindNewContacts()
 	}
 }
 
-void b2ContactManager::FinishCollide(b2TaskExecutor& executor, b2TaskGroup& taskGroup, b2StackAllocator& allocator)
+void b2ContactManager::FinishCollide(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator)
 {
 	auto begins = b2MakeStackAllocThreadDataSorter<b2Contact*>(m_perThreadData,
 		&b2ContactManagerPerThreadData::m_beginContacts, b2ContactPointerLessThan, allocator);
@@ -502,7 +502,7 @@ void b2ContactManager::FinishCollide()
 	}
 }
 
-void b2ContactManager::FinishSynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup& taskGroup, b2StackAllocator& allocator)
+void b2ContactManager::FinishSynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator)
 {
 	auto moves = b2MakeStackAllocThreadDataSorter<b2DeferredMoveProxy>(m_perThreadData,
 		&b2ContactManagerPerThreadData::m_moveProxies, b2DeferredMoveProxyLessThan, allocator);
@@ -528,7 +528,7 @@ void b2ContactManager::FinishSynchronizeFixtures()
 	}
 }
 
-void b2ContactManager::FinishSolve(b2TaskExecutor& executor, b2TaskGroup& taskGroup, b2StackAllocator& allocator)
+void b2ContactManager::FinishSolve(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator)
 {
 	auto postSolves = b2MakeStackAllocThreadDataSorter<b2DeferredPostSolve>(m_perThreadData,
 		&b2ContactManagerPerThreadData::m_postSolves, b2DeferredPostSolveLessThan, allocator);

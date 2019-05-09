@@ -296,7 +296,7 @@ public:
 	float32 GetMinAlpha() const { return m_minAlpha; }
 
 	// Compare alpha values of contacts with a consistent method of choosing between contacts with the same alpha.
-	static bool AlphaContactLessThan(float32 alpha0, const b2Contact* contact0, float32 alpha1, const b2Contact& contact1)
+	static bool AlphaContactLessThan(float32 alpha0, const b2Contact& contact0, float32 alpha1, const b2Contact* contact1)
 	{
 		if (alpha0 < alpha1)
 		{
@@ -305,12 +305,12 @@ public:
 
 		if (alpha0 == alpha1)
 		{
-			if (contact0 == nullptr)
+			if (contact1 == nullptr)
 			{
 				return true;
 			}
 
-			return b2ContactPointerLessThan(contact0, &contact1);
+			return b2ContactPointerLessThan(&contact0, contact1);
 		}
 
 		return false;
@@ -430,7 +430,7 @@ public:
 				alpha = ComputeAlpha(c);
 			}
 
-			if (AlphaContactLessThan(m_minAlpha, m_minContact, alpha, *c))
+			if (AlphaContactLessThan(alpha, *c, m_minAlpha, m_minContact))
 			{
 				// This is the minimum TOI found so far.
 				m_minContact = c;
@@ -449,8 +449,6 @@ private:
 
 b2World::b2World(const b2Vec2& gravity)
 {
-	printf("b2SolveTask size: %zu\n", sizeof(b2SolveTask));
-
 	static std::once_flag s_contactRegisterInitFlag;
 	std::call_once(s_contactRegisterInitFlag, b2Contact::InitializeRegisters);
 
@@ -474,7 +472,7 @@ b2World::b2World(const b2Vec2& gravity)
 	m_jointCost = 10;
 	m_solveTaskCostThreshold = 100;
 
-	m_consistencySorting = true;
+	m_consistencySorting = false; // TEMP TODO_JUSTIN
 	m_allowSleep = true;
 	m_gravity = gravity;
 
@@ -830,7 +828,7 @@ void b2World::SetAllowSleeping(bool flag)
 	}
 }
 
-void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2TimeStep& step)
+void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b2TimeStep& step)
 {
 	int32 bodyCapacity = 2 * b2_maxTOIContacts;
 	int32 contactCapacity = b2_maxTOIContacts;
@@ -1047,7 +1045,7 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2
 	m_stackAllocator.Free(bodies);
 }
 
-void b2World::FindNewContacts(b2TaskExecutor& executor, b2TaskGroup taskGroup)
+void b2World::FindNewContacts(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 {
 	if (m_contactManager.m_broadPhase.GetMoveCount() == 0)
 	{
@@ -1079,7 +1077,7 @@ void b2World::FindNewContacts(b2TaskExecutor& executor, b2TaskGroup taskGroup)
 	}
 }
 
-void b2World::Collide(b2TaskExecutor& executor, b2TaskGroup taskGroup)
+void b2World::Collide(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 {
 	if (m_contactManager.m_contacts.size() == 0)
 	{
@@ -1109,7 +1107,7 @@ void b2World::Collide(b2TaskExecutor& executor, b2TaskGroup taskGroup)
 	}
 }
 
-void b2World::SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup taskGroup)
+void b2World::SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 {
 	if (m_nonStaticBodies.size() == 0)
 	{
@@ -1139,7 +1137,7 @@ void b2World::SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup taskGrou
 	}
 }
 
-void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2TimeStep& step)
+void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b2TimeStep& step)
 {
 	// A single static body can be included in multiple islands.
 	// In the worst case every non static body is in its own island with every static body.
@@ -1408,7 +1406,7 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2Tim
 	ClearPostSolve(executor, taskGroup);
 }
 
-void b2World::ClearPostSolve(b2TaskExecutor& executor, b2TaskGroup taskGroup)
+void b2World::ClearPostSolve(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 {
 	b2ClearContactSolveFlags contactsTasks[b2_maxRangeSubTasks];
 	if (m_contactManager.m_contacts.size() > 0)
@@ -1442,7 +1440,7 @@ void b2World::ClearPostSolve(b2TaskExecutor& executor, b2TaskGroup taskGroup)
 	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
 }
 
-void b2World::ClearPostSolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup)
+void b2World::ClearPostSolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 {
 	b2ClearContactSolveTOIFlags contactsTasks[b2_maxRangeSubTasks];
 	if (m_contactManager.m_contacts.size() > 0)
@@ -1481,7 +1479,7 @@ void b2World::ClearPostSolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup)
 	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
 }
 
-void b2World::ClearForces(b2TaskExecutor& executor, b2TaskGroup taskGroup)
+void b2World::ClearForces(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 {
 	if (m_nonStaticBodies.size() == 0)
 	{
@@ -1500,7 +1498,7 @@ void b2World::ClearForces(b2TaskExecutor& executor, b2TaskGroup taskGroup)
 	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
 }
 
-void b2World::FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup taskGroup, b2Contact** contactOut, float32* alphaOut)
+void b2World::FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2Contact** contactOut, float32* alphaOut)
 {
 	if (m_contactManager.m_toiCount == 0)
 	{
@@ -1546,7 +1544,7 @@ void b2World::FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup taskGroup,
 
 		float32 alpha = b2FindMinToiContactTask::ComputeAlpha(contact);
 
-		if (b2FindMinToiContactTask::AlphaContactLessThan(minAlpha, minContact, alpha, *contact))
+		if (b2FindMinToiContactTask::AlphaContactLessThan(alpha, *contact, minAlpha, minContact))
 		{
 			minAlpha = alpha;
 			minContact = contact;
@@ -1559,7 +1557,7 @@ void b2World::FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup taskGroup,
 		float32 alpha = tasks[i].GetMinAlpha();
 		b2Contact* contact = tasks[i].GetMinContact();
 
-		if (contact && b2FindMinToiContactTask::AlphaContactLessThan(minAlpha, minContact, alpha, *contact))
+		if (contact && b2FindMinToiContactTask::AlphaContactLessThan(alpha, *contact, minAlpha, minContact))
 		{
 			minContact = contact;
 			minAlpha = alpha;
@@ -1584,7 +1582,7 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 		memset(&m_contactManager.m_perThreadData[i].m_profile, 0, sizeof(b2Profile));
 	}
 
-	b2TaskGroup taskGroup = executor.CreateTaskGroup(m_stackAllocator);
+	b2TaskGroup* taskGroup = executor.CreateTaskGroup(m_stackAllocator);
 
 	// If new fixtures were added, we need to find the new contacts.
 	if (m_flags & e_newFixture)

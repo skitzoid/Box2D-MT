@@ -49,10 +49,10 @@
 	#define b2_notifyLockScopeEnd }
 #endif
 
-inline b2ThreadPoolTaskGroup* b2GetThreadPoolTaskGroup(b2TaskGroup taskGroup)
+inline b2ThreadPoolTaskGroup* b2GetThreadPoolTaskGroup(b2TaskGroup* taskGroup)
 {
-	b2Assert(taskGroup.userData);
-	return (b2ThreadPoolTaskGroup*)taskGroup.userData;
+	b2Assert(taskGroup);
+	return (b2ThreadPoolTaskGroup*)taskGroup;
 }
 
 // Compare the cost of two tasks. Currently only b2SolveTask sets a cost.
@@ -329,15 +329,14 @@ void b2ThreadPoolTaskExecutor::StepEnd(b2World& world)
 	B2_NOT_USED(world);
 }
 
-b2TaskGroup b2ThreadPoolTaskExecutor::CreateTaskGroup(b2StackAllocator& allocator)
+b2TaskGroup* b2ThreadPoolTaskExecutor::CreateTaskGroup(b2StackAllocator& allocator)
 {
 	b2ThreadPoolTaskGroup* tpTaskGroup = (b2ThreadPoolTaskGroup*)allocator.Allocate(sizeof(b2ThreadPoolTaskGroup));
 	new(tpTaskGroup) b2ThreadPoolTaskGroup(m_threadPool);
-	b2TaskGroup taskGroup(tpTaskGroup);
-	return taskGroup;
+	return tpTaskGroup;
 }
 
-void b2ThreadPoolTaskExecutor::DestroyTaskGroup(b2TaskGroup taskGroup, b2StackAllocator& allocator)
+void b2ThreadPoolTaskExecutor::DestroyTaskGroup(b2TaskGroup* taskGroup, b2StackAllocator& allocator)
 {
 	b2ThreadPoolTaskGroup* tpTaskGroup = b2GetThreadPoolTaskGroup(taskGroup);
 	b2Assert(tpTaskGroup);
@@ -358,7 +357,7 @@ void b2ThreadPoolTaskExecutor::PartitionRange(b2TaskType type, uint32 begin, uin
 	b2PartitionRange(begin, end, maxSubTasks, itemsPerTask, output);
 }
 
-void b2ThreadPoolTaskExecutor::SubmitTask(b2TaskGroup taskGroup, b2Task* task)
+void b2ThreadPoolTaskExecutor::SubmitTask(b2TaskGroup* taskGroup, b2Task* task)
 {
 	b2ThreadPoolTaskGroup* tpTaskGroup = b2GetThreadPoolTaskGroup(taskGroup);
 	b2Assert(tpTaskGroup);
@@ -366,7 +365,7 @@ void b2ThreadPoolTaskExecutor::SubmitTask(b2TaskGroup taskGroup, b2Task* task)
 	m_threadPool.SubmitTask(*tpTaskGroup, task);
 }
 
-void b2ThreadPoolTaskExecutor::SubmitTasks(b2TaskGroup taskGroup, b2Task** tasks, uint32 count)
+void b2ThreadPoolTaskExecutor::SubmitTasks(b2TaskGroup* taskGroup, b2Task** tasks, uint32 count)
 {
 	b2ThreadPoolTaskGroup* tpTaskGroup = b2GetThreadPoolTaskGroup(taskGroup);
 	b2Assert(tpTaskGroup);
@@ -374,7 +373,7 @@ void b2ThreadPoolTaskExecutor::SubmitTasks(b2TaskGroup taskGroup, b2Task** tasks
 	m_threadPool.SubmitTasks(*tpTaskGroup, tasks, count);
 }
 
-void b2ThreadPoolTaskExecutor::Wait(b2TaskGroup taskGroup, const b2ThreadContext& ctx)
+void b2ThreadPoolTaskExecutor::Wait(b2TaskGroup* taskGroup, const b2ThreadContext& ctx)
 {
 	b2ThreadPoolTaskGroup* tpTaskGroup = b2GetThreadPoolTaskGroup(taskGroup);
 	b2Assert(tpTaskGroup);

@@ -101,10 +101,10 @@ public:
 	void SynchronizeFixtures(b2Body** bodies, uint32 count, uint32 threadId);
 
 	// Finish multithreaded work with consistency sorting.
-	void FinishFindNewContacts(b2TaskExecutor& executor, b2TaskGroup& taskGroup, b2StackAllocator& allocator);
-	void FinishCollide(b2TaskExecutor& executor, b2TaskGroup& taskGroup, b2StackAllocator& allocator);
-	void FinishSynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup& taskGroup, b2StackAllocator& allocator);
-	void FinishSolve(b2TaskExecutor& executor, b2TaskGroup& taskGroup, b2StackAllocator& allocator);
+	void FinishFindNewContacts(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator);
+	void FinishCollide(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator);
+	void FinishSynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator);
+	void FinishSolve(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator);
 
 	// Finish multithreaded work without consistency sorting.
 	void FinishFindNewContacts();

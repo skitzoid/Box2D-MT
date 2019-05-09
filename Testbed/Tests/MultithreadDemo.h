@@ -54,7 +54,7 @@ public:
 			// Marking fixtures as thick walls can avoid expensive TOI checks for non-bullet
 			// contacts with those fixtures. This should only be applied to walls that are
 			// thick enough to prevent tunneling on their own, without TOI.
-#if 0		// Not applied by default so that performance can be fairly compared to Box2D.
+#if 1		// Not applied by default so that performance can be fairly compared to Box2D.
 			fd.isThickWall = true;
 #endif
 

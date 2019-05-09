@@ -46,15 +46,15 @@ public:
 
 	/// Create a task group.
 	/// The allocator can provide storage for the task group if needed.
-	virtual b2TaskGroup CreateTaskGroup(b2StackAllocator& allocator)
+	virtual b2TaskGroup* CreateTaskGroup(b2StackAllocator& allocator)
 	{
 		B2_NOT_USED(allocator);
-		b2TaskGroup taskGroup(nullptr);
+		b2TaskGroup* taskGroup(nullptr);
 		return taskGroup;
 	}
 
 	/// Destroy the task group, freeing any allocations made by CreateTaskGroup.
-	virtual void DestroyTaskGroup(b2TaskGroup taskGroup, b2StackAllocator& allocator)
+	virtual void DestroyTaskGroup(b2TaskGroup* taskGroup, b2StackAllocator& allocator)
 	{
 		B2_NOT_USED(taskGroup);
 		B2_NOT_USED(allocator);
@@ -71,14 +71,14 @@ public:
 	}
 
 	/// Submit a single task for execution.
-	virtual void SubmitTask(b2TaskGroup taskGroup, b2Task* task)
+	virtual void SubmitTask(b2TaskGroup* taskGroup, b2Task* task)
 	{
 		B2_NOT_USED(taskGroup);
 		B2_NOT_USED(task);
 	}
 
 	/// Submit multiple tasks for execution.
-	virtual void SubmitTasks(b2TaskGroup taskGroup, b2Task** tasks, uint32 count)
+	virtual void SubmitTasks(b2TaskGroup* taskGroup, b2Task** tasks, uint32 count)
 	{
 		for (uint32 i = 0; i < count; ++i)
 		{
@@ -87,7 +87,7 @@ public:
 	}
 
 	/// Wait for all tasks in the group to finish.
-	virtual void Wait(b2TaskGroup taskGroup, const b2ThreadContext& ctx)
+	virtual void Wait(b2TaskGroup* taskGroup, const b2ThreadContext& ctx)
 	{
 		B2_NOT_USED(taskGroup);
 		B2_NOT_USED(ctx);

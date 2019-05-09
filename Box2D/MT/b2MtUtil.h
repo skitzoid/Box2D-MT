@@ -24,7 +24,7 @@
 #include "Box2D/MT/b2TaskExecutor.h"
 
 // Submit a task to an executor.
-inline void b2SubmitTask(b2TaskExecutor& executor, b2TaskGroup taskGroup, b2Task* task)
+inline void b2SubmitTask(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2Task* task)
 {
 	task->SetTaskGroup(taskGroup);
 	executor.SubmitTask(taskGroup, task);
@@ -32,7 +32,7 @@ inline void b2SubmitTask(b2TaskExecutor& executor, b2TaskGroup taskGroup, b2Task
 
 // Submit an array of tasks to an executor.
 template<typename TaskType>
-inline void b2SubmitTasks(b2TaskExecutor& executor, b2TaskGroup taskGroup, TaskType* tasks, uint32 count)
+inline void b2SubmitTasks(b2TaskExecutor& executor, b2TaskGroup* taskGroup, TaskType* tasks, uint32 count)
 {
 	b2Task* taskPtrs[b2_maxRangeSubTasks];
 	for (uint32 i = 0; i < count; ++i)

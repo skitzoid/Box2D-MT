@@ -147,9 +147,6 @@ public:
 	b2Contact* GetContactList();
 	const b2Contact* GetContactList() const;
 
-	/// The world may continue gathering bodies for solving until this estimated cost is reached.
-#define b2_solveBatchTargetCost					100
-
 	/// Get/set the body, contact, and joint contributions to the estimated island solving cost.
 	/// islandCost = bodyCost * bodyCount + contactCost * contactCount + jointCost * jointCount
 	void SetIslandCostScales(uint32 bodyCost, uint32 contactCost, uint32 jointCost);
@@ -267,15 +264,15 @@ private:
 	friend class b2Controller;
 	friend class b2FindMinToiContactTask;
 
-	void SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2TimeStep& step);
-	void SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup taskGroup);
-	void FindNewContacts(b2TaskExecutor& executor, b2TaskGroup taskGroup);
-	void Collide(b2TaskExecutor& executor, b2TaskGroup taskGroup);
-	void Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2TimeStep& step);
-	void ClearPostSolve(b2TaskExecutor& executor, b2TaskGroup taskGroup);
-	void ClearPostSolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup);
-	void ClearForces(b2TaskExecutor& executor, b2TaskGroup taskGroup);
-	void FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup taskGroup, b2Contact** contactOut, float32* alphaOut);
+	void SolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b2TimeStep& step);
+	void SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
+	void FindNewContacts(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
+	void Collide(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
+	void Solve(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b2TimeStep& step);
+	void ClearPostSolve(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
+	void ClearPostSolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
+	void ClearForces(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
+	void FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2Contact** contactOut, float32* alphaOut);
 
 	void RecalculateToiCandidacy(b2Body* b);
 	void RecalculateToiCandidacy(b2Fixture* f);

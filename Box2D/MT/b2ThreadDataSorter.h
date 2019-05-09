@@ -118,7 +118,7 @@ public:
 
 	// Submit a sorting task.
 	// Note: this gives better parallelism when called on multiple sorters before waiting.
-	void SubmitSortTask(b2TaskExecutor& executor, b2TaskGroup taskGroup);
+	void SubmitSortTask(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
 
 	// Have all required sort tasks been submitted?
 	bool IsSubmitRequired() const
@@ -153,13 +153,13 @@ private:
 	};
 
 	// Sort the per thread data.
-	void SubmitThreadDataSort(b2TaskExecutor& executor, b2TaskGroup taskGroup);
+	void SubmitThreadDataSort(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
 
 	// Merge the sorted per thread data into the output buffer.
-	void SubmitThreadDataToBufferMerge(b2TaskExecutor& executor, b2TaskGroup taskGroup);
+	void SubmitThreadDataToBufferMerge(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
 
 	// Merge the sorted ranges within the output buffer.
-	void SubmitBufferToBufferMerge(b2TaskExecutor& executor, b2TaskGroup taskGroup);
+	void SubmitBufferToBufferMerge(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
 
 	// Not expected to work under these conditions.
 	// Create an issue or submit a pull request if you want to lift these restrictions.
@@ -205,7 +205,7 @@ public:
 
 	// Submit a sorting task.
 	// Note: this gives better parallelism when called on multiple sorters before waiting.
-	void SubmitSortTask(b2TaskExecutor& executor, b2TaskGroup taskGroup)
+	void SubmitSortTask(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 	{
 		m_sorter.SubmitSortTask(executor, taskGroup);
 	}
@@ -260,7 +260,7 @@ b2ThreadDataSorter<T, ThreadData, Member, Compare, ThreadDataCount>::b2ThreadDat
 
 template<typename T, typename ThreadData, typename Member, typename Compare, uint32 ThreadDataCount>
 void b2ThreadDataSorter<T, ThreadData, Member, Compare, ThreadDataCount>::SubmitSortTask(
-	b2TaskExecutor& executor, b2TaskGroup taskGroup)
+	b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 {
 	switch(m_nextPhase)
 	{
@@ -291,7 +291,7 @@ void b2ThreadDataSorter<T, ThreadData, Member, Compare, ThreadDataCount>::Submit
 
 template<typename T, typename ThreadData, typename Member, typename Compare, uint32 ThreadDataCount>
 void b2ThreadDataSorter<T, ThreadData, Member, Compare, ThreadDataCount>::SubmitThreadDataSort(
-	b2TaskExecutor& executor, b2TaskGroup taskGroup)
+	b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 {
 	b2Assert(m_sortedRangeCount == ThreadDataCount);
 
@@ -312,7 +312,7 @@ void b2ThreadDataSorter<T, ThreadData, Member, Compare, ThreadDataCount>::Submit
 
 template<typename T, typename ThreadData, typename Member, typename Compare, uint32 ThreadDataCount>
 void b2ThreadDataSorter<T, ThreadData, Member, Compare, ThreadDataCount>::SubmitThreadDataToBufferMerge(
-	b2TaskExecutor& executor, b2TaskGroup taskGroup)
+	b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 {
 	b2Assert(m_sortedRangeCount == ThreadDataCount);
 
@@ -348,7 +348,7 @@ void b2ThreadDataSorter<T, ThreadData, Member, Compare, ThreadDataCount>::Submit
 
 template<typename T, typename ThreadData, typename Member, typename Compare, uint32 ThreadDataCount>
 void b2ThreadDataSorter<T, ThreadData, Member, Compare, ThreadDataCount>::SubmitBufferToBufferMerge(
-	b2TaskExecutor& executor, b2TaskGroup taskGroup)
+	b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 {
 	if (m_outputCount <= 1)
 	{
@@ -426,7 +426,7 @@ b2StackAllocThreadDataSorter<T, ThreadData, Member, Compare, ThreadDataCount>
 // Convenience function to run all sorting tasks and wait for them to finish.
 // Note: this will sacrifice parallelism if used on multiple sorters sequentially.
 template<typename Sorter>
-void b2Sort(Sorter& sorter, b2TaskExecutor& executor, b2TaskGroup taskGroup, b2StackAllocator& allocator)
+void b2Sort(Sorter& sorter, b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator)
 {
 	b2Assert(sorter.IsSubmitRequired());
 

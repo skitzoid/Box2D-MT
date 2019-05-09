@@ -65,7 +65,7 @@ struct b2ThreadPoolOptions
 };
 
 /// A task group is used to wait for completion of a group of tasks.
-class b2ThreadPoolTaskGroup
+class b2ThreadPoolTaskGroup : public b2TaskGroup
 {
 public:
 	explicit b2ThreadPoolTaskGroup(b2ThreadPool& threadPool);
@@ -86,6 +86,7 @@ public:
 	/// Construct a thread pool.
 	explicit b2ThreadPool(const b2ThreadPoolOptions& options);
 
+	/// Join with workers.
 	~b2ThreadPool();
 
 	/// Set the amount of time in milliseconds that workers will busy wait for tasks before
@@ -166,22 +167,22 @@ public:
 
 	/// Create a task group.
 	/// The allocator can provide storage for the task group if needed.
-	b2TaskGroup CreateTaskGroup(b2StackAllocator& allocator) override;
+	b2TaskGroup* CreateTaskGroup(b2StackAllocator& allocator) override;
 
 	/// Destroy the task group, freeing any allocations made in CreateTaskGroup.
-	void DestroyTaskGroup(b2TaskGroup taskGroup, b2StackAllocator& allocator) override;
+	void DestroyTaskGroup(b2TaskGroup* taskGroup, b2StackAllocator& allocator) override;
 
 	/// Partition a range into sub-ranges that will each be assigned to a range task.
 	void PartitionRange(b2TaskType type, uint32 begin, uint32 end, b2PartitionedRange& output) override;
 
 	/// Submit a single task for execution.
-	void SubmitTask(b2TaskGroup taskGroup, b2Task* task) override;
+	void SubmitTask(b2TaskGroup* taskGroup, b2Task* task) override;
 
 	/// Submit multiple tasks for execution.
-	void SubmitTasks(b2TaskGroup taskGroup, b2Task** tasks, uint32 count) override;
+	void SubmitTasks(b2TaskGroup* taskGroup, b2Task** tasks, uint32 count) override;
 
 	/// Wait for all tasks in the group to finish.
-	void Wait(b2TaskGroup taskGroup, const b2ThreadContext& ctx) override;
+	void Wait(b2TaskGroup* taskGroup, const b2ThreadContext& ctx) override;
 
 private:
 	b2ThreadPool m_threadPool;

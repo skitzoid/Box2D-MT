@@ -59,12 +59,8 @@ struct b2ThreadContext
 	uint32 threadId;
 };
 
-/// Represents a group of tasks. The user data should be set by an executor.
-struct b2TaskGroup
-{
-	explicit b2TaskGroup(void* userDataIn) : userData(userDataIn) {}
-	void* userData;
-};
+/// Represents a group of tasks. Implemented by executors if needed.
+class b2TaskGroup { };
 
 /// The base class for all tasks that are run by the thread pool.
 class b2Task
@@ -91,14 +87,14 @@ public:
 	uint32 GetCost() const;
 
 	/// Associate this task with a task group.
-	void SetTaskGroup(b2TaskGroup taskGroup);
+	void SetTaskGroup(b2TaskGroup* taskGroup);
 
 	/// Get the group that this task is associated with.
-	b2TaskGroup GetTaskGroup() const;
+	b2TaskGroup* GetTaskGroup() const;
 
 private:
 	uint32 m_costEstimate;
-	b2TaskGroup m_taskGroup;
+	b2TaskGroup* m_taskGroup;
 };
 
 /// A range over which a range task executes.
@@ -169,12 +165,12 @@ inline uint32 b2Task::GetCost() const
 	return m_costEstimate;
 }
 
-inline void b2Task::SetTaskGroup(b2TaskGroup taskGroup)
+inline void b2Task::SetTaskGroup(b2TaskGroup* taskGroup)
 {
 	m_taskGroup = taskGroup;
 }
 
-inline b2TaskGroup b2Task::GetTaskGroup() const
+inline b2TaskGroup* b2Task::GetTaskGroup() const
 {
 	return m_taskGroup;
 }
