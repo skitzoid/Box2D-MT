@@ -32,6 +32,7 @@ struct b2Profile
 	float32 solveVelocity;
 	float32 solvePosition;
 	float32 solveTOI;
+	float32 solveTOIFindMinContact;
 	float32 broadphase;
 	float32 broadphaseSyncFixtures;
 	float32 broadphaseFindContacts;
@@ -82,6 +83,7 @@ inline void b2AddProfile(b2Profile& dest, const b2Profile& src, float32 scale)
     dest.solveVelocity += scale * src.solveVelocity;
     dest.solvePosition += scale * src.solvePosition;
     dest.solveTOI += scale * src.solveTOI;
+    dest.solveTOIFindMinContact += scale * src.solveTOIFindMinContact;
     dest.broadphase += scale * src.broadphase;
     dest.broadphaseSyncFixtures += scale * src.broadphaseSyncFixtures;
     dest.broadphaseFindContacts += scale * src.broadphaseFindContacts;

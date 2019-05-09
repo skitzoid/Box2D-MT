@@ -33,16 +33,10 @@
 #include "Box2D/Collision/b2TimeOfImpact.h"
 #include "Box2D/Common/b2Draw.h"
 #include "Box2D/Common/b2Timer.h"
-#include "Box2D/MT/b2TaskExecutor.h"
+#include "Box2D/MT/b2MtUtil.h"
+#include "Box2D/MT/b2ThreadDataSorter.h"
 #include <new>
-
-b2ThreadContext b2MainThreadCtx(b2StackAllocator& stackAllocator)
-{
-	b2ThreadContext threadCtx;
-	threadCtx.stack = &stackAllocator;
-	threadCtx.threadId = 0;
-	return threadCtx;
-}
+#include <mutex>
 
 class b2SolveTask : public b2Task
 {
@@ -57,37 +51,30 @@ public:
 		m_allowSleep = allowSleep;
 		m_next = next;
 		m_islandCount = 0;
-		m_bodyCount = 0;
-		m_contactCount = 0;
-		m_jointCount = 0;
 	}
 
 	void AddIsland(int32 bodyCount, int32 contactCount, int32 jointCount,
 		b2Body** bodies, b2Contact** contacts, b2Joint** joints,
-		b2Velocity* velocities, b2Position* positions)
+		b2Velocity* velocities, b2Position* positions, uint32 cost)
 	{
 		m_islands[m_islandCount++] = b2Island(
 			bodyCount, contactCount, jointCount,
 			bodies, contacts, joints,
 			velocities, positions);
 
-		m_bodyCount += bodyCount;
-		m_contactCount += contactCount;
-		m_jointCount += jointCount;
-
-		SetCost(GetCost() + b2GetIslandCost(m_bodyCount, m_contactCount, m_jointCount));
+		SetCost(GetCost() + cost);
 	}
 
-	int32 GetBodyCount() const { return m_bodyCount; }
+	uint32 GetIslandCount() const { return m_islandCount; }
 
 	b2SolveTask* GetNext() { return m_next; }
 
-private:
+	virtual b2TaskType GetType() const override { return e_solveTask; }
 
 	virtual void Execute(const b2ThreadContext& threadCtx) override
 	{
 		b2TimeStep timestep = *m_timestep;
-		for (int32 islandIndex = 0; islandIndex < m_islandCount; ++islandIndex)
+		for (uint32 islandIndex = 0; islandIndex < m_islandCount; ++islandIndex)
 		{
 			b2Island& island = m_islands[islandIndex];
 
@@ -98,16 +85,15 @@ private:
 		}
 	}
 
-	b2Island m_islands[b2_solveBatchTargetBodyCount];
+private:
+
+	b2Island m_islands[b2_maxIslandsPerSolveTask];
 	const b2TimeStep* m_timestep;
 	b2ContactManagerPerThreadData* m_td;
 	b2ContactListener* m_contactListener;
 	b2SolveTask* m_next;
 	b2Vec2 m_gravity;
-	int32 m_islandCount;
-	int32 m_bodyCount;
-	int32 m_contactCount;
-	int32 m_jointCount;
+	uint32 m_islandCount;
 	bool m_allowSleep;
 };
 
@@ -119,28 +105,36 @@ public:
 		: b2RangeTask(range)
 		, m_contactManager(manager)
 	{}
-private:
+
+	virtual b2TaskType GetType() const override { return e_collideTask; }
+
 	virtual void Execute(const b2ThreadContext& threadCtx, const b2RangeTaskRange& range) override
 	{
 		m_contactManager->Collide(range.begin, range.end, threadCtx.threadId);
 	}
+
+private:
 	b2ContactManager* m_contactManager;
 };
 
-class b2GenerateDeferredMoveProxiesTask : public b2RangeTask
+class b2BroadphaseSyncFixturesTask : public b2RangeTask
 {
 public:
-	b2GenerateDeferredMoveProxiesTask() {}
-	b2GenerateDeferredMoveProxiesTask(const b2RangeTaskRange& range, b2ContactManager* manager, b2Body** bodies)
+	b2BroadphaseSyncFixturesTask() {}
+	b2BroadphaseSyncFixturesTask(const b2RangeTaskRange& range, b2ContactManager* manager, b2Body** bodies)
 		: b2RangeTask(range)
 		, m_contactManager(manager)
 		, m_bodies(bodies)
 	{}
-private:
+
+	virtual b2TaskType GetType() const override { return e_broadPhaseSyncFixturesTask; }
+
 	virtual void Execute(const b2ThreadContext& threadCtx, const b2RangeTaskRange& range) override
 	{
-		m_contactManager->GenerateDeferredMoveProxies(m_bodies + range.begin, range.end - range.begin, threadCtx.threadId);
+		m_contactManager->SynchronizeFixtures(m_bodies + range.begin, range.end - range.begin, threadCtx.threadId);
 	}
+
+private:
 	b2ContactManager* m_contactManager;
 	b2Body** m_bodies;
 };
@@ -153,58 +147,102 @@ public:
 		: b2RangeTask(range)
 		, m_contactManager(manager)
 	{}
-private:
+
+	virtual b2TaskType GetType() const override { return e_broadPhaseFindContactsTask; }
+
 	virtual void Execute(const b2ThreadContext& threadCtx, const b2RangeTaskRange& range) override
 	{
 		m_contactManager->FindNewContacts(range.begin, range.end, threadCtx.threadId);
 	}
+
+private:
 	b2ContactManager* m_contactManager;
 };
 
-class b2ContactPreSolveTask : public b2RangeTask
+class b2ClearContactSolveFlags : public b2RangeTask
 {
 public:
-	b2ContactPreSolveTask() {}
-	b2ContactPreSolveTask(const b2RangeTaskRange& range, b2Contact** contacts, bool toi)
+	b2ClearContactSolveFlags() {}
+	b2ClearContactSolveFlags(const b2RangeTaskRange& range, b2Contact** contacts)
 		: b2RangeTask(range)
 		, m_contacts(contacts)
-		, m_toi(toi)
 	{}
-private:
+
+	virtual b2TaskType GetType() const override { return e_clearContactSolveFlagsTask; }
+
 	virtual void Execute(const b2ThreadContext&, const b2RangeTaskRange& range) override
 	{
-		if (m_toi)
+		for (uint32 i = range.begin; i < range.end; ++i)
 		{
-			for (uint32 i = range.begin; i < range.end; ++i)
-			{
-				b2Contact* c = m_contacts[i];
-				c->m_flags &= ~(b2Contact::e_toiFlag | b2Contact::e_islandFlag);
-				c->m_toiCount = 0;
-				c->m_toi = 1.0f;
-			}
-		}
-		else
-		{
-			for (uint32 i = range.begin; i < range.end; ++i)
-			{
-				b2Contact* c = m_contacts[i];
-				c->m_flags &= ~b2Contact::e_islandFlag;
-			}
+			b2Contact* c = m_contacts[i];
+			c->m_flags &= ~b2Contact::e_islandFlag;
 		}
 	}
+
+private:
 	b2Contact** m_contacts;
-	bool m_toi;
 };
 
-class b2BodyPreSolveTask : public b2RangeTask
+class b2ClearContactSolveTOIFlags : public b2RangeTask
 {
 public:
-	b2BodyPreSolveTask() {}
-	b2BodyPreSolveTask(const b2RangeTaskRange& range, b2Body** bodies)
+	b2ClearContactSolveTOIFlags() {}
+	b2ClearContactSolveTOIFlags(const b2RangeTaskRange& range, b2Contact** contacts)
+		: b2RangeTask(range)
+		, m_contacts(contacts)
+	{}
+
+	virtual b2TaskType GetType() const override { return e_clearContactSolveToiFlagsTask; }
+
+	virtual void Execute(const b2ThreadContext&, const b2RangeTaskRange& range) override
+	{
+		for (uint32 i = range.begin; i < range.end; ++i)
+		{
+			b2Contact* c = m_contacts[i];
+			c->m_flags &= ~(b2Contact::e_toiFlag | b2Contact::e_islandFlag);
+			c->m_toiCount = 0;
+			c->m_toi = 1.0f;
+		}
+	}
+
+private:
+	b2Contact** m_contacts;
+};
+
+class b2ClearBodySolveFlags : public b2RangeTask
+{
+public:
+	b2ClearBodySolveFlags() {}
+	b2ClearBodySolveFlags(const b2RangeTaskRange& range, b2Body** bodies)
 		: b2RangeTask(range)
 		, m_bodies(bodies)
 	{}
+
+	virtual b2TaskType GetType() const override { return e_clearBodySolveFlagsTask; }
+
+	virtual void Execute(const b2ThreadContext&, const b2RangeTaskRange& range) override
+	{
+		for (uint32 i = range.begin; i < range.end; ++i)
+		{
+			m_bodies[i]->m_flags &= ~b2Body::e_islandFlag;
+		}
+	}
+
 private:
+	b2Body** m_bodies;
+};
+
+class b2ClearBodySolveTOIFlags : public b2RangeTask
+{
+public:
+	b2ClearBodySolveTOIFlags() {}
+	b2ClearBodySolveTOIFlags(const b2RangeTaskRange& range, b2Body** bodies)
+		: b2RangeTask(range)
+		, m_bodies(bodies)
+	{}
+
+	virtual b2TaskType GetType() const override { return e_clearBodySolveToiFlagsTask; }
+
 	virtual void Execute(const b2ThreadContext&, const b2RangeTaskRange& range) override
 	{
 		for (uint32 i = range.begin; i < range.end; ++i)
@@ -213,92 +251,209 @@ private:
 			m_bodies[i]->m_sweep.alpha0 = 0.0f;
 		}
 	}
+
+private:
 	b2Body** m_bodies;
 };
 
-class b2SortMovesTask : public b2Task
+class b2ClearForcesTask : public b2RangeTask
 {
 public:
-	b2SortMovesTask() {}
-	b2SortMovesTask(b2ContactManagerPerThreadData& td)
-		: m_tdIn(&td)
+	b2ClearForcesTask() {}
+	b2ClearForcesTask(const b2RangeTaskRange& range, b2Body** bodies)
+		: b2RangeTask(range)
+		, m_bodies(bodies)
 	{}
-private:
-	virtual void Execute(const b2ThreadContext&) override
+
+	virtual b2TaskType GetType() const override { return e_clearForcesTask; }
+
+	virtual void Execute(const b2ThreadContext&, const b2RangeTaskRange& range) override
 	{
-		std::sort(m_tdIn->m_deferredMoveProxies.Data(), m_tdIn->m_deferredMoveProxies.End(), b2DeferredMoveProxyLessThan);
+		for (uint32 i = range.begin; i < range.end; ++i)
+		{
+			m_bodies[i]->m_force.SetZero();
+			m_bodies[i]->m_torque = 0.0f;
+		}
 	}
-	b2ContactManagerPerThreadData* m_tdIn;
+
+private:
+	b2Body** m_bodies;
 };
 
-class b2SortPostSolvesTask : public b2Task
+class alignas(b2_cacheLineSize) b2FindMinToiContactTask : public b2RangeTask
 {
 public:
-	b2SortPostSolvesTask() {}
-	b2SortPostSolvesTask(b2ContactManagerPerThreadData& td)
-		: m_tdIn(&td)
+	b2FindMinToiContactTask() {}
+	b2FindMinToiContactTask(const b2RangeTaskRange& range, b2Contact** contacts, b2World* world)
+		: b2RangeTask(range)
+		, m_world(world)
+		, m_contacts(contacts)
+		, m_minContact(nullptr)
+		, m_minAlpha(1.0f)
 	{}
+
+	b2Contact* GetMinContact() const { return m_minContact; }
+	float32 GetMinAlpha() const { return m_minAlpha; }
+
+	// Compare alpha values of contacts with a consistent method of choosing between contacts with the same alpha.
+	static bool AlphaContactLessThan(float32 alpha0, const b2Contact* contact0, float32 alpha1, const b2Contact& contact1)
+	{
+		if (alpha0 < alpha1)
+		{
+			return true;
+		}
+
+		if (alpha0 == alpha1)
+		{
+			if (contact0 == nullptr)
+			{
+				return true;
+			}
+
+			return b2ContactPointerLessThan(contact0, &contact1);
+		}
+
+		return false;
+	}
+
+	static float32 ComputeAlpha(b2Contact* c)
+	{
+		// Compute the TOI for this contact.
+		float32 alpha = 1.0f;
+
+		b2Fixture* fA = c->GetFixtureA();
+		b2Fixture* fB = c->GetFixtureB();
+		b2Body* bA = fA->GetBody();
+		b2Body* bB = fB->GetBody();
+
+		// Compute the TOI for this contact.
+		float32 alpha0 = bA->m_sweep.alpha0;
+
+		b2Assert(alpha0 < 1.0f);
+
+		int32 indexA = c->GetChildIndexA();
+		int32 indexB = c->GetChildIndexB();
+
+		// Compute the time of impact in interval [0, minTOI]
+		b2TOIInput input;
+		input.proxyA.Set(fA->GetShape(), indexA);
+		input.proxyB.Set(fB->GetShape(), indexB);
+		input.sweepA = bA->m_sweep;
+		input.sweepB = bB->m_sweep;
+		input.tMax = 1.0f;
+
+		b2TOIOutput output;
+		b2TimeOfImpact(&output, &input);
+
+		// Beta is the fraction of the remaining portion of the .
+		float32 beta = output.t;
+		if (output.state == b2TOIOutput::e_touching)
+		{
+			alpha = b2Min(alpha0 + (1.0f - alpha0) * beta, 1.0f);
+		}
+		else
+		{
+			alpha = 1.0f;
+		}
+
+		c->m_toi = alpha;
+		c->m_flags |= b2Contact::e_toiFlag;
+
+		return alpha;
+	}
+
+	virtual b2TaskType GetType() const override { return e_findMinContactTask; }
+
+	virtual void Execute(const b2ThreadContext& threadCtx, const b2RangeTaskRange& range) override
+	{
+		b2GrowableArray<b2Contact*>& deferredFindMinContacts = m_world->m_perThreadData[threadCtx.threadId].m_findMinContacts;
+
+		for (uint32 i = range.begin; i < range.end; ++i)
+		{
+			b2Contact* c = m_contacts[i];
+
+			b2Assert((c->m_flags & b2Contact::e_toiCandidateFlag) == b2Contact::e_toiCandidateFlag);
+
+			b2Fixture* fA = c->GetFixtureA();
+			b2Fixture* fB = c->GetFixtureB();
+
+			b2Assert(b2Contact::IsToiCandidate(fA, fB));
+
+			// Is this contact disabled?
+			if (c->IsEnabled() == false)
+			{
+				continue;
+			}
+
+			// Prevent excessive sub-stepping.
+			if (c->m_toiCount > b2_maxSubSteps)
+			{
+				continue;
+			}
+
+			float32 alpha = 1.0f;
+			if (c->m_flags & b2Contact::e_toiFlag)
+			{
+				// This contact has a valid cached TOI.
+				alpha = c->m_toi;
+			}
+			else
+			{
+				b2Body* bA = fA->GetBody();
+				b2Body* bB = fB->GetBody();
+
+				b2BodyType typeA = bA->GetType();
+				b2BodyType typeB = bB->GetType();
+				b2Assert(typeA == b2_dynamicBody || typeB == b2_dynamicBody);
+
+				bool activeA = bA->IsAwake() && typeA != b2_staticBody;
+				bool activeB = bB->IsAwake() && typeB != b2_staticBody;
+
+				// Is at least one body active (awake and dynamic or kinematic)?
+				if (activeA == false && activeB == false)
+				{
+					continue;
+				}
+
+				// MT Note: the sweeps need to be on the same time interval for b2TimeOfImpact,
+				// but advancing a sweep here would cause a data race, so we do that later on the
+				// user thread. Any contacts that are created during SolveTOI will have their sweeps
+				// synchronized during creation to avoid this path, but the sweeps of existing
+				// non-touching contacts could have become out of sync during SolveTOI.
+				if (bA->m_sweep.alpha0 != bB->m_sweep.alpha0)
+				{
+					deferredFindMinContacts.push_back(c);
+
+					continue;
+				}
+
+				alpha = ComputeAlpha(c);
+			}
+
+			if (AlphaContactLessThan(m_minAlpha, m_minContact, alpha, *c))
+			{
+				// This is the minimum TOI found so far.
+				m_minContact = c;
+				m_minAlpha = alpha;
+			}
+		}
+	}
+
 private:
-	virtual void Execute(const b2ThreadContext&) override
-	{
-		std::sort(m_tdIn->m_deferredPostSolves.Data(), m_tdIn->m_deferredPostSolves.End(), b2DeferredPostSolveLessThan);
-	}
-	b2ContactManagerPerThreadData* m_tdIn;
+
+	b2World* m_world;
+	b2Contact** m_contacts;
+	b2Contact* m_minContact;
+	float32 m_minAlpha;
 };
-
-class b2SortCollidesTask : public b2Task
-{
-public:
-	b2SortCollidesTask() {}
-	b2SortCollidesTask(b2ContactManagerPerThreadData& td)
-		: m_tdIn(&td)
-	{}
-private:
-	virtual void Execute(const b2ThreadContext&) override
-	{
-		std::sort(m_tdIn->m_deferredBeginContacts.Data(), m_tdIn->m_deferredBeginContacts.End(), b2ContactPointerLessThan);
-		std::sort(m_tdIn->m_deferredEndContacts.Data(), m_tdIn->m_deferredEndContacts.End(), b2ContactPointerLessThan);
-		std::sort(m_tdIn->m_deferredDestroys.Data(), m_tdIn->m_deferredDestroys.End(), b2ContactPointerLessThan);
-		std::sort(m_tdIn->m_deferredPreSolves.Data(), m_tdIn->m_deferredPreSolves.End(), b2DeferredPreSolveLessThan);
-	}
-	b2ContactManagerPerThreadData* m_tdIn;
-};
-
-class b2SortCreatesTask : public b2Task
-{
-public:
-	b2SortCreatesTask() {}
-	b2SortCreatesTask(b2ContactManagerPerThreadData& td)
-		: m_tdIn(&td)
-	{}
-private:
-	virtual void Execute(const b2ThreadContext&) override
-	{
-		std::sort(m_tdIn->m_deferredCreates.Data(), m_tdIn->m_deferredCreates.End(), b2DeferredContactCreateLessThan);
-	}
-	b2ContactManagerPerThreadData* m_tdIn;
-};
-
-template<typename TaskType>
-inline void b2SubmitTasks(b2TaskExecutor& executor, b2TaskGroup taskGroup, TaskType* tasks, uint32 count)
-{
-	b2Task* taskPtrs[b2_partitionRangeMaxOutput];
-	for (uint32 i = 0; i < count; ++i)
-	{
-		taskPtrs[i] = tasks + i;
-		taskPtrs[i]->SetTaskGroup(taskGroup);
-	}
-	executor.SubmitTasks(taskGroup, taskPtrs, count);
-}
-
-inline void b2SubmitTask(b2TaskExecutor& executor, b2TaskGroup taskGroup, b2Task* task)
-{
-	task->SetTaskGroup(taskGroup);
-	executor.SubmitTask(taskGroup, task);
-}
 
 b2World::b2World(const b2Vec2& gravity)
 {
+	printf("b2SolveTask size: %zu\n", sizeof(b2SolveTask));
+
+	static std::once_flag s_contactRegisterInitFlag;
+	std::call_once(s_contactRegisterInitFlag, b2Contact::InitializeRegisters);
+
 	m_destructionListener = nullptr;
 	m_debugDraw = nullptr;
 
@@ -314,6 +469,12 @@ b2World::b2World(const b2Vec2& gravity)
 
 	m_stepComplete = true;
 
+	m_bodyCost = 1;
+	m_contactCost = 10;
+	m_jointCost = 10;
+	m_solveTaskCostThreshold = 100;
+
+	m_consistencySorting = true;
 	m_allowSleep = true;
 	m_gravity = gravity;
 
@@ -391,13 +552,13 @@ b2Body* b2World::CreateBody(const b2BodyDef* def)
 	// Add to bodies array.
 	if (def->type != b2_staticBody)
 	{
-		b->m_worldIndex = m_nonStaticBodies.GetCount();
-		m_nonStaticBodies.Push(b);
+		b->m_worldIndex = m_nonStaticBodies.size();
+		m_nonStaticBodies.push_back(b);
 	}
 	else
 	{
-		b->m_worldIndex = m_staticBodies.GetCount();
-		m_staticBodies.Push(b);
+		b->m_worldIndex = m_staticBodies.size();
+		m_staticBodies.push_back(b);
 	}
 
 	return b;
@@ -483,13 +644,13 @@ void b2World::DestroyBody(b2Body* b)
 	int32 index = b->m_worldIndex;
 	if (b->GetType() != b2_staticBody)
 	{
-		m_nonStaticBodies.Back()->m_worldIndex = index;
-		m_nonStaticBodies.RemoveAndSwap(index);
+		m_nonStaticBodies.back()->m_worldIndex = index;
+		b2RemoveAndSwapBack(m_nonStaticBodies, index);
 	}
 	else
 	{
-		m_staticBodies.Back()->m_worldIndex = index;
-		m_staticBodies.RemoveAndSwap(index);
+		m_staticBodies.back()->m_worldIndex = index;
+		b2RemoveAndSwapBack(m_staticBodies, index);
 	}
 
 	--m_bodyCount;
@@ -652,7 +813,6 @@ void b2World::DestroyJoint(b2Joint* j)
 	}
 }
 
-//
 void b2World::SetAllowSleeping(bool flag)
 {
 	if (flag == m_allowSleep)
@@ -672,11 +832,6 @@ void b2World::SetAllowSleeping(bool flag)
 
 void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2TimeStep& step)
 {
-	if (m_stepComplete)
-	{
-		SolveTOIInit(executor, taskGroup);
-	}
-
 	int32 bodyCapacity = 2 * b2_maxTOIContacts;
 	int32 contactCapacity = b2_maxTOIContacts;
 
@@ -691,129 +846,20 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2
 	// Find TOI events and solve them.
 	for (;;)
 	{
-#if _DEBUG
-		for (int32 i = m_contactManager.m_toiCount; i < m_contactManager.m_contacts.GetCount(); ++i)
-		{
-			b2Contact* c = m_contactManager.m_contacts[i];
-
-			b2Assert((c->m_flags & b2Contact::e_toiCandidateFlag) == 0);
-
-			b2Fixture* fA = c->GetFixtureA();
-			b2Fixture* fB = c->GetFixtureB();
-
-			b2Assert(b2Contact::IsToiCandidate(fA, fB) == false);
-		}
-#endif
-
 		// Find the first TOI.
 		b2Contact* minContact = nullptr;
 		float32 minAlpha = 1.0f;
-
-		for (int32 i = 0; i < m_contactManager.m_toiCount; ++i)
 		{
-			b2Contact* c = m_contactManager.m_contacts[i];
-
-			b2Assert((c->m_flags & b2Contact::e_toiCandidateFlag) == b2Contact::e_toiCandidateFlag);
-
-			b2Fixture* fA = c->GetFixtureA();
-			b2Fixture* fB = c->GetFixtureB();
-
-			b2Assert(b2Contact::IsToiCandidate(fA, fB));
-
-			// Is this contact disabled?
-			if (c->IsEnabled() == false)
-			{
-				continue;
-			}
-
-			// Prevent excessive sub-stepping.
-			if (c->m_toiCount > b2_maxSubSteps)
-			{
-				continue;
-			}
-
-			float32 alpha = 1.0f;
-			if (c->m_flags & b2Contact::e_toiFlag)
-			{
-				// This contact has a valid cached TOI.
-				alpha = c->m_toi;
-			}
-			else
-			{
-				b2Body* bA = fA->GetBody();
-				b2Body* bB = fB->GetBody();
-
-				b2BodyType typeA = bA->GetType();
-				b2BodyType typeB = bB->GetType();
-				b2Assert(typeA == b2_dynamicBody || typeB == b2_dynamicBody);
-
-				bool activeA = bA->IsAwake() && typeA != b2_staticBody;
-				bool activeB = bB->IsAwake() && typeB != b2_staticBody;
-
-				// Is at least one body active (awake and dynamic or kinematic)?
-				if (activeA == false && activeB == false)
-				{
-					continue;
-				}
-
-				// Compute the TOI for this contact.
-				// Put the sweeps onto the same time interval.
-				float32 alpha0 = bA->m_sweep.alpha0;
-
-				if (bA->m_sweep.alpha0 < bB->m_sweep.alpha0)
-				{
-					alpha0 = bB->m_sweep.alpha0;
-					bA->m_sweep.Advance(alpha0);
-				}
-				else if (bB->m_sweep.alpha0 < bA->m_sweep.alpha0)
-				{
-					alpha0 = bA->m_sweep.alpha0;
-					bB->m_sweep.Advance(alpha0);
-				}
-
-				b2Assert(alpha0 < 1.0f);
-
-				int32 indexA = c->GetChildIndexA();
-				int32 indexB = c->GetChildIndexB();
-
-				// Compute the time of impact in interval [0, minTOI]
-				b2TOIInput input;
-				input.proxyA.Set(fA->GetShape(), indexA);
-				input.proxyB.Set(fB->GetShape(), indexB);
-				input.sweepA = bA->m_sweep;
-				input.sweepB = bB->m_sweep;
-				input.tMax = 1.0f;
-
-				b2TOIOutput output;
-				b2TimeOfImpact(&output, &input);
-
-				// Beta is the fraction of the remaining portion of the .
-				float32 beta = output.t;
-				if (output.state == b2TOIOutput::e_touching)
-				{
-					alpha = b2Min(alpha0 + (1.0f - alpha0) * beta, 1.0f);
-				}
-				else
-				{
-					alpha = 1.0f;
-				}
-
-				c->m_toi = alpha;
-				c->m_flags |= b2Contact::e_toiFlag;
-			}
-
-			if (alpha < minAlpha)
-			{
-				// This is the minimum TOI found so far.
-				minContact = c;
-				minAlpha = alpha;
-			}
+			b2Timer timer;
+			FindMinToiContact(executor, taskGroup, &minContact, &minAlpha);
+			m_profile.solveTOIFindMinContact += timer.GetMilliseconds();
 		}
 
 		if (minContact == nullptr || 1.0f - 10.0f * b2_epsilon < minAlpha)
 		{
 			// No more TOI events. Done!
 			m_stepComplete = true;
+			ClearPostSolveTOI(executor, taskGroup);
 			break;
 		}
 
@@ -982,8 +1028,11 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2
 
 		// Commit fixture proxy movements to the broad-phase so that new contacts are created.
 		// Also, some contacts can be destroyed.
-		m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount(), 0);
-		m_contactManager.m_broadPhase.ResetBuffers();
+		// MT note: this is done on a single thread because very few moves occur during SolveTOI.
+		{
+			m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount(), 0);
+			m_contactManager.m_broadPhase.ResetBuffers();
+		}
 
 		if (m_subStepping)
 		{
@@ -998,7 +1047,7 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2
 	m_stackAllocator.Free(bodies);
 }
 
-void b2World::FindNewContacts(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 threadCount)
+void b2World::FindNewContacts(b2TaskExecutor& executor, b2TaskGroup taskGroup)
 {
 	if (m_contactManager.m_broadPhase.GetMoveCount() == 0)
 	{
@@ -1007,115 +1056,101 @@ void b2World::FindNewContacts(b2TaskExecutor& executor, b2TaskGroup taskGroup, u
 
 	SetMtLock(e_mtLocked | e_mtCollisionLocked);
 
-	b2BroadphaseFindNewContactsTask tasks[b2_partitionRangeMaxOutput];
+	b2BroadphaseFindNewContactsTask tasks[b2_maxRangeSubTasks];
 	b2PartitionedRange ranges;
-	executor.PartitionRange(0, m_contactManager.m_broadPhase.GetMoveCount(), ranges);
+	executor.PartitionRange(e_broadPhaseFindContactsTask, 0, m_contactManager.m_broadPhase.GetMoveCount(), ranges);
 	for (uint32 i = 0; i < ranges.count; ++i)
 	{
 		tasks[i] = b2BroadphaseFindNewContactsTask(ranges[i], &m_contactManager);
 	}
 	m_contactManager.m_deferCreates = true;
 	b2SubmitTasks(executor, taskGroup, tasks, ranges.count);
-
 	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
 	m_contactManager.m_deferCreates = false;
 
-	b2SortCreatesTask sortTasks[b2_maxThreads];
-	for (uint32 i = 0; i < threadCount; ++i)
-	{
-		sortTasks[i] = b2SortCreatesTask(m_contactManager.m_perThreadData[i]);
-	}
-	b2SubmitTasks(executor, taskGroup, sortTasks, threadCount);
-
-	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
-
 	SetMtLock(0);
-	m_contactManager.m_broadPhase.ResetBuffers();
-	m_contactManager.ConsumeDeferredCreates(threadCount);
+	if (m_consistencySorting)
+	{
+		m_contactManager.FinishFindNewContacts(executor, taskGroup, m_stackAllocator);
+	}
+	else
+	{
+		m_contactManager.FinishFindNewContacts();
+	}
 }
 
-void b2World::Collide(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 threadCount)
+void b2World::Collide(b2TaskExecutor& executor, b2TaskGroup taskGroup)
 {
-	if (m_contactManager.m_contacts.GetCount() == 0)
+	if (m_contactManager.m_contacts.size() == 0)
 	{
 		return;
 	}
 
 	SetMtLock(e_mtLocked | e_mtCollisionLocked);
 
-	b2CollideTask tasks[b2_partitionRangeMaxOutput];
+	b2CollideTask tasks[b2_maxRangeSubTasks];
 	b2PartitionedRange ranges;
-	executor.PartitionRange(0, m_contactManager.m_contacts.GetCount(), ranges);
+	executor.PartitionRange(e_collideTask, 0, m_contactManager.m_contacts.size(), ranges);
 	for (uint32 i = 0; i < ranges.count; ++i)
 	{
 		tasks[i] = b2CollideTask(ranges[i], &m_contactManager);
 	}
 	b2SubmitTasks(executor, taskGroup, tasks, ranges.count);
-
-	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
-
-	b2SortCollidesTask sortTasks[b2_maxThreads];
-	for (uint32 i = 0; i < threadCount; ++i)
-	{
-		sortTasks[i] = b2SortCollidesTask(m_contactManager.m_perThreadData[i]);
-	}
-	b2SubmitTasks(executor, taskGroup, sortTasks, threadCount);
-
 	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
 
 	SetMtLock(0);
-	m_contactManager.ConsumeDeferredAwakes(threadCount);
-	m_contactManager.ConsumeDeferredBeginContacts(threadCount);
-	m_contactManager.ConsumeDeferredEndContacts(threadCount);
-	m_contactManager.ConsumeDeferredPreSolves(threadCount);
-	m_contactManager.ConsumeDeferredDestroys(threadCount);
+	if (m_consistencySorting)
+	{
+		m_contactManager.FinishCollide(executor, taskGroup, m_stackAllocator);
+	}
+	else
+	{
+		m_contactManager.FinishCollide();
+	}
 }
 
-void b2World::SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 threadCount)
+void b2World::SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup taskGroup)
 {
-	if (m_nonStaticBodies.GetCount() == 0)
+	if (m_nonStaticBodies.size() == 0)
 	{
 		return;
 	}
 
 	SetMtLock(e_mtLocked | e_mtCollisionLocked);
 
-	b2GenerateDeferredMoveProxiesTask moveTasks[b2_partitionRangeMaxOutput];
+	b2BroadphaseSyncFixturesTask moveTasks[b2_maxRangeSubTasks];
 	b2PartitionedRange ranges;
-	executor.PartitionRange(0, m_nonStaticBodies.GetCount(), ranges);
+	executor.PartitionRange(e_broadPhaseSyncFixturesTask, 0, m_nonStaticBodies.size(), ranges);
 	for (uint32 i = 0; i < ranges.count; ++i)
 	{
-		moveTasks[i] = b2GenerateDeferredMoveProxiesTask(ranges[i], &m_contactManager, m_nonStaticBodies.Data());
+		moveTasks[i] = b2BroadphaseSyncFixturesTask(ranges[i], &m_contactManager, m_nonStaticBodies.data());
 	}
 	b2SubmitTasks(executor, taskGroup, moveTasks, ranges.count);
-
-	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
-
-	b2SortMovesTask sortTasks[b2_maxThreads];
-	for (uint32 i = 0; i < threadCount; ++i)
-	{
-		sortTasks[i] = b2SortMovesTask(m_contactManager.m_perThreadData[i]);
-	}
-	b2SubmitTasks(executor, taskGroup, sortTasks, threadCount);
-
 	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
 
 	SetMtLock(0);
-	m_contactManager.ConsumeDeferredMoveProxies(threadCount);
+	if (m_consistencySorting)
+	{
+		m_contactManager.FinishSynchronizeFixtures(executor, taskGroup, m_stackAllocator);
+	}
+	else
+	{
+		m_contactManager.FinishSynchronizeFixtures();
+	}
 }
 
-void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2TimeStep& step, uint32 threadCount)
+void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2TimeStep& step)
 {
 	// A single static body can be included in multiple islands.
 	// In the worst case every non static body is in its own island with every static body.
-	int32 maxStaticBodySolveCount = m_nonStaticBodies.GetCount() * m_staticBodies.GetCount();
+	uint32 maxStaticBodySolveCount = m_nonStaticBodies.size() * m_staticBodies.size();
 
 	// A static body can only be brought into an island by a contact or joint connecting
 	// it to a non-static body.
-	maxStaticBodySolveCount = b2Min(maxStaticBodySolveCount, m_contactManager.m_contacts.GetCount() + m_jointCount);
+	maxStaticBodySolveCount = b2Min(maxStaticBodySolveCount, m_contactManager.m_contacts.size() + m_jointCount);
 
-	int32 allBodiesCapacity = m_nonStaticBodies.GetCount() + maxStaticBodySolveCount;
-	int32 allContactsCapacity = m_contactManager.m_contacts.GetCount();
+	int32 allBodiesCapacity = m_nonStaticBodies.size() + maxStaticBodySolveCount;
+	int32 allContactsCapacity = m_contactManager.m_contacts.size();
 	int32 allJointsCapacity = m_jointCount;
 
 	b2Body** allBodies = (b2Body**)m_stackAllocator.Allocate(allBodiesCapacity * sizeof(b2Body*));
@@ -1138,9 +1173,6 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2Tim
 
 	SetMtLock(e_mtLocked | e_mtSolveLocked);
 
-	// Clear all the island flags.
-	SolveInit(executor, taskGroup);
-
 	b2Timer traversalTimer;
 
 	// Build and simulate all awake islands.
@@ -1148,7 +1180,7 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2Tim
 	b2Body** stack = (b2Body**)m_stackAllocator.Allocate(stackSize * sizeof(b2Body*));
 	b2SolveTask* solveTaskList = nullptr;
     b2SolveTask* currSolveTask = nullptr;
-	for (int32 i = 0; i < m_nonStaticBodies.GetCount(); ++i)
+	for (uint32 i = 0; i < m_nonStaticBodies.size(); ++i)
 	{
 		b2Body* seed = m_nonStaticBodies[i];
 
@@ -1278,8 +1310,10 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2Tim
 			solveTaskList = currSolveTask;
 		}
 
+		uint32 cost = m_bodyCost * bodyCount + m_contactCost * contactCount + m_jointCost * jointCount;
+
 		currSolveTask->AddIsland(bodyCount, contactCount, jointCount,
-			bodies, contacts, joints, velocities, positions);
+			bodies, contacts, joints, velocities, positions, cost);
 
 		bodies += bodyCount;
 		contacts += contactCount;
@@ -1299,8 +1333,8 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2Tim
 		b2Assert(allContactsCount <= allContactsCapacity);
 		b2Assert(allJointsCount <= allJointsCapacity);
 
-		if (currSolveTask->GetCost() >= b2_solveBatchTargetCost ||
-			currSolveTask->GetBodyCount() >= b2_solveBatchTargetBodyCount)
+		if (currSolveTask->GetCost() >= m_solveTaskCostThreshold ||
+			currSolveTask->GetIslandCount() >= b2_maxIslandsPerSolveTask)
 		{
 			b2SubmitTask(executor, taskGroup, currSolveTask);
 			currSolveTask = nullptr;
@@ -1318,14 +1352,6 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2Tim
 
 	// Wait for solve tasks to finish.
 	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
-
-	// Start sorting post solves.
-	b2SortPostSolvesTask sortTasks[b2_maxThreads];
-	for (uint32 i = 0; i < threadCount; ++i)
-	{
-		sortTasks[i] = b2SortPostSolvesTask(m_contactManager.m_perThreadData[i]);
-	}
-	b2SubmitTasks(executor, taskGroup, sortTasks, threadCount);
 
 	// Deallocate tasks.
 	while (solveTaskList)
@@ -1349,21 +1375,26 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2Tim
 	m_stackAllocator.Free(allContacts);
 	m_stackAllocator.Free(allBodies);
 
-	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
-
 	SetMtLock(0);
-	m_contactManager.ConsumeDeferredPostSolves(threadCount);
+	if (m_consistencySorting)
+	{
+		m_contactManager.FinishSolve(executor, taskGroup, m_stackAllocator);
+	}
+	else
+	{
+		m_contactManager.FinishSolve();
+	}
 
 	{
 		b2Timer timer;
 
-		SynchronizeFixtures(executor, taskGroup, threadCount);
+		SynchronizeFixtures(executor, taskGroup);
 		m_profile.broadphaseSyncFixtures += timer.GetMilliseconds();
 
 		{
 			b2Timer timer2;
 
-			FindNewContacts(executor, taskGroup, threadCount);
+			FindNewContacts(executor, taskGroup);
 
 			m_profile.broadphaseFindContacts += timer2.GetMilliseconds();
 		}
@@ -1372,33 +1403,37 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2Tim
 		m_profile.broadphase += broadPhaseTime;
 		m_profile.solve -= broadPhaseTime;
 	}
+
+	// Clear all the island flags.
+	ClearPostSolve(executor, taskGroup);
 }
 
-void b2World::SolveInit(b2TaskExecutor& executor, b2TaskGroup taskGroup)
+void b2World::ClearPostSolve(b2TaskExecutor& executor, b2TaskGroup taskGroup)
 {
-	b2ContactPreSolveTask contactsTasks[b2_partitionRangeMaxOutput];
-	if (m_contactManager.m_contacts.GetCount() > 0)
+	b2ClearContactSolveFlags contactsTasks[b2_maxRangeSubTasks];
+	if (m_contactManager.m_contacts.size() > 0)
 	{
 		b2PartitionedRange ranges;
-		executor.PartitionRange(0, m_contactManager.m_contacts.GetCount(), ranges);
+		executor.PartitionRange(e_clearContactSolveFlagsTask, 0, m_contactManager.m_contacts.size(), ranges);
 		for (uint32 i = 0; i < ranges.count; ++i)
 		{
-			contactsTasks[i] = b2ContactPreSolveTask(ranges[i], m_contactManager.m_contacts.Data(), false);
+			contactsTasks[i] = b2ClearContactSolveFlags(ranges[i], m_contactManager.m_contacts.data());
 		}
 		b2SubmitTasks(executor, taskGroup, contactsTasks, ranges.count);
 	}
-	b2BodyPreSolveTask bodyTasks[b2_partitionRangeMaxOutput];
-	if (m_nonStaticBodies.GetCount() > 0)
+	b2ClearBodySolveFlags bodyTasks[b2_maxRangeSubTasks];
+	if (m_nonStaticBodies.size() > 0)
 	{
 		b2PartitionedRange ranges;
-		executor.PartitionRange(0, m_nonStaticBodies.GetCount(), ranges);
+		executor.PartitionRange(e_clearBodySolveFlagsTask, 0, m_nonStaticBodies.size(), ranges);
 		for (uint32 i = 0; i < ranges.count; ++i)
 		{
-			bodyTasks[i] = b2BodyPreSolveTask(ranges[i], m_nonStaticBodies.Data());
+			bodyTasks[i] = b2ClearBodySolveFlags(ranges[i], m_nonStaticBodies.data());
 		}
 		b2SubmitTasks(executor, taskGroup, bodyTasks, ranges.count);
 	}
 
+	// TODO_JUSTIN: MT
 	for (b2Joint* j = m_jointList; j; j = j->m_next)
 	{
 		j->m_islandFlag = false;
@@ -1407,39 +1442,132 @@ void b2World::SolveInit(b2TaskExecutor& executor, b2TaskGroup taskGroup)
 	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
 }
 
-void b2World::SolveTOIInit(b2TaskExecutor& executor, b2TaskGroup taskGroup)
+void b2World::ClearPostSolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup)
 {
-	b2ContactPreSolveTask contactsTasks[b2_partitionRangeMaxOutput];
-	if (m_contactManager.m_contacts.GetCount() > 0)
+	b2ClearContactSolveTOIFlags contactsTasks[b2_maxRangeSubTasks];
+	if (m_contactManager.m_contacts.size() > 0)
 	{
 		b2PartitionedRange ranges;
-		executor.PartitionRange(0, m_contactManager.m_contacts.GetCount(), ranges);
+		executor.PartitionRange(e_clearContactSolveToiFlagsTask, 0, m_contactManager.m_contacts.size(), ranges);
 		for (uint32 i = 0; i < ranges.count; ++i)
 		{
-			contactsTasks[i] = b2ContactPreSolveTask(ranges[i], m_contactManager.m_contacts.Data(), true);
+			contactsTasks[i] = b2ClearContactSolveTOIFlags(ranges[i], m_contactManager.m_contacts.data());
 		}
 		b2SubmitTasks(executor, taskGroup, contactsTasks, ranges.count);
 	}
-	b2BodyPreSolveTask bodyTasks[b2_partitionRangeMaxOutput];
-	if (m_nonStaticBodies.GetCount() > 0)
+	b2ClearBodySolveTOIFlags bodyTasks[b2_maxRangeSubTasks];
+	if (m_nonStaticBodies.size() > 0)
 	{
 		b2PartitionedRange ranges;
-		executor.PartitionRange(0, m_nonStaticBodies.GetCount(), ranges);
+		executor.PartitionRange(e_clearBodySolveToiFlagsTask, 0, m_nonStaticBodies.size(), ranges);
 		for (uint32 i = 0; i < ranges.count; ++i)
 		{
-			bodyTasks[i] = b2BodyPreSolveTask(ranges[i], m_nonStaticBodies.Data());
+			bodyTasks[i] = b2ClearBodySolveTOIFlags(ranges[i], m_nonStaticBodies.data());
 		}
 		b2SubmitTasks(executor, taskGroup, bodyTasks, ranges.count);
 	}
-
-	for (int32 i = 0; i < m_staticBodies.GetCount(); ++i)
+	b2ClearBodySolveTOIFlags staticBodyTasks[b2_maxRangeSubTasks];
+	if (m_staticBodies.size() > 0)
 	{
-		b2Body* b = m_staticBodies[i];
-		b->m_flags &= ~b2Body::e_islandFlag;
-		b->m_sweep.alpha0 = 0.0f;
+		b2PartitionedRange ranges;
+		executor.PartitionRange(e_clearBodySolveToiFlagsTask, 0, m_staticBodies.size(), ranges);
+		for (uint32 i = 0; i < ranges.count; ++i)
+		{
+			staticBodyTasks[i] = b2ClearBodySolveTOIFlags(ranges[i], m_staticBodies.data());
+		}
+		b2SubmitTasks(executor, taskGroup, staticBodyTasks, ranges.count);
 	}
 
 	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
+}
+
+void b2World::ClearForces(b2TaskExecutor& executor, b2TaskGroup taskGroup)
+{
+	if (m_nonStaticBodies.size() == 0)
+	{
+		return;
+	}
+
+	b2ClearForcesTask forcesTasks[b2_maxRangeSubTasks];
+	b2PartitionedRange ranges;
+	executor.PartitionRange(e_clearForcesTask, 0, m_nonStaticBodies.size(), ranges);
+	for (uint32 i = 0; i < ranges.count; ++i)
+	{
+		forcesTasks[i] = b2ClearForcesTask(ranges[i], m_nonStaticBodies.data());
+	}
+	b2SubmitTasks(executor, taskGroup, forcesTasks, ranges.count);
+
+	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
+}
+
+void b2World::FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup taskGroup, b2Contact** contactOut, float32* alphaOut)
+{
+	if (m_contactManager.m_toiCount == 0)
+	{
+		return;
+	}
+
+	b2FindMinToiContactTask tasks[b2_maxRangeSubTasks];
+	b2PartitionedRange ranges;
+	executor.PartitionRange(e_findMinContactTask, 0, m_contactManager.m_toiCount, ranges);
+	for (uint32 i = 0; i < ranges.count; ++i)
+	{
+		tasks[i] = b2FindMinToiContactTask(ranges[i], m_contactManager.GetToiBegin(), this);
+	}
+	b2SubmitTasks(executor, taskGroup, tasks, ranges.count);
+
+	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
+
+	b2Contact* minContact = tasks[0].GetMinContact();
+	float32 minAlpha = tasks[0].GetMinAlpha();
+
+	// Contacts between bodies with out of sync sweeps need to be processed on a single thread.
+	auto outOfSyncSweeps = b2MakeStackAllocThreadDataSorter<b2Contact*>(m_perThreadData,
+		&PerThreadData::m_findMinContacts, b2ContactPointerLessThan, m_stackAllocator);
+
+	b2Sort(outOfSyncSweeps, executor, taskGroup, m_stackAllocator);
+
+	for (auto it = outOfSyncSweeps.begin(); it != outOfSyncSweeps.end(); ++it)
+	{
+		b2Contact* contact = *it;
+		b2Fixture* fixtureA = contact->GetFixtureA();
+		b2Fixture* fixtureB = contact->GetFixtureB();
+		b2Body* bodyA = fixtureA->GetBody();
+		b2Body* bodyB = fixtureB->GetBody();
+
+		if (bodyA->m_sweep.alpha0 < bodyB->m_sweep.alpha0)
+		{
+			bodyA->m_sweep.Advance(bodyB->m_sweep.alpha0);
+		}
+		else if (bodyB->m_sweep.alpha0 < bodyA->m_sweep.alpha0)
+		{
+			bodyB->m_sweep.Advance(bodyA->m_sweep.alpha0);
+		}
+
+		float32 alpha = b2FindMinToiContactTask::ComputeAlpha(contact);
+
+		if (b2FindMinToiContactTask::AlphaContactLessThan(minAlpha, minContact, alpha, *contact))
+		{
+			minAlpha = alpha;
+			minContact = contact;
+		}
+	}
+
+	// Find minimum of all tasks.
+	for (uint32 i = 1; i < ranges.count; ++i)
+	{
+		float32 alpha = tasks[i].GetMinAlpha();
+		b2Contact* contact = tasks[i].GetMinContact();
+
+		if (contact && b2FindMinToiContactTask::AlphaContactLessThan(minAlpha, minContact, alpha, *contact))
+		{
+			minContact = contact;
+			minAlpha = alpha;
+		}
+	}
+
+	*contactOut = minContact;
+	*alphaOut = minAlpha;
 }
 
 void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIterations, b2TaskExecutor& executor)
@@ -1463,7 +1591,7 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 	{
 		b2Timer timer;
 
-		FindNewContacts(executor, taskGroup, threadCount);
+		FindNewContacts(executor, taskGroup);
 
 		float32 elapsed = timer.GetMilliseconds();
 		m_profile.broadphase += elapsed;
@@ -1477,7 +1605,7 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 	// Update contacts. This is where some contacts are destroyed.
 	{
 		b2Timer timer;
-		Collide(executor, taskGroup, threadCount);
+		Collide(executor, taskGroup);
 		m_profile.collide = timer.GetMilliseconds();
 	}
 
@@ -1502,7 +1630,7 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 	if (m_stepComplete && step.dt > 0.0f)
 	{
 		b2Timer timer;
-		Solve(executor, taskGroup, step, threadCount);
+		Solve(executor, taskGroup, step);
 		m_profile.solve += timer.GetMilliseconds();
 	}
 
@@ -1521,7 +1649,7 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 
 	if (m_flags & e_clearForces)
 	{
-		ClearForces();
+		ClearForces(executor, taskGroup);
 	}
 
 	m_flags &= ~e_locked;

@@ -16,12 +16,41 @@
 * 3. This notice may not be removed or altered from any source distribution.
 */
 
-#ifndef B2_THREADING_H
-#define B2_THREADING_H
+#ifndef B2_TASK_H
+#define B2_TASK_H
 
 #include "Box2D/Common/b2Settings.h"
 
 class b2StackAllocator;
+
+#define b2_numRangeTasks 9
+#define b2_numTasks 12
+
+/// This lets executors customize behavior based on task types.
+enum b2TaskType
+{
+	// Range tasks.
+	e_broadPhaseFindContactsTask = 0,
+	e_broadPhaseSyncFixturesTask,
+	e_clearContactSolveFlagsTask,
+	e_clearContactSolveToiFlagsTask,
+	e_clearBodySolveFlagsTask,
+	e_clearBodySolveToiFlagsTask,
+	e_clearForcesTask,
+	e_collideTask,
+	e_findMinContactTask,
+
+	// Non-range tasks.
+	e_mergeTask,
+	e_solveTask,
+	e_sortTask
+};
+
+/// Is the type a range task?
+inline bool b2IsRangeTask(b2TaskType type)
+{
+	return (int32)type <= (int32)e_findMinContactTask;
+}
 
 /// Thread data required for task execution.
 struct b2ThreadContext
@@ -50,13 +79,16 @@ public:
 	/// Execute the task.
 	virtual void Execute(const b2ThreadContext& ctx) = 0;
 
+	/// Get the task type.
+	virtual b2TaskType GetType() const = 0;
+
 	virtual ~b2Task() {}
 
 	/// Set the estimated cost of executing the task so the executor can prioritize higher cost tasks.
 	void SetCost(uint32 costEstimate);
 
 	/// Get the estimated cost of executing the task.
-	int32 GetCost() const;
+	uint32 GetCost() const;
 
 	/// Associate this task with a task group.
 	void SetTaskGroup(b2TaskGroup taskGroup);
@@ -82,6 +114,8 @@ struct b2RangeTaskRange
 		, end(endIn)
 	{ }
 
+	uint32 GetCount() const { return end - begin; }
+
 	uint32 begin;
 	uint32 end;
 };
@@ -96,7 +130,7 @@ struct b2PartitionedRange
 	b2RangeTaskRange& operator[](size_t i);
 	const b2RangeTaskRange& operator[](size_t i) const;
 
-	b2RangeTaskRange ranges[b2_partitionRangeMaxOutput];
+	b2RangeTaskRange ranges[b2_maxRangeSubTasks];
 	uint32 count;
 };
 
@@ -108,7 +142,7 @@ public:
 	b2RangeTask() { }
 	b2RangeTask(const b2RangeTaskRange& range)
 		: m_range{range}
-	{ }
+	{}
 
 	/// Execute the task over the specified range.
 	virtual void Execute(const b2ThreadContext& ctx, const b2RangeTaskRange& range) = 0;
@@ -122,16 +156,15 @@ protected:
 	b2RangeTaskRange m_range;
 };
 
-/// Evenly divides the range [begin, end) into the target number of ranges.
-/// The max difference in the sizes of any two output ranges is 1.
-void b2PartitionRange(uint32 begin, uint32 end, uint32 targetOutputCount, b2PartitionedRange& output);
+/// Evenly divides the range [begin, end) into sub ranges.
+void b2PartitionRange(uint32 begin, uint32 end, uint32 maxOutputRanges, uint32 minElementsPerRange, b2PartitionedRange& output);
 
 inline void b2Task::SetCost(uint32 costEstimate)
 {
 	m_costEstimate = costEstimate;
 }
 
-inline int32 b2Task::GetCost() const
+inline uint32 b2Task::GetCost() const
 {
 	return m_costEstimate;
 }

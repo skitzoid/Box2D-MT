@@ -217,11 +217,11 @@ void b2BroadPhase::UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback, uint
 	}
 
 	// Sort the pair buffer to expose duplicates.
-	std::sort(td->m_pairBuffer.Data(), td->m_pairBuffer.Data() + td->m_pairBuffer.GetCount(), b2PairLessThan);
+	std::sort(td->m_pairBuffer.data(), td->m_pairBuffer.data() + td->m_pairBuffer.size(), b2PairLessThan);
 
 	// Send the pairs back to the client.
-	int32 i = 0;
-	while (i < td->m_pairBuffer.GetCount())
+	uint32 i = 0;
+	while (i < td->m_pairBuffer.size())
 	{
 		b2Pair& primaryPair = td->m_pairBuffer[i];
 
@@ -233,7 +233,7 @@ void b2BroadPhase::UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback, uint
 		++i;
 
 		// Skip any duplicate pairs.
-		while (i < td->m_pairBuffer.GetCount())
+		while (i < td->m_pairBuffer.size())
 		{
 			b2Pair& pair = td->m_pairBuffer[i];
 			if (pair.proxyIdA != primaryPair.proxyIdA || pair.proxyIdB != primaryPair.proxyIdB)
@@ -267,17 +267,17 @@ inline void b2BroadPhase::ShiftOrigin(const b2Vec2& newOrigin)
 
 inline void b2BroadPhase::ResetBuffers()
 {
-	m_moveBuffer.Clear();
+	m_moveBuffer.clear();
 
 	for (int32 i = 0; i < b2_maxThreads; ++i)
 	{
-		m_perThreadData[i].m_pairBuffer.Clear();
+		m_perThreadData[i].m_pairBuffer.clear();
 	}
 }
 
 inline int32 b2BroadPhase::GetMoveCount() const
 {
-	return m_moveBuffer.GetCount();
+	return m_moveBuffer.size();
 }
 
 #endif

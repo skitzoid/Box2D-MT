@@ -567,7 +567,7 @@ void b2Island::Report(const b2ContactVelocityConstraint* constraints, b2ContactL
 				b2DeferredPostSolve postSolve;
 				postSolve.contact = c;
 				postSolve.impulse = impulse;
-				td->m_deferredPostSolves.Push(postSolve);
+				td->m_postSolves.push_back(postSolve);
 			}
 		}
 	}

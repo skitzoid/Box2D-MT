@@ -27,7 +27,7 @@
 #include "Box2D/Dynamics/b2ContactManager.h"
 #include "Box2D/Dynamics/b2WorldCallbacks.h"
 #include "Box2D/Dynamics/b2TimeStep.h"
-#include "Box2D/MT/b2Threading.h"
+#include "Box2D/MT/b2MtUtil.h"
 
 struct b2AABB;
 struct b2BodyDef;
@@ -147,6 +147,27 @@ public:
 	b2Contact* GetContactList();
 	const b2Contact* GetContactList() const;
 
+	/// The world may continue gathering bodies for solving until this estimated cost is reached.
+#define b2_solveBatchTargetCost					100
+
+	/// Get/set the body, contact, and joint contributions to the estimated island solving cost.
+	/// islandCost = bodyCost * bodyCount + contactCost * contactCount + jointCost * jointCount
+	void SetIslandCostScales(uint32 bodyCost, uint32 contactCost, uint32 jointCost);
+	uint32 GetBodyCostScale() const { return m_bodyCost; }
+	uint32 GetContactCostScale() const { return m_contactCost; }
+	uint32 SetJointCostScale() const { return m_jointCost; }
+
+	/// Get/set the solve task cost threshold. Islands will be added to the same solve task until
+	/// this cost threshold is reached.
+	void SetSolveTaskCostThreshold(uint32 cost) { m_solveTaskCostThreshold = cost; }
+	uint32 GetSolveTaskCostThreshold() const { return m_solveTaskCostThreshold; }
+
+	/// Enable/disable consistency sorting. When enabled, the results of multithreaded tasks
+	/// are sorted to ensure run-to-run reproducibility. Default is enabled.
+	/// Note: disabling does not always improve performance.
+	void SetConsistencySorting(bool flag) { m_consistencySorting = flag; }
+	bool GetConsistencySorting() const { return m_consistencySorting; }
+
 	/// Enable/disable sleep.
 	void SetAllowSleeping(bool flag);
 	bool GetAllowSleeping() const { return m_allowSleep; }
@@ -244,30 +265,17 @@ private:
 	friend class b2Fixture;
 	friend class b2ContactManager;
 	friend class b2Controller;
+	friend class b2FindMinToiContactTask;
 
 	void SolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2TimeStep& step);
-
-	// Destroy contacts that aren't overlapping in the broadphase.
-	void DestroyNonOverlappingContacts(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 threadCount);
-
-	// Synchronize broadphase proxies with their fixtures.
-	void SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 threadCount);
-
-	// Run find new contacts tasks.
-	void FindNewContacts(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 threadCount);
-
-	// Start collision tasks for existing contacts.
-	void Collide(b2TaskExecutor& executor, b2TaskGroup taskGroup, uint32 threadCount);
-
-	// Traverse the graph of bodies, contacts, and joints to create solve tasks.
-	// Wait for all solve tasks to finish.
-	// Synchronize fixtures.
-	// Find new contacts.
-	void Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2TimeStep& step, uint32 threadCount);
-
-	// Run tasks for clearing all island flags on bodies, contacts, and joints.
-	void SolveInit(b2TaskExecutor& executor, b2TaskGroup taskGroup);
-	void SolveTOIInit(b2TaskExecutor& executor, b2TaskGroup taskGroup);
+	void SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup taskGroup);
+	void FindNewContacts(b2TaskExecutor& executor, b2TaskGroup taskGroup);
+	void Collide(b2TaskExecutor& executor, b2TaskGroup taskGroup);
+	void Solve(b2TaskExecutor& executor, b2TaskGroup taskGroup, const b2TimeStep& step);
+	void ClearPostSolve(b2TaskExecutor& executor, b2TaskGroup taskGroup);
+	void ClearPostSolveTOI(b2TaskExecutor& executor, b2TaskGroup taskGroup);
+	void ClearForces(b2TaskExecutor& executor, b2TaskGroup taskGroup);
+	void FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup taskGroup, b2Contact** contactOut, float32* alphaOut);
 
 	void RecalculateToiCandidacy(b2Body* b);
 	void RecalculateToiCandidacy(b2Fixture* f);
@@ -278,6 +286,15 @@ private:
 	void SetMtLock(int32 lockFlags);
 	bool IsMtCollisionLocked() const;
 	bool IsMtSolveLocked() const;
+
+	struct PerThreadData
+	{
+		b2GrowableArray<b2Contact*> m_findMinContacts;
+
+		uint8 _padding[b2_cacheLineSize];
+	};
+
+	PerThreadData m_perThreadData[b2_maxThreads];
 
 	b2BlockAllocator m_blockAllocator;
 	b2StackAllocator m_stackAllocator;
@@ -296,7 +313,14 @@ private:
 	b2GrowableArray<b2Body*> m_staticBodies;
 
 	b2Vec2 m_gravity;
+
+	uint32 m_bodyCost;
+	uint32 m_contactCost;
+	uint32 m_jointCost;
+	uint32 m_solveTaskCostThreshold;
+
 	bool m_allowSleep;
+	bool m_consistencySorting;
 
 	b2DestructionListener* m_destructionListener;
 	b2Draw* m_debugDraw;
@@ -357,7 +381,7 @@ inline int32 b2World::GetJointCount() const
 
 inline int32 b2World::GetContactCount() const
 {
-	return m_contactManager.m_contacts.GetCount();
+	return m_contactManager.m_contacts.size();
 }
 
 inline void b2World::SetGravity(const b2Vec2& gravity)
@@ -378,6 +402,13 @@ inline bool b2World::IsLocked() const
 inline bool b2World::IsMtLocked() const
 {
 	return (m_flags & e_mtLocked) == e_mtLocked;
+}
+
+inline void b2World::SetIslandCostScales(uint32 bodyCost, uint32 contactCost, uint32 jointCost)
+{
+	m_bodyCost = bodyCost;
+	m_contactCost = contactCost;
+	m_jointCost = jointCost;
 }
 
 inline void b2World::SetAutoClearForces(bool flag)

@@ -48,6 +48,7 @@ void b2Contact::InitializeRegisters()
 	AddType(b2EdgeAndPolygonContact::Create, b2EdgeAndPolygonContact::Destroy, b2Shape::e_edge, b2Shape::e_polygon);
 	AddType(b2ChainAndCircleContact::Create, b2ChainAndCircleContact::Destroy, b2Shape::e_chain, b2Shape::e_circle);
 	AddType(b2ChainAndPolygonContact::Create, b2ChainAndPolygonContact::Destroy, b2Shape::e_chain, b2Shape::e_polygon);
+	s_initialized = true;
 }
 
 void b2Contact::AddType(b2ContactCreateFcn* createFcn, b2ContactDestroyFcn* destoryFcn,
@@ -70,11 +71,7 @@ void b2Contact::AddType(b2ContactCreateFcn* createFcn, b2ContactDestroyFcn* dest
 
 b2Contact* b2Contact::Create(b2Fixture* fixtureA, int32 indexA, b2Fixture* fixtureB, int32 indexB, b2BlockAllocator* allocator)
 {
-	if (s_initialized == false)
-	{
-		InitializeRegisters();
-		s_initialized = true;
-	}
+	b2Assert(s_initialized == true);
 
 	b2Shape::Type type1 = fixtureA->GetType();
 	b2Shape::Type type2 = fixtureB->GetType();
@@ -151,6 +148,7 @@ b2Contact::b2Contact(b2Fixture* fA, int32 indexA, b2Fixture* fB, int32 indexB)
 	m_nodeB.other = nullptr;
 
 	m_toiCount = 0;
+	m_toi = 1.0f;
 
 	m_friction = b2MixFriction(m_fixtureA->m_friction, m_fixtureB->m_friction);
 	m_restitution = b2MixRestitution(m_fixtureA->m_restitution, m_fixtureB->m_restitution);
@@ -236,7 +234,7 @@ void b2Contact::UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener*
 			}
 			else
 			{
-				td->m_deferredAwakes.Push(this);
+				td->m_awakes.push_back(this);
 			}
 		}
 	}
@@ -260,7 +258,7 @@ void b2Contact::UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener*
 			}
 			else
 			{
-				td->m_deferredBeginContacts.Push(this);
+				td->m_beginContacts.push_back(this);
 			}
 		}
 	}
@@ -275,7 +273,7 @@ void b2Contact::UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener*
 			}
 			else
 			{
-				td->m_deferredEndContacts.Push(this);
+				td->m_endContacts.push_back(this);
 			}
 		}
 	}
@@ -291,7 +289,7 @@ void b2Contact::UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener*
 			else
 			{
 				b2DeferredPreSolve presolve = { this, oldManifold };
-				td->m_deferredPreSolves.Push(presolve);
+				td->m_preSolves.push_back(presolve);
 			}
 		}
 	}

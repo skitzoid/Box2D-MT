@@ -131,12 +131,12 @@ void b2Body::SetType(b2BodyType type)
 	if (GetType() == b2_staticBody)
 	{
 		// Remove from static bodies.
-		m_world->m_staticBodies.Back()->m_worldIndex = m_worldIndex;
-		m_world->m_staticBodies.RemoveAndSwap(m_worldIndex);
+		m_world->m_staticBodies.back()->m_worldIndex = m_worldIndex;
+		b2RemoveAndSwapBack(m_world->m_staticBodies, m_worldIndex);
 
 		// Add to non static bodies.
-		m_worldIndex = m_world->m_nonStaticBodies.GetCount();
-		m_world->m_nonStaticBodies.Push(this);
+		m_worldIndex = m_world->m_nonStaticBodies.size();
+		m_world->m_nonStaticBodies.push_back(this);
 	}
 
 	m_type = (uint16)type;
@@ -152,12 +152,12 @@ void b2Body::SetType(b2BodyType type)
 		SynchronizeFixtures();
 
 		// Remove from non static bodies.
-		m_world->m_nonStaticBodies.Back()->m_worldIndex = m_worldIndex;
-		m_world->m_nonStaticBodies.RemoveAndSwap(m_worldIndex);
+		m_world->m_nonStaticBodies.back()->m_worldIndex = m_worldIndex;
+		b2RemoveAndSwapBack(m_world->m_nonStaticBodies, m_worldIndex);
 
 		// Add to static bodies.
-		m_worldIndex = m_world->m_staticBodies.GetCount();
-		m_world->m_staticBodies.Push(this);
+		m_worldIndex = m_world->m_staticBodies.size();
+		m_world->m_staticBodies.push_back(this);
 	}
 
 	SetAwake(true);

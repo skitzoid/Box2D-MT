@@ -25,9 +25,11 @@
 
 #include <stdio.h>
 
+#if b2_enableGlobalStats
 float32 b2_toiTime, b2_toiMaxTime;
 int32 b2_toiCalls, b2_toiIters, b2_toiMaxIters;
 int32 b2_toiRootIters, b2_toiMaxRootIters;
+#endif
 
 //
 struct b2SeparationFunction
@@ -100,7 +102,7 @@ struct b2SeparationFunction
 			m_type = e_faceA;
 			b2Vec2 localPointA1 = m_proxyA->GetVertex(cache->indexA[0]);
 			b2Vec2 localPointA2 = m_proxyA->GetVertex(cache->indexA[1]);
-			
+
 			m_axis = b2Cross(localPointA2 - localPointA1, 1.0f);
 			m_axis.Normalize();
 			b2Vec2 normal = b2Mul(xfA.q, m_axis);
@@ -140,7 +142,7 @@ struct b2SeparationFunction
 
 				b2Vec2 localPointA = m_proxyA->GetVertex(*indexA);
 				b2Vec2 localPointB = m_proxyB->GetVertex(*indexB);
-				
+
 				b2Vec2 pointA = b2Mul(xfA, localPointA);
 				b2Vec2 pointB = b2Mul(xfB, localPointB);
 
@@ -154,7 +156,7 @@ struct b2SeparationFunction
 				b2Vec2 pointA = b2Mul(xfA, m_localPoint);
 
 				b2Vec2 axisB = b2MulT(xfB.q, -normal);
-				
+
 				*indexA = -1;
 				*indexB = m_proxyB->GetSupport(axisB);
 
@@ -255,7 +257,9 @@ void b2TimeOfImpact(b2TOIOutput* output, const b2TOIInput* input)
 {
 	b2Timer timer;
 
+#if b2_enableGlobalStats
 	++b2_toiCalls;
+#endif
 
 	output->state = b2TOIOutput::e_unknown;
 	output->t = input->tMax;
@@ -422,7 +426,9 @@ void b2TimeOfImpact(b2TOIOutput* output, const b2TOIInput* input)
 				}
 
 				++rootIterCount;
+#if b2_enableGlobalStats
 				++b2_toiRootIters;
+#endif
 
 				float32 s = fcn.Evaluate(indexA, indexB, t);
 
@@ -444,15 +450,16 @@ void b2TimeOfImpact(b2TOIOutput* output, const b2TOIInput* input)
 					a2 = t;
 					s2 = s;
 				}
-				
+
 				if (rootIterCount == 50)
 				{
 					break;
 				}
 			}
 
+#if b2_enableGlobalStats
 			b2_toiMaxRootIters = b2Max(b2_toiMaxRootIters, rootIterCount);
-
+#endif
 			++pushBackIter;
 
 			if (pushBackIter == b2_maxPolygonVertices)
@@ -462,7 +469,9 @@ void b2TimeOfImpact(b2TOIOutput* output, const b2TOIInput* input)
 		}
 
 		++iter;
+#if b2_enableGlobalStats
 		++b2_toiIters;
+#endif
 
 		if (done)
 		{
@@ -478,9 +487,11 @@ void b2TimeOfImpact(b2TOIOutput* output, const b2TOIInput* input)
 		}
 	}
 
+#if b2_enableGlobalStats
 	b2_toiMaxIters = b2Max(b2_toiMaxIters, iter);
 
 	float32 time = timer.GetMilliseconds();
 	b2_toiMaxTime = b2Max(b2_toiMaxTime, time);
 	b2_toiTime += time;
+#endif
 }

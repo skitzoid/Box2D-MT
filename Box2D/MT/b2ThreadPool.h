@@ -21,14 +21,48 @@
 
 #include "Box2D/Common/b2GrowableArray.h"
 #include "Box2D/Common/b2Timer.h"
-#include "Box2D/MT/b2TaskExecutor.h"
-#include "Box2D/MT/b2Threading.h"
+#include "Box2D/MT/b2MtUtil.h"
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
 
 class b2ThreadPool;
+
+/// Options for constructing a thread pool.
+struct b2ThreadPoolOptions
+{
+	b2ThreadPoolOptions()
+	{
+		totalThreadCount = -1;
+		busyWaitTimeoutMs = 0.03f;
+		setUserThreadAffinity = true;
+		setWorkerThreadAffinity = true;
+		useRelaxedAffinity = false;
+	}
+
+	/// The number of threads to make available for execution. This includes
+	/// the user thread, so the thread pool will allocate one less thread.
+	/// -1 is interpreted as the number of logical cores.
+	int32 totalThreadCount;
+
+	/// The number of milliseconds that a worker thread will busy wait before
+	/// waiting on a condition variable.
+	float32 busyWaitTimeoutMs;
+
+	/// Should the user thread affinity be set?
+	/// Note: this is only used when b2_hwloc is defined.
+	bool setUserThreadAffinity;
+
+	/// Should the worker thread affinity be set?
+	/// Note: this is only used when b2_hwloc is defined.
+	bool setWorkerThreadAffinity;
+
+	/// When thread affinity is enabled, should threads be assigned to physical
+	/// cores rather than logical cores? This allows the OS to move the thread
+	/// to a different logical core on the same physical core.
+	bool useRelaxedAffinity;
+};
 
 /// A task group is used to wait for completion of a group of tasks.
 class b2ThreadPoolTaskGroup
@@ -45,23 +79,18 @@ private:
 	std::atomic<uint32> m_remainingTasks;
 };
 
-/// The thread pool manages worker threads that execute tasks.
+/// Executes tasks on worker threads.
 class b2ThreadPool
 {
 public:
 	/// Construct a thread pool.
-	/// @param totalThreadCount the number of threads to make available for execution. This
-	/// includes the user thread, so the thread pool will allocate [threadCount - 1] threads.
-	/// -1 is interpreted as the number of logical cores.
-	explicit b2ThreadPool(int32 totalThreadCount = -1);
+	explicit b2ThreadPool(const b2ThreadPoolOptions& options);
 
 	~b2ThreadPool();
 
-	/// Wake the workers so they can busy-wait for tasks until StopBusyWaiting is called.
-	void StartBusyWaiting();
-
-	/// Allow the workers to sleep until tasks are added or StartBusyWaiting is called.
-	void StopBusyWaiting();
+	/// Set the amount of time in milliseconds that workers will busy wait for tasks before
+	/// waiting on a condition variable.
+	void SetBusyWaitTimeout(float32 busyWaitTimeoutMs);
 
 	/// Submit a single task for execution.
 	/// Returns immediately after submission.
@@ -96,21 +125,23 @@ private:
 	void WorkerMain(uint32 threadId);
 	void Shutdown();
 
-	mutable std::mutex m_mutex;
+	std::thread m_threads[b2_maxThreads - 1];
+	int32 m_threadCount;
 
 	std::condition_variable m_workerCond;
 
+	mutable std::mutex m_mutex;
+
 	std::atomic<int32> m_pendingTaskCount;
-	std::atomic<bool> m_busyWait;
+	std::atomic<float32> m_busyWaitTimeout;
 
 	b2GrowableArray<b2Task*> m_pendingTasks;
-
-	std::thread m_threads[b2_maxThreadPoolThreads];
-	int32 m_threadCount;
-
 	float32 m_lockMilliseconds;
 
 	bool m_signalShutdown;
+	bool m_setUserThreadAffinity;
+	bool m_setWorkerThreadAffinity;
+	bool m_useRelaxedAffinity;
 };
 
 /// A task executor that uses b2ThreadPool.
@@ -118,10 +149,7 @@ class b2ThreadPoolTaskExecutor : public b2TaskExecutor
 {
 public:
 	/// Construct a thread pool task executor.
-	/// @param threadCount the number of threads to make available for execution. This
-	/// includes the user thread, so the thread pool will allocate [threadCount - 1] threads.
-	/// -1 is interpreted as the number of logical cores.
-	explicit b2ThreadPoolTaskExecutor(int32 threadCount = -1);
+	explicit b2ThreadPoolTaskExecutor(const b2ThreadPoolOptions& options = b2ThreadPoolOptions());
 
 	/// Get the thread pool.
 	b2ThreadPool* GetThreadPool();
@@ -144,7 +172,7 @@ public:
 	void DestroyTaskGroup(b2TaskGroup taskGroup, b2StackAllocator& allocator) override;
 
 	/// Partition a range into sub-ranges that will each be assigned to a range task.
-	void PartitionRange(uint32 begin, uint32 end, b2PartitionedRange& output) override;
+	void PartitionRange(b2TaskType type, uint32 begin, uint32 end, b2PartitionedRange& output) override;
 
 	/// Submit a single task for execution.
 	void SubmitTask(b2TaskGroup taskGroup, b2Task* task) override;
@@ -182,8 +210,8 @@ inline void b2ThreadPool::ResetTimers()
 	m_lockMilliseconds = 0;
 }
 
-inline b2ThreadPoolTaskExecutor::b2ThreadPoolTaskExecutor(int32 threadCount)
-	: m_threadPool(threadCount)
+inline b2ThreadPoolTaskExecutor::b2ThreadPoolTaskExecutor(const b2ThreadPoolOptions& options)
+	: m_threadPool(options)
 {
 
 }

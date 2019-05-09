@@ -4,8 +4,14 @@
 workspace 'Box2D'
 	newoption
 	{
-		trigger     = 'drd',
-		description = 'Make a DRD configuration that prevents false positives from b2ThreadPool (valgrind must be installed).'
+		trigger		= 'drd',
+		description = 'Make a DRD configuration that prevents false positives from b2ThreadPool (valgrind must be installed separately).'
+	}
+
+	newoption
+	{
+		trigger		= 'hwloc',
+		description = 'Use hwloc to set thread affinity in b2ThreadPool (hwloc must be installed separately).'
 	}
 
 	configurations { 'Debug', 'Release' }
@@ -44,20 +50,31 @@ project 'Box2D'
 	kind 'StaticLib'
 	files { 'Box2D/**' }
 	includedirs { '.' }
+	filter 'system:linux'
+		links { 'pthread' }
+	filter 'options:hwloc'
+		defines { 'b2_hwloc' }
+		links { 'hwloc' }
 
 project 'HelloWorld'
 	kind 'ConsoleApp'
 	files { 'HelloWorld/HelloWorld.cpp' }
 	includedirs { '.' }
 	links { 'Box2D' }
-	filter { 'system:linux' }
-	links { 'pthread' }
+	filter 'system:linux'
+		links { 'pthread' }
+	filter 'options:hwloc'
+		defines { 'b2_hwloc' }
+		links { 'hwloc' }
 
 project 'Testbed'
 	kind 'ConsoleApp'
 	debugdir 'Testbed'
 	warnings 'Default'
 	includedirs { '.' }
+	filter 'options:hwloc'
+		defines { 'b2_hwloc' }
+		links { 'hwloc' }
 
 	files
 	{

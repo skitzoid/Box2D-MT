@@ -19,7 +19,7 @@
 #ifndef B2_TASK_EXECUTOR_H
 #define B2_TASK_EXECUTOR_H
 
-#include "Box2D/MT/b2Threading.h"
+#include "Box2D/MT/b2Task.h"
 
 class b2World;
 
@@ -61,8 +61,11 @@ public:
 	}
 
 	/// Partition a range into sub-ranges that will each be assigned to a range task.
-	virtual void PartitionRange(uint32 begin, uint32 end, b2PartitionedRange& output)
+	/// Implementing this is optional (you could instead divide ranges during task submission).
+	virtual void PartitionRange(b2TaskType type, uint32 begin, uint32 end, b2PartitionedRange& output)
 	{
+		B2_NOT_USED(type);
+
 		output[0] = b2RangeTaskRange(begin, end);
 		output.count = 1;
 	}

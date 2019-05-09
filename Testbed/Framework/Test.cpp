@@ -365,6 +365,7 @@ void Test::Step(Settings* settings)
 		m_maxProfile.solveVelocity = b2Max(m_maxProfile.solveVelocity, p.solveVelocity);
 		m_maxProfile.solvePosition = b2Max(m_maxProfile.solvePosition, p.solvePosition);
 		m_maxProfile.solveTOI = b2Max(m_maxProfile.solveTOI, p.solveTOI);
+		m_maxProfile.solveTOIFindMinContact = b2Max(m_maxProfile.solveTOIFindMinContact, p.solveTOIFindMinContact);
 		m_maxProfile.broadphase = b2Max(m_maxProfile.broadphase, p.broadphase);
 		m_maxProfile.broadphaseSyncFixtures = b2Max(m_maxProfile.broadphaseSyncFixtures, p.broadphaseSyncFixtures);
 		m_maxProfile.broadphaseFindContacts = b2Max(m_maxProfile.broadphaseFindContacts, p.broadphaseFindContacts);
@@ -397,6 +398,7 @@ void Test::Step(Settings* settings)
 			aveProfile.solveVelocity = scale * m_totalProfile.solveVelocity;
 			aveProfile.solvePosition = scale * m_totalProfile.solvePosition;
 			aveProfile.solveTOI = scale * m_totalProfile.solveTOI;
+			aveProfile.solveTOIFindMinContact = scale * m_totalProfile.solveTOIFindMinContact;
 			aveProfile.broadphase = scale * m_totalProfile.broadphase;
 			aveProfile.broadphaseSyncFixtures = scale * m_totalProfile.broadphaseSyncFixtures;
 			aveProfile.broadphaseFindContacts = scale * m_totalProfile.broadphaseFindContacts;
@@ -427,7 +429,9 @@ void Test::Step(Settings* settings)
 		m_textLine += DRAW_STRING_NEW_LINE;
 		g_debugDraw.DrawString(5, m_textLine, "|-solveTOI [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.solveTOI, aveProfile.solveTOI, m_maxProfile.solveTOI);
 		m_textLine += DRAW_STRING_NEW_LINE;
-		g_debugDraw.DrawString(5, m_textLine, "locking [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.locking, aveProfile.locking, m_maxProfile.locking);
+		g_debugDraw.DrawString(5, m_textLine, "| |-find min contact [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.solveTOIFindMinContact, aveProfile.solveTOIFindMinContact, m_maxProfile.solveTOIFindMinContact);
+		m_textLine += DRAW_STRING_NEW_LINE;
+		g_debugDraw.DrawString(5, m_textLine, "locking * [ave] (max) = %5.2f [%6.2f] (%6.2f)", p.locking, aveProfile.locking, m_maxProfile.locking);
 		m_textLine += DRAW_STRING_NEW_LINE;
 		g_debugDraw.DrawString(5, m_textLine, "* sum of per-thread times");
 		m_textLine += DRAW_STRING_NEW_LINE;

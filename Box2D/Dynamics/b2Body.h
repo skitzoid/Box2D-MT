@@ -419,7 +419,10 @@ private:
 	friend class b2ContactSolver;
 	friend class b2Contact;
 	friend class b2Fixture;
-	friend class b2BodyPreSolveTask;
+	friend class b2ClearBodySolveFlags;
+	friend class b2ClearBodySolveTOIFlags;
+	friend class b2ClearForcesTask;
+	friend class b2FindMinToiContactTask;
 
 	friend class b2DistanceJoint;
 	friend class b2FrictionJoint;

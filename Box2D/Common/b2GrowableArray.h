@@ -50,7 +50,7 @@ public:
 		m_array = nullptr;
 	}
 
-	void Push(T element)
+	void push_back(T element)
 	{
 		if (m_count == m_capacity)
 		{
@@ -65,32 +65,22 @@ public:
 		++m_count;
 	}
 
-	T Pop()
+	T pop_back()
 	{
 		b2Assert(m_count > 0);
 		--m_count;
 		return m_array[m_count];
 	}
 
-	T& Back() const
+	T& back() const
 	{
 		b2Assert(m_count > 0);
 		return m_array[m_count - 1];
 	}
 
-	void Clear()
+	void clear()
 	{
 		m_count = 0;
-	}
-
-	int32 GetCount() const
-	{
-		return m_count;
-	}
-
-	void RemoveAndSwap(int32 index)
-	{
-		m_array[index] = m_array[--m_count];
 	}
 
 	T& operator[](size_t i)
@@ -103,22 +93,37 @@ public:
 		return m_array[i];
 	}
 
-	T* Data()
+	uint32 size() const
+	{
+		return m_count;
+	}
+
+	T* data()
 	{
 		return m_array;
 	}
 
-	const T* Data() const
+	const T* data() const
 	{
 		return m_array;
 	}
 
-	T* End()
+	T* begin()
+	{
+		return m_array;
+	}
+
+	const T* begin() const
+	{
+		return m_array;
+	}
+
+	T* end()
 	{
 		return m_array + m_count;
 	}
 
-	const T* End() const
+	const T* end() const
 	{
 		return m_array + m_count;
 	}

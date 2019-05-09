@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include "Box2D/MT/b2ThreadPool.h"
+#include "Box2D/MT/b2Hardware.h"
 #include "Box2D/Common/b2Math.h"
 #include "Box2D/Common/b2StackAllocator.h"
 #include "Box2D/Dynamics/b2TimeStep.h"
@@ -69,30 +70,38 @@ b2ThreadPoolTaskGroup::b2ThreadPoolTaskGroup(b2ThreadPool& threadPool)
 	b2_drdIgnoreVar(m_remainingTasks);
 }
 
-b2ThreadPool::b2ThreadPool(int32 totalThreadCount)
+b2ThreadPool::b2ThreadPool(const b2ThreadPoolOptions& options)
 {
+	int32 totalThreadCount = options.totalThreadCount;
+
 	b2Assert(totalThreadCount <= b2_maxThreads);
 	b2Assert(totalThreadCount >= -1);
 
 	if (totalThreadCount == -1)
 	{
 		// Use the number of logical cores.
-		// TODO: Use the number of physical cores, although finding that number
-		// is platform specific. See boost::thread::physical_concurrency.
-		totalThreadCount = (int32)std::thread::hardware_concurrency();
+		totalThreadCount = std::thread::hardware_concurrency();
 	}
 
 	m_lockMilliseconds = 0;
 	m_pendingTaskCount.store(0, std::memory_order_relaxed);
-	m_busyWait.store(false, std::memory_order_relaxed);
+	m_busyWaitTimeout.store(options.busyWaitTimeoutMs, std::memory_order_relaxed);
 	m_signalShutdown = false;
+	m_setUserThreadAffinity = options.setUserThreadAffinity;
+	m_setWorkerThreadAffinity = options.setWorkerThreadAffinity;
+	m_useRelaxedAffinity = options.useRelaxedAffinity;
 
 	// This prevents DRD from generating false positive data races.
 	b2_drdIgnoreVar(m_pendingTaskCount);
-	b2_drdIgnoreVar(m_busyWait);
+	b2_drdIgnoreVar(m_busyWaitTimeout);
+
+	if (m_setUserThreadAffinity)
+	{
+		b2Hardware::SetThreadAffinity(0, m_useRelaxedAffinity);
+	}
 
 	// Minus one for the user thread.
-	m_threadCount = b2Clamp(totalThreadCount - 1, 0, b2_maxThreadPoolThreads);
+	m_threadCount = b2Clamp(totalThreadCount - 1, 0, b2_maxThreads - 1);
 	for (int32 i = 0; i < m_threadCount; ++i)
 	{
 		m_threads[i] = std::thread(&b2ThreadPool::WorkerMain, this, 1 + i);
@@ -104,19 +113,9 @@ b2ThreadPool::~b2ThreadPool()
 	Shutdown();
 }
 
-void b2ThreadPool::StartBusyWaiting()
+void b2ThreadPool::SetBusyWaitTimeout(float32 busyWaitTimeoutMs)
 {
-	b2_notifyLockScopeBegin
-		std::lock_guard<std::mutex> lk(m_mutex);
-		m_busyWait.store(true, std::memory_order_relaxed);
-	b2_notifyLockScopeEnd
-	m_workerCond.notify_all();
-}
-
-void b2ThreadPool::StopBusyWaiting()
-{
-	std::lock_guard<std::mutex> lk(m_mutex);
-	m_busyWait.store(false, std::memory_order_relaxed);
+	m_busyWaitTimeout.store(busyWaitTimeoutMs, std::memory_order_relaxed);
 }
 
 void b2ThreadPool::SubmitTasks(b2ThreadPoolTaskGroup& group, b2Task** tasks, uint32 count)
@@ -128,10 +127,10 @@ void b2ThreadPool::SubmitTasks(b2ThreadPoolTaskGroup& group, b2Task** tasks, uin
 
 		for (uint32 i = 0; i < count; ++i)
 		{
-			m_pendingTasks.Push(tasks[i]);
-			std::push_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskCostLessThan);
+			m_pendingTasks.push_back(tasks[i]);
+			std::push_heap(m_pendingTasks.begin(), m_pendingTasks.end(), b2TaskCostLessThan);
 		}
-		m_pendingTaskCount.store(m_pendingTasks.GetCount(), std::memory_order_relaxed);
+		m_pendingTaskCount.store(m_pendingTasks.size(), std::memory_order_relaxed);
 		group.m_remainingTasks.store(group.m_remainingTasks.load(std::memory_order_relaxed) + count, std::memory_order_relaxed);
 	b2_notifyLockScopeEnd
 	m_workerCond.notify_all();
@@ -144,9 +143,9 @@ void b2ThreadPool::SubmitTask(b2ThreadPoolTaskGroup& group, b2Task* task)
 		std::lock_guard<std::mutex> lk(m_mutex);
 		m_lockMilliseconds += lockTimer.GetMilliseconds();
 
-		m_pendingTasks.Push(task);
-		std::push_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskCostLessThan);
-		m_pendingTaskCount.store(m_pendingTasks.GetCount(), std::memory_order_relaxed);
+		m_pendingTasks.push_back(task);
+		std::push_heap(m_pendingTasks.begin(), m_pendingTasks.end(), b2TaskCostLessThan);
+		m_pendingTaskCount.store(m_pendingTasks.size(), std::memory_order_relaxed);
 		group.m_remainingTasks.store(group.m_remainingTasks.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
 	b2_notifyLockScopeEnd
 	m_workerCond.notify_one();
@@ -168,7 +167,7 @@ void b2ThreadPool::Wait(const b2ThreadPoolTaskGroup& group, const b2ThreadContex
 			return;
 		}
 
-		if (m_pendingTasks.GetCount() == 0)
+		if (m_pendingTasks.size() == 0)
 		{
 			lk.unlock();
 			// Busy wait.
@@ -176,16 +175,16 @@ void b2ThreadPool::Wait(const b2ThreadPoolTaskGroup& group, const b2ThreadContex
 			{
 				std::this_thread::yield();
 			}
-			b2Timer timer;
+			lockTimer.Reset();
 			lk.lock();
-			m_lockMilliseconds += timer.GetMilliseconds();
+			m_lockMilliseconds += lockTimer.GetMilliseconds();
 			return;
 		}
 
 		// Execute a task while waiting.
-		std::pop_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskCostLessThan);
-		b2Task* task = m_pendingTasks.Pop();
-		m_pendingTaskCount.store(m_pendingTasks.GetCount(), std::memory_order_relaxed);
+		std::pop_heap(m_pendingTasks.begin(), m_pendingTasks.end(), b2TaskCostLessThan);
+		b2Task* task = m_pendingTasks.pop_back();
+		m_pendingTaskCount.store(m_pendingTasks.size(), std::memory_order_relaxed);
 
 		lk.unlock();
 
@@ -209,7 +208,7 @@ void b2ThreadPool::Restart(int32 threadCount)
 	Shutdown();
 	m_signalShutdown = false;
 
-	m_threadCount = b2Clamp(threadCount - 1, 0, b2_maxThreadPoolThreads);
+	m_threadCount = b2Clamp(threadCount - 1, 0, b2_maxThreads - 1);
 	for (int32 i = 0; i < m_threadCount; ++i)
 	{
 		m_threads[i] = std::thread(&b2ThreadPool::WorkerMain, this, 1 + i);
@@ -218,6 +217,11 @@ void b2ThreadPool::Restart(int32 threadCount)
 
 void b2ThreadPool::WorkerMain(uint32 threadId)
 {
+	if (m_setWorkerThreadAffinity)
+	{
+		b2Hardware::SetThreadAffinity(threadId, m_useRelaxedAffinity);
+	}
+
 	b2StackAllocator stack;
 
 	b2ThreadContext context;
@@ -229,53 +233,55 @@ void b2ThreadPool::WorkerMain(uint32 threadId)
 
 	while (true)
 	{
-		while (m_pendingTasks.GetCount() == 0)
+		b2Timer waitTimer;
+		while (m_pendingTasks.size() == 0)
 		{
-			if (m_busyWait.load(std::memory_order_relaxed))
+			// Busy wait.
+			bool timedOut = false;
+			lk.unlock();
+			while (m_pendingTaskCount.load(std::memory_order_relaxed) == 0)
 			{
-				lk.unlock();
-				while (m_pendingTaskCount.load(std::memory_order_relaxed) == 0 &&
-					m_busyWait.load(std::memory_order_relaxed))
+				timedOut = waitTimer.GetMilliseconds() > m_busyWaitTimeout.load(std::memory_order_relaxed);
+				if (timedOut)
 				{
-					std::this_thread::yield();
+					break;
 				}
-				b2Timer timer;
-				lk.lock();
-				m_lockMilliseconds += timer.GetMilliseconds();
-				// Note: the pending task count will be checked again now that we have the lock,
-				// and we'll go back to waiting if there's no longer any pending tasks.
+				std::this_thread::yield();
 			}
-			else
+			lockTimer.Reset();
+			lk.lock();
+			m_lockMilliseconds += lockTimer.GetMilliseconds();
+
+			if (timedOut == false)
 			{
-				m_workerCond.wait(lk, [this]()
-				{
-					if (m_busyWait.load(std::memory_order_relaxed))
-					{
-						return true;
-					}
-					if (m_pendingTasks.GetCount() > 0)
-					{
-						return true;
-					}
-					if (m_signalShutdown)
-					{
-						return true;
-					}
-					return false;
-				});
+				// We saw a pending task while busy waiting but we need to check again now that we're holding the lock.
+				continue;
 			}
+
+			m_workerCond.wait(lk, [this]()
+			{
+				if (m_pendingTasks.size() > 0)
+				{
+					return true;
+				}
+				if (m_signalShutdown)
+				{
+					return true;
+				}
+				return false;
+			});
 
 			if (m_signalShutdown)
 			{
 				// Shutting down in the middle of processing tasks is not supported.
-				b2Assert(m_pendingTasks.GetCount() == 0);
+				b2Assert(m_pendingTasks.size() == 0);
 				return;
 			}
 		}
 
-		std::pop_heap(m_pendingTasks.Data(), m_pendingTasks.Data() + m_pendingTasks.GetCount(), b2TaskCostLessThan);
-		b2Task* task = m_pendingTasks.Pop();
-		m_pendingTaskCount.store(m_pendingTasks.GetCount(), std::memory_order_relaxed);
+		std::pop_heap(m_pendingTasks.begin(), m_pendingTasks.end(), b2TaskCostLessThan);
+		b2Task* task = m_pendingTasks.pop_back();
+		m_pendingTaskCount.store(m_pendingTasks.size(), std::memory_order_relaxed);
 
 		b2ThreadPoolTaskGroup* group = b2GetThreadPoolTaskGroup(task->GetTaskGroup());
 
@@ -299,7 +305,7 @@ void b2ThreadPool::Shutdown()
 		b2_notifyLockScopeBegin
 			std::lock_guard<std::mutex> lk(m_mutex);
 			m_signalShutdown = true;
-			m_busyWait.store(false, std::memory_order_relaxed);
+			m_busyWaitTimeout.store(0, std::memory_order_relaxed);
 		b2_notifyLockScopeEnd
 		m_workerCond.notify_all();
 	}
@@ -316,13 +322,11 @@ void b2ThreadPool::Shutdown()
 void b2ThreadPoolTaskExecutor::StepBegin(b2World& world)
 {
 	B2_NOT_USED(world);
-	m_threadPool.StartBusyWaiting();
 }
 
 void b2ThreadPoolTaskExecutor::StepEnd(b2World& world)
 {
 	B2_NOT_USED(world);
-	m_threadPool.StopBusyWaiting();
 }
 
 b2TaskGroup b2ThreadPoolTaskExecutor::CreateTaskGroup(b2StackAllocator& allocator)
@@ -342,11 +346,16 @@ void b2ThreadPoolTaskExecutor::DestroyTaskGroup(b2TaskGroup taskGroup, b2StackAl
 	allocator.Free(tpTaskGroup);
 }
 
-void b2ThreadPoolTaskExecutor::PartitionRange(uint32 begin, uint32 end, b2PartitionedRange& output)
+void b2ThreadPoolTaskExecutor::PartitionRange(b2TaskType type, uint32 begin, uint32 end, b2PartitionedRange& output)
 {
-	uint32 targetOutputCount = m_threadPool.GetThreadCount();
+	static_assert(b2_maxThreads <= b2_maxRangeSubTasks, "Increase b2_maxRangeSubTasks.");
+	b2Assert(b2IsRangeTask(type));
+	b2Assert(type < b2_numRangeTasks);
 
-	b2PartitionRange(begin, end, targetOutputCount, output);
+	uint32 maxSubTasks = m_threadPool.GetThreadCount();
+	uint32 itemsPerTask = 1;
+
+	b2PartitionRange(begin, end, maxSubTasks, itemsPerTask, output);
 }
 
 void b2ThreadPoolTaskExecutor::SubmitTask(b2TaskGroup taskGroup, b2Task* task)

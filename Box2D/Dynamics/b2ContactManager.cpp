@@ -18,10 +18,13 @@
 */
 
 #include "Box2D/Common/b2Timer.h"
+#include "Box2D/Common/b2StackAllocator.h"
 #include "Box2D/Dynamics/b2ContactManager.h"
 #include "Box2D/Dynamics/b2Body.h"
 #include "Box2D/Dynamics/b2Fixture.h"
 #include "Box2D/Dynamics/Contacts/b2Contact.h"
+#include "Box2D/MT/b2MtUtil.h"
+#include "Box2D/MT/b2ThreadDataSorter.h"
 
 /// A do-nothing contact listener.
 class b2DefaultContactListener : public b2ContactListener
@@ -83,40 +86,6 @@ bool b2DeferredPostSolveLessThan(const b2DeferredPostSolve& l, const b2DeferredP
 	return b2ContactPointerLessThan(l.contact, r.contact);
 }
 
-template<typename T, typename CompType>
-bool b2PopPerThreadData(b2ContactManagerPerThreadData* td, T& out, int32 threadCount,
-	b2GrowableArray<T> b2ContactManagerPerThreadData::*member,
-	CompType compFunc)
-{
-	int32 selectedThread = -1;
-	for (int32 i = 0; i < threadCount; ++i)
-	{
-		if ((td[i].*member).GetCount() > 0)
-		{
-			selectedThread = i;
-			break;
-		}
-	}
-
-	if (selectedThread == -1)
-	{
-		return false;
-	}
-
-	for (int32 i = selectedThread + 1; i < threadCount; ++i)
-	{
-		if ((td[i].*member).GetCount() > 0 &&
-			!compFunc((td[i].*member).Back(), (td[selectedThread].*member).Back()))
-		{
-			selectedThread = i;
-		}
-	}
-
-	out = (td[selectedThread].*member).Pop();
-
-	return true;
-}
-
 b2ContactManager::b2ContactManager()
 	: m_perThreadData{}
 {
@@ -135,7 +104,7 @@ void b2ContactManager::Destroy(b2Contact* c)
 	b2Body* bodyA = fixtureA->GetBody();
 	b2Body* bodyB = fixtureB->GetBody();
 
-	if (m_contactListener && c->IsTouching())
+	if (m_contactListener && c->IsTouching() && m_contactListener->EndContactImmediate(c, 0))
 	{
 		m_contactListener->EndContact(c);
 	}
@@ -217,14 +186,14 @@ void b2ContactManager::Collide(uint32 contactsBegin, uint32 contactsEnd, uint32 
 			// Should these bodies collide?
 			if (bodyB->ShouldCollide(bodyA) == false)
 			{
-				td.m_deferredDestroys.Push(c);
+				td.m_destroys.push_back(c);
 				continue;
 			}
 
 			// Check user filtering.
 			if (m_contactFilter && m_contactFilter->ShouldCollide(fixtureA, fixtureB, threadId) == false)
 			{
-				td.m_deferredDestroys.Push(c);
+				td.m_destroys.push_back(c);
 				continue;
 			}
 
@@ -246,7 +215,7 @@ void b2ContactManager::Collide(uint32 contactsBegin, uint32 contactsEnd, uint32 
 		// Here we destroy contacts that cease to overlap in the broad-phase.
 		if (overlap == false)
 		{
-			td.m_deferredDestroys.Push(c);
+			td.m_destroys.push_back(c);
 			continue;
 		}
 
@@ -322,7 +291,7 @@ void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB, uint3
 		deferredCreate.indexA = indexA;
 		deferredCreate.indexB = indexB;
 		deferredCreate.proxyIds = proxyIds;
-		m_perThreadData[threadId].m_deferredCreates.Push(deferredCreate);
+		m_perThreadData[threadId].m_creates.push_back(deferredCreate);
 	}
 	else
 	{
@@ -338,7 +307,7 @@ void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB, uint3
 }
 
 // This allows proxy synchronization to be somewhat parallel.
-void b2ContactManager::GenerateDeferredMoveProxies(b2Body** bodies, uint32 count, uint32 threadId)
+void b2ContactManager::SynchronizeFixtures(b2Body** bodies, uint32 count, uint32 threadId)
 {
 	b2ContactManagerPerThreadData& td = m_perThreadData[threadId];
 
@@ -382,120 +351,242 @@ void b2ContactManager::GenerateDeferredMoveProxies(b2Body** bodies, uint32 count
 					moveProxy.aabb = proxy->aabb;
 					moveProxy.displacement = b->m_xf.p - xf1.p;
 					moveProxy.proxyId = proxy->proxyId;
-					td.m_deferredMoveProxies.Push(moveProxy);
+					td.m_moveProxies.push_back(moveProxy);
 				}
 			}
 		}
 	}
 }
 
-void b2ContactManager::ConsumeDeferredBeginContacts(uint32 threadCount)
+void b2ContactManager::FinishFindNewContacts(b2TaskExecutor& executor, b2TaskGroup& taskGroup, b2StackAllocator& allocator)
 {
-	b2Contact* contact = nullptr;
-	while (b2PopPerThreadData(m_perThreadData, contact, threadCount,
-			&b2ContactManagerPerThreadData::m_deferredBeginContacts, b2ContactPointerLessThan))
-	{
-		m_contactListener->BeginContact(contact);
-	}
-}
+	m_broadPhase.ResetBuffers();
+	auto creates = b2MakeStackAllocThreadDataSorter<b2DeferredContactCreate>(m_perThreadData,
+		&b2ContactManagerPerThreadData::m_creates, b2DeferredContactCreateLessThan, allocator);
 
-void b2ContactManager::ConsumeDeferredEndContacts(uint32 threadCount)
-{
-	b2Contact* contact = nullptr;
-	while (b2PopPerThreadData(m_perThreadData, contact, threadCount,
-		&b2ContactManagerPerThreadData::m_deferredEndContacts, b2ContactPointerLessThan))
-	{
-		m_contactListener->EndContact(contact);
-	}
-}
+	b2Sort(creates, executor, taskGroup, allocator);
 
-void b2ContactManager::ConsumeDeferredPreSolves(uint32 threadCount)
-{
-	b2DeferredPreSolve ps{};
-	while (b2PopPerThreadData(m_perThreadData, ps, threadCount,
-		&b2ContactManagerPerThreadData::m_deferredPreSolves, b2DeferredPreSolveLessThan))
-	{
-		m_contactListener->PreSolve(ps.contact, &ps.oldManifold);
-	}
-}
-
-void b2ContactManager::ConsumeDeferredPostSolves(uint32 threadCount)
-{
-	b2DeferredPostSolve ps{};
-	while (b2PopPerThreadData(m_perThreadData, ps, threadCount,
-		&b2ContactManagerPerThreadData::m_deferredPostSolves, b2DeferredPostSolveLessThan))
-	{
-		m_contactListener->PostSolve(ps.contact, &ps.impulse);
-	}
-}
-
-void b2ContactManager::ConsumeDeferredAwakes(uint32 threadCount)
-{
-	// Order doesn't affect determinism so we don't bother sorting.
-	for (uint32 i = 0; i < threadCount; ++i)
-	{
-		while (m_perThreadData[i].m_deferredAwakes.GetCount())
-		{
-			b2Contact* c = m_perThreadData[i].m_deferredAwakes.Pop();
-			c->m_nodeA.other->SetAwake(true);
-			c->m_nodeB.other->SetAwake(true);
-		}
-	}
-}
-
-void b2ContactManager::ConsumeDeferredDestroys(uint32 threadCount)
-{
-	b2Contact* contact = nullptr;
-	while (b2PopPerThreadData(m_perThreadData, contact, threadCount,
-		&b2ContactManagerPerThreadData::m_deferredDestroys, b2ContactPointerLessThan))
-	{
-		Destroy(contact);
-	}
-}
-
-void b2ContactManager::ConsumeDeferredCreates(uint32 threadCount)
-{
 	b2ContactProxyIds prevIds{};
 
-	// Finish contact creation.
-	b2DeferredContactCreate deferredCreate{};
-	while (b2PopPerThreadData(m_perThreadData, deferredCreate, threadCount,
-		&b2ContactManagerPerThreadData::m_deferredCreates, b2DeferredContactCreateLessThan))
+	for (auto it = creates.begin(); it != creates.end(); ++it)
 	{
-		// Already created?
-		if (deferredCreate.proxyIds == prevIds)
+		if (it->proxyIds == prevIds)
 		{
 			continue;
 		}
+		prevIds = it->proxyIds;
 
-		prevIds = deferredCreate.proxyIds;
-
-		b2Fixture* fixtureA = deferredCreate.fixtureA;
-		b2Fixture* fixtureB = deferredCreate.fixtureB;
-
-		int32 indexA = deferredCreate.indexA;
-		int32 indexB = deferredCreate.indexB;
-
-		// Call the factory.
-		b2Contact* c = b2Contact::Create(fixtureA, indexA, fixtureB, indexB, m_allocator);
-		if (c == nullptr)
-		{
-			return;
-		}
-
-		// Finish creating.
-		OnContactCreate(c, prevIds);
+		ConsumeCreate(*it);
 	}
 }
 
-void b2ContactManager::ConsumeDeferredMoveProxies(uint32 threadCount)
+void b2ContactManager::FinishFindNewContacts()
 {
-	b2DeferredMoveProxy moveProxy;
-	while (b2PopPerThreadData(m_perThreadData, moveProxy, threadCount,
-		&b2ContactManagerPerThreadData::m_deferredMoveProxies, b2DeferredMoveProxyLessThan))
+	m_broadPhase.ResetBuffers();
+
+	b2ContactProxyIds prevIds{};
+
+	for (uint32 i = 0; i < b2_maxThreads; ++i)
 	{
-		m_broadPhase.MoveProxy(moveProxy.proxyId, moveProxy.aabb, moveProxy.displacement);
+		b2ContactManagerPerThreadData& td = m_perThreadData[i];
+		while (td.m_creates.size())
+		{
+			b2DeferredContactCreate create = td.m_creates.pop_back();
+
+			if (create.proxyIds == prevIds)
+			{
+				continue;
+			}
+			prevIds = create.proxyIds;
+
+			ConsumeCreate(create);
+		}
 	}
+}
+
+void b2ContactManager::FinishCollide(b2TaskExecutor& executor, b2TaskGroup& taskGroup, b2StackAllocator& allocator)
+{
+	auto begins = b2MakeStackAllocThreadDataSorter<b2Contact*>(m_perThreadData,
+		&b2ContactManagerPerThreadData::m_beginContacts, b2ContactPointerLessThan, allocator);
+
+	auto ends = b2MakeStackAllocThreadDataSorter<b2Contact*>(m_perThreadData,
+		&b2ContactManagerPerThreadData::m_endContacts, b2ContactPointerLessThan, allocator);
+
+	auto preSolves = b2MakeStackAllocThreadDataSorter<b2DeferredPreSolve>(m_perThreadData,
+		&b2ContactManagerPerThreadData::m_preSolves, b2DeferredPreSolveLessThan, allocator);
+
+	auto destroys = b2MakeStackAllocThreadDataSorter<b2Contact*>(m_perThreadData,
+		&b2ContactManagerPerThreadData::m_destroys, b2ContactPointerLessThan, allocator);
+
+	while (true)
+	{
+		begins.SubmitSortTask(executor, taskGroup);
+		ends.SubmitSortTask(executor, taskGroup);
+		preSolves.SubmitSortTask(executor, taskGroup);
+		destroys.SubmitSortTask(executor, taskGroup);
+
+		if (begins.IsSubmitRequired() == false && ends.IsSubmitRequired() == false &&
+			preSolves.IsSubmitRequired() == false && destroys.IsSubmitRequired() == false)
+		{
+			ConsumeAwakes();
+			executor.Wait(taskGroup, b2MainThreadCtx(allocator));
+			break;
+		}
+
+		executor.Wait(taskGroup, b2MainThreadCtx(allocator));
+	}
+
+	for (auto it = begins.begin(); it != begins.end(); ++it)
+	{
+		m_contactListener->BeginContact(*it);
+	}
+
+	for (auto it = ends.begin(); it != ends.end(); ++it)
+	{
+		m_contactListener->EndContact(*it);
+	}
+
+	for (auto it = preSolves.begin(); it != preSolves.end(); ++it)
+	{
+		m_contactListener->PreSolve(it->contact, &it->oldManifold);
+	}
+
+	for (auto it = destroys.begin(); it != destroys.end(); ++it)
+	{
+		Destroy(*it);
+	}
+}
+
+void b2ContactManager::FinishCollide()
+{
+	ConsumeAwakes();
+
+	for (uint32 i = 0; i < b2_maxThreads; ++i)
+	{
+		b2ContactManagerPerThreadData& td = m_perThreadData[i];
+		while (td.m_beginContacts.size())
+		{
+			b2Contact* c = td.m_beginContacts.pop_back();
+			m_contactListener->BeginContact(c);
+		}
+	}
+
+	for (uint32 i = 0; i < b2_maxThreads; ++i)
+	{
+		b2ContactManagerPerThreadData& td = m_perThreadData[i];
+		while (td.m_endContacts.size())
+		{
+			b2Contact* c = td.m_endContacts.pop_back();
+			m_contactListener->EndContact(c);
+		}
+	}
+
+	for (uint32 i = 0; i < b2_maxThreads; ++i)
+	{
+		b2ContactManagerPerThreadData& td = m_perThreadData[i];
+		while (td.m_preSolves.size())
+		{
+			b2DeferredPreSolve ps = td.m_preSolves.pop_back();
+			m_contactListener->PreSolve(ps.contact, &ps.oldManifold);
+		}
+	}
+
+	for (uint32 i = 0; i < b2_maxThreads; ++i)
+	{
+		b2ContactManagerPerThreadData& td = m_perThreadData[i];
+		while (td.m_destroys.size())
+		{
+			b2Contact* c = td.m_destroys.pop_back();
+			Destroy(c);
+		}
+	}
+}
+
+void b2ContactManager::FinishSynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup& taskGroup, b2StackAllocator& allocator)
+{
+	auto moves = b2MakeStackAllocThreadDataSorter<b2DeferredMoveProxy>(m_perThreadData,
+		&b2ContactManagerPerThreadData::m_moveProxies, b2DeferredMoveProxyLessThan, allocator);
+
+	b2Sort(moves, executor, taskGroup, allocator);
+
+	for (auto it = moves.begin(); it != moves.end(); ++it)
+	{
+		m_broadPhase.MoveProxy(it->proxyId, it->aabb, it->displacement);
+	}
+}
+
+void b2ContactManager::FinishSynchronizeFixtures()
+{
+	for (uint32 i = 0; i < b2_maxThreads; ++i)
+	{
+		b2ContactManagerPerThreadData& td = m_perThreadData[i];
+		while (td.m_moveProxies.size())
+		{
+			b2DeferredMoveProxy moveProxy = td.m_moveProxies.pop_back();
+			m_broadPhase.MoveProxy(moveProxy.proxyId, moveProxy.aabb, moveProxy.displacement);
+		}
+	}
+}
+
+void b2ContactManager::FinishSolve(b2TaskExecutor& executor, b2TaskGroup& taskGroup, b2StackAllocator& allocator)
+{
+	auto postSolves = b2MakeStackAllocThreadDataSorter<b2DeferredPostSolve>(m_perThreadData,
+		&b2ContactManagerPerThreadData::m_postSolves, b2DeferredPostSolveLessThan, allocator);
+
+	b2Sort(postSolves, executor, taskGroup, allocator);
+
+	for (auto it = postSolves.begin(); it != postSolves.end(); ++it)
+	{
+		m_contactListener->PostSolve(it->contact, &it->impulse);
+	}
+}
+
+void b2ContactManager::FinishSolve()
+{
+	for (uint32 i = 0; i < b2_maxThreads; ++i)
+	{
+		b2ContactManagerPerThreadData& td = m_perThreadData[i];
+		while (td.m_postSolves.size())
+		{
+			b2DeferredPostSolve ps = td.m_postSolves.pop_back();
+			m_contactListener->PostSolve(ps.contact, &ps.impulse);
+		}
+	}
+}
+
+void b2ContactManager::ConsumeAwakes()
+{
+	for (uint32 i = 0; i < b2_maxThreads; ++i)
+	{
+		while (m_perThreadData[i].m_awakes.size())
+		{
+			b2Contact* c = m_perThreadData[i].m_awakes.pop_back();
+			b2Body* bodyA = c->m_nodeB.other;
+			b2Body* bodyB = c->m_nodeB.other;
+
+			bodyA->SetAwake(true);
+			bodyB->SetAwake(true);
+		}
+	}
+}
+
+void b2ContactManager::ConsumeCreate(const b2DeferredContactCreate& create)
+{
+	b2Fixture* fixtureA = create.fixtureA;
+	b2Fixture* fixtureB = create.fixtureB;
+
+	int32 indexA = create.indexA;
+	int32 indexB = create.indexB;
+
+	// Call the factory.
+	b2Contact* c = b2Contact::Create(fixtureA, indexA, fixtureB, indexB, m_allocator);
+	if (c == nullptr)
+	{
+		return;
+	}
+
+	// Finish creating.
+	OnContactCreate(c, create.proxyIds);
 }
 
 inline void b2ContactManager::OnContactCreate(b2Contact* c, b2ContactProxyIds proxyIds)
@@ -553,6 +644,16 @@ inline void b2ContactManager::OnContactCreate(b2Contact* c, b2ContactProxyIds pr
 	{
 		bodyA->SetAwake(true);
 		bodyB->SetAwake(true);
+	}
+
+	// We do this here because we can't advance body sweeps during the multithreaded FindMinContact.
+	if (bodyA->m_sweep.alpha0 < bodyB->m_sweep.alpha0)
+	{
+		bodyA->m_sweep.Advance(bodyB->m_sweep.alpha0);
+	}
+	else if (bodyB->m_sweep.alpha0 < bodyA->m_sweep.alpha0)
+	{
+		bodyB->m_sweep.Advance(bodyA->m_sweep.alpha0);
 	}
 
 	PushContact(c);
@@ -630,26 +731,26 @@ inline void b2ContactManager::PushContact(b2Contact* c)
 {
 	if (c->m_flags & b2Contact::e_toiCandidateFlag)
 	{
-		if (m_toiCount < m_contacts.GetCount())
+		if (m_toiCount < m_contacts.size())
 		{
 			c->m_managerIndex = m_toiCount;
 			b2Assert((m_contacts[m_toiCount]->m_flags & b2Contact::e_toiCandidateFlag) == 0);
-			m_contacts[m_toiCount]->m_managerIndex = m_contacts.GetCount();
-			m_contacts.Push(m_contacts[m_toiCount]);
+			m_contacts[m_toiCount]->m_managerIndex = m_contacts.size();
+			m_contacts.push_back(m_contacts[m_toiCount]);
 			m_contacts[m_toiCount] = c;
 			++m_toiCount;
 		}
 		else
 		{
-			c->m_managerIndex = m_contacts.GetCount();
-			m_contacts.Push(c);
+			c->m_managerIndex = m_contacts.size();
+			m_contacts.push_back(c);
 			++m_toiCount;
 		}
 	}
 	else
 	{
-		c->m_managerIndex = m_contacts.GetCount();
-		m_contacts.Push(c);
+		c->m_managerIndex = m_contacts.size();
+		m_contacts.push_back(c);
 	}
 }
 
@@ -661,8 +762,8 @@ inline void b2ContactManager::RemoveContact(b2Contact* c)
 		--m_toiCount;
 		m_contacts[m_toiCount]->m_managerIndex = c->m_managerIndex;
 		m_contacts[c->m_managerIndex] = m_contacts[m_toiCount];
-		b2Contact* backContact = m_contacts.Pop();
-		if (m_contacts.GetCount() > m_toiCount)
+		b2Contact* backContact = m_contacts.pop_back();
+		if (m_contacts.size() > m_toiCount)
 		{
 			m_contacts[m_toiCount] = backContact;
 			m_contacts[m_toiCount]->m_managerIndex = m_toiCount;
@@ -671,7 +772,7 @@ inline void b2ContactManager::RemoveContact(b2Contact* c)
 	else
 	{
 		b2Assert((c->m_flags & b2Contact::e_toiCandidateFlag) == 0);
-		m_contacts.Back()->m_managerIndex = c->m_managerIndex;
-		m_contacts.RemoveAndSwap(c->m_managerIndex);
+		m_contacts.back()->m_managerIndex = c->m_managerIndex;
+		b2RemoveAndSwapBack(m_contacts, c->m_managerIndex);
 	}
 }

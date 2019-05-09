@@ -27,6 +27,11 @@ public:
 		e_boxcount = 2800
 	};
 
+	static Test* Create()
+	{
+		return new MultithreadDemo;
+	}
+
 	MultithreadDemo()
 	{
 		m_boxCount = 0;
@@ -46,10 +51,18 @@ public:
 			b2FixtureDef fd;
 			fd.shape = &shape;
 
-			// Marking fixtures as thick walls avoids expensive TOI checks for non-bullet
+			// Marking fixtures as thick walls can avoid expensive TOI checks for non-bullet
 			// contacts with those fixtures. This should only be applied to walls that are
 			// thick enough to prevent tunneling on their own, without TOI.
+#if 0		// Not applied by default so that performance can be fairly compared to Box2D.
 			fd.isThickWall = true;
+#endif
+
+			// Disabling consistency sorting may improve performance at the cost of run-to-run
+			// reproducibility, although I haven't seen measurable gains on this test.
+#if 0
+			m_world->SetConsistencySorting(false);
+#endif
 
 			shape.SetAsBox(25.0f, 2.5f, b2Vec2(0.0f, -2.5f), 0.0f);
 			m_groundBody->CreateFixture(&fd);
@@ -147,11 +160,6 @@ public:
 		{
 			m_slider->SetMotorSpeed(-m_slider->GetMotorSpeed());
 		}
-	}
-
-	static Test* Create()
-	{
-		return new MultithreadDemo;
 	}
 
 	void CreateWheel(b2Vec2 position, float32 armLength)

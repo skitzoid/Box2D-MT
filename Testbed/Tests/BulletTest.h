@@ -76,6 +76,7 @@ public:
 		m_bullet->SetLinearVelocity(b2Vec2(0.0f, -50.0f));
 		m_bullet->SetAngularVelocity(0.0f);
 
+#if b2_enableGlobalStats
 		extern int32 b2_gjkCalls, b2_gjkIters, b2_gjkMaxIters;
 		extern int32 b2_toiCalls, b2_toiIters, b2_toiMaxIters;
 		extern int32 b2_toiRootIters, b2_toiMaxRootIters;
@@ -89,12 +90,14 @@ public:
 		b2_toiMaxIters = 0;
 		b2_toiRootIters = 0;
 		b2_toiMaxRootIters = 0;
+#endif
 	}
 
 	void Step(Settings* settings)
 	{
 		Test::Step(settings);
 
+#if b2_enableGlobalStats
 		extern int32 b2_gjkCalls, b2_gjkIters, b2_gjkMaxIters;
 		extern int32 b2_toiCalls, b2_toiIters;
 		extern int32 b2_toiRootIters, b2_toiMaxRootIters;
@@ -116,6 +119,7 @@ public:
 				b2_toiRootIters / float32(b2_toiCalls), b2_toiMaxRootIters);
 			m_textLine += DRAW_STRING_NEW_LINE;
 		}
+#endif
 
 		if (m_stepCount % 60 == 0)
 		{

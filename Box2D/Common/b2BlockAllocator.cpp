@@ -20,6 +20,7 @@
 #include <limits.h>
 #include <string.h>
 #include <stddef.h>
+#include <mutex>
 
 int32 b2BlockAllocator::s_blockSizes[b2_blockSizes] =
 {
@@ -39,7 +40,6 @@ int32 b2BlockAllocator::s_blockSizes[b2_blockSizes] =
 	640,	// 13
 	896,	// 14
 	1152,	// 15
-
 };
 uint8 b2BlockAllocator::s_blockSizeLookup[b2_maxBlockSize + 1];
 
@@ -76,6 +76,9 @@ bool b2BlockAllocator::InitializeBlockSizeLookup()
 
 b2BlockAllocator::b2BlockAllocator()
 {
+	static std::once_flag s_blockSizeLookupInitFlag;
+	std::call_once(s_blockSizeLookupInitFlag, b2BlockAllocator::InitializeBlockSizeLookup);
+
 	b2Assert(b2_blockSizes < UCHAR_MAX);
 
 	m_chunkSpace = b2_chunkArrayIncrement;
@@ -84,8 +87,6 @@ b2BlockAllocator::b2BlockAllocator()
 
 	memset(m_chunks, 0, m_chunkSpace * sizeof(b2Chunk));
 	memset(m_freeLists, 0, sizeof(m_freeLists));
-
-	static bool blockSizeLookupInitialized = InitializeBlockSizeLookup();
 }
 
 b2BlockAllocator::~b2BlockAllocator()

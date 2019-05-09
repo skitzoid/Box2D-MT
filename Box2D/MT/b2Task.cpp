@@ -17,21 +17,36 @@
 */
 
 #include "Box2D/Dynamics/b2TimeStep.h"
-#include "Box2D/MT/b2Threading.h"
+#include "Box2D/MT/b2MtUtil.h"
 
-void b2PartitionRange(uint32 begin, uint32 end, uint32 targetOutputCount, b2PartitionedRange& output)
+void b2PartitionRange(uint32 begin, uint32 end, uint32 maxOutputRanges, uint32 minElementsPerRange, b2PartitionedRange& output)
 {
-	b2Assert(targetOutputCount <= b2_partitionRangeMaxOutput);
+	b2Assert(maxOutputRanges <= b2_maxRangeSubTasks);
 	b2Assert(begin < end);
 
 	uint32 elementCount = end - begin;
 
-	uint32 elementsPerTask = elementCount / targetOutputCount;
-	uint32 elementsRemainder = elementCount % targetOutputCount;
+	if (elementCount <= minElementsPerRange)
+	{
+		b2Assert(output.count < b2_maxRangeSubTasks);
+		output[output.count].begin = begin;
+		output[output.count].end = end;
+		output.count += 1;
+		return;
+	}
+
+	uint32 minElementRangeCount = elementCount / minElementsPerRange;
+	if (minElementRangeCount < maxOutputRanges)
+	{
+		maxOutputRanges = minElementRangeCount;
+	}
+
+	uint32 elementsPerTask = elementCount / maxOutputRanges;
+	uint32 elementsRemainder = elementCount % maxOutputRanges;
 
 	uint32 beginIndex = begin;
 	uint32 endIndex = 0;
-	for (uint32 i = 0; i < targetOutputCount; ++i)
+	for (uint32 i = 0; i < maxOutputRanges; ++i)
 	{
 		uint32 rangeSize = elementsPerTask;
 		if (i < elementsRemainder)
@@ -39,14 +54,15 @@ void b2PartitionRange(uint32 begin, uint32 end, uint32 targetOutputCount, b2Part
 			rangeSize += 1;
 		}
 		endIndex = beginIndex + rangeSize;
-		if (endIndex > elementCount)
+		if (endIndex > end)
 		{
-			endIndex = elementCount;
+			endIndex = end;
 		}
+		b2Assert(output.count < b2_maxRangeSubTasks);
 		output[output.count].begin = beginIndex;
 		output[output.count].end = endIndex;
 		output.count += 1;
-		if (endIndex == elementCount)
+		if (endIndex == end)
 		{
 			break;
 		}

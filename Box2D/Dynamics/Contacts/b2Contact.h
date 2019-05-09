@@ -168,7 +168,9 @@ protected:
 	friend class b2ContactSolver;
 	friend class b2Body;
 	friend class b2Fixture;
-	friend class b2ContactPreSolveTask;
+	friend class b2ClearContactSolveFlags;
+	friend class b2ClearContactSolveTOIFlags;
+	friend class b2FindMinToiContactTask;
 	friend bool b2ContactPointerLessThan(const b2Contact* l, const b2Contact* r);
 
 	// Flags stored in m_flags
@@ -223,7 +225,7 @@ protected:
 
 	uint32 m_flags;
 
-	int32 m_managerIndex;
+	uint32 m_managerIndex;
 
 	// Nodes for connecting bodies.
 	b2ContactEdge m_nodeA;

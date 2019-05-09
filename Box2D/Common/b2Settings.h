@@ -31,10 +31,10 @@
 
 #define B2_NOT_USED(x) ((void)(x))
 
-#if !defined(b2DEBUG)
-#define b2Assert(A) assert(A)
+#if !defined(NDEBUG)
+	#define b2Assert(A) assert(A)
 #else
-#define b2Assert(A) B2_NOT_USED(A)
+	#define b2Assert(A) B2_NOT_USED(A)
 #endif
 
 typedef std::int8_t		int8;
@@ -156,24 +156,23 @@ typedef double			float64;
     #define b2_forceInline inline
 #endif
 
+/// Some global variables are used to gather stats on runtime behavior, but they are
+/// disabled by default due to the data races they cause with multithreading.
+/// Set this to true if you need to use those variables.
+/// Note: behavior is undefined if multithreading is used while this is true.
+#define b2_enableGlobalStats					false
+
 /// The size of a cache line.
 #define b2_cacheLineSize						64
 
-/// The maximum number of thread pool threads.
-#define b2_maxThreadPoolThreads					7
-
-/// The maximum number of threads.
-#define b2_maxThreads							(b2_maxThreadPoolThreads + 1)
+/// The maximum number of threads. Must be greater than 1 and even.
+#define b2_maxThreads							8
 
 /// The maximum number of subtasks that a range task can be split into.
-/// Custom executors must not exceed this value.
-#define b2_partitionRangeMaxOutput				2 * b2_maxThreads
+#define b2_maxRangeSubTasks						b2_maxThreads
 
-/// The world may continue gathering bodies for solving until this estimated cost is reached.
-#define b2_solveBatchTargetCost					100
-
-/// The world may continue gathering bodies for solving until it gathers this many.
-#define b2_solveBatchTargetBodyCount			16
+/// The maximum number of islands per solve task.
+#define b2_maxIslandsPerSolveTask				16
 
 /// Get the estimated cost of solving an island with the specified attributes
 int32 b2GetIslandCost(int32 bodyCount, int32 contactCount, int32 jointCount);

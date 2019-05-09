@@ -78,6 +78,7 @@ public:
 		}
 #endif
 
+#if b2_enableGlobalStats
 		extern int32 b2_gjkCalls, b2_gjkIters, b2_gjkMaxIters;
 		extern int32 b2_toiCalls, b2_toiIters;
 		extern int32 b2_toiRootIters, b2_toiMaxRootIters;
@@ -87,10 +88,12 @@ public:
 		b2_toiCalls = 0; b2_toiIters = 0;
 		b2_toiRootIters = 0; b2_toiMaxRootIters = 0;
 		b2_toiTime = 0.0f; b2_toiMaxTime = 0.0f;
+#endif
 	}
 
 	void Launch()
 	{
+#if b2_enableGlobalStats
 		extern int32 b2_gjkCalls, b2_gjkIters, b2_gjkMaxIters;
 		extern int32 b2_toiCalls, b2_toiIters;
 		extern int32 b2_toiRootIters, b2_toiMaxRootIters;
@@ -100,6 +103,7 @@ public:
 		b2_toiCalls = 0; b2_toiIters = 0;
 		b2_toiRootIters = 0; b2_toiMaxRootIters = 0;
 		b2_toiTime = 0.0f; b2_toiMaxTime = 0.0f;
+#endif
 
 		m_body->SetTransform(b2Vec2(0.0f, 20.0f), 0.0f);
 		m_angularVelocity = RandomFloat(-50.0f, 50.0f);
@@ -111,6 +115,7 @@ public:
 	{
 		Test::Step(settings);
 
+#if b2_enableGlobalStats
 		extern int32 b2_gjkCalls, b2_gjkIters, b2_gjkMaxIters;
 
 		if (b2_gjkCalls > 0)
@@ -129,7 +134,7 @@ public:
 			g_debugDraw.DrawString(5, m_textLine, "toi calls = %d, ave [max] toi iters = %3.1f [%d]",
 								b2_toiCalls, b2_toiIters / float32(b2_toiCalls), b2_toiMaxRootIters);
 			m_textLine += DRAW_STRING_NEW_LINE;
-			
+
 			g_debugDraw.DrawString(5, m_textLine, "ave [max] toi root iters = %3.1f [%d]",
 				b2_toiRootIters / float32(b2_toiCalls), b2_toiMaxRootIters);
 			m_textLine += DRAW_STRING_NEW_LINE;
@@ -138,6 +143,7 @@ public:
 				1000.0f * b2_toiTime / float32(b2_toiCalls), 1000.0f * b2_toiMaxTime);
 			m_textLine += DRAW_STRING_NEW_LINE;
 		}
+#endif
 
 		if (m_stepCount % 60 == 0)
 		{

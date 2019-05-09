@@ -23,7 +23,9 @@
 #include "Box2D/Collision/Shapes/b2PolygonShape.h"
 
 // GJK using Voronoi regions (Christer Ericson) and Barycentric coordinates.
+#if b2_enableGlobalStats
 int32 b2_gjkCalls, b2_gjkIters, b2_gjkMaxIters;
+#endif
 
 void b2DistanceProxy::Set(const b2Shape* shape, int32 index)
 {
@@ -451,7 +453,7 @@ void b2Distance(b2DistanceOutput* output,
 				b2SimplexCache* cache,
 				const b2DistanceInput* input)
 {
-#if 0 // Data race
+#if b2_enableGlobalStats
 	++b2_gjkCalls;
 #endif
 
@@ -535,7 +537,7 @@ void b2Distance(b2DistanceOutput* output,
 
 		// Iteration count is equated to the number of support point calls.
 		++iter;
-#if 0 // Data race
+#if b2_enableGlobalStats
 		++b2_gjkIters;
 #endif
 
@@ -560,7 +562,7 @@ void b2Distance(b2DistanceOutput* output,
 		++simplex.m_count;
 	}
 
-#if 0 // Data race
+#if b2_enableGlobalStats
 	b2_gjkMaxIters = b2Max(b2_gjkMaxIters, iter);
 #endif
 
