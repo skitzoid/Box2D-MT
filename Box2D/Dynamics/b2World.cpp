@@ -472,7 +472,7 @@ b2World::b2World(const b2Vec2& gravity)
 	m_jointCost = 10;
 	m_solveTaskCostThreshold = 100;
 
-	m_consistencySorting = false; // TEMP TODO_JUSTIN
+	m_consistencySorting = true;
 	m_allowSleep = true;
 	m_gravity = gravity;
 

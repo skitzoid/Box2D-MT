@@ -57,6 +57,7 @@ public:
     static void SetThreadAffinity(uint32 threadIndex, bool relaxed)
     {
         B2_NOT_USED(threadIndex);
+        B2_NOT_USED(relaxed);
     }
 };
 #endif // #ifdef b2_hwloc

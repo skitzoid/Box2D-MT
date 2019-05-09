@@ -55,6 +55,7 @@ project 'Box2D'
 	filter 'options:hwloc'
 		defines { 'b2_hwloc' }
 		links { 'hwloc' }
+	filter {}
 
 project 'HelloWorld'
 	kind 'ConsoleApp'
@@ -66,6 +67,7 @@ project 'HelloWorld'
 	filter 'options:hwloc'
 		defines { 'b2_hwloc' }
 		links { 'hwloc' }
+	filter {}
 
 project 'Testbed'
 	kind 'ConsoleApp'
@@ -75,6 +77,7 @@ project 'Testbed'
 	filter 'options:hwloc'
 		defines { 'b2_hwloc' }
 		links { 'hwloc' }
+	filter {}
 
 	files
 	{
