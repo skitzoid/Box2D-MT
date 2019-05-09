@@ -48,12 +48,6 @@
 	#define b2_notifyLockScopeEnd }
 #endif
 
-inline b2ThreadPoolTaskGroup* b2GetThreadPoolTaskGroup(b2TaskGroup* taskGroup)
-{
-	b2Assert(taskGroup);
-	return (b2ThreadPoolTaskGroup*)taskGroup;
-}
-
 // Compare the cost of two tasks. Currently only b2SolveTask sets a cost.
 inline bool b2TaskCostLessThan(const b2Task* a, const b2Task* b)
 {
@@ -186,7 +180,7 @@ void b2ThreadPool::Wait(const b2ThreadPoolTaskGroup& group, const b2ThreadContex
 		m_lockMilliseconds += lockTimer.GetMilliseconds();
 
 		// This is not necessarily the group we're waiting on.
-		b2ThreadPoolTaskGroup* executeGroup = b2GetThreadPoolTaskGroup(task->GetTaskGroup());
+		b2ThreadPoolTaskGroup* executeGroup = static_cast<b2ThreadPoolTaskGroup*>(task->GetTaskGroup());
 
 		// We only modify this while the mutex is locked, so it's okay to do this non-atomically.
 		executeGroup->m_remainingTasks.store(executeGroup->m_remainingTasks.load(std::memory_order_relaxed) - 1,
@@ -269,7 +263,7 @@ void b2ThreadPool::WorkerMain(uint32 threadId)
 		b2Task* task = m_pendingTasks.pop_back();
 		m_pendingTaskCount.store(m_pendingTasks.size(), std::memory_order_relaxed);
 
-		b2ThreadPoolTaskGroup* group = b2GetThreadPoolTaskGroup(task->GetTaskGroup());
+		b2ThreadPoolTaskGroup* group = static_cast<b2ThreadPoolTaskGroup*>(task->GetTaskGroup());
 
 		lk.unlock();
 
@@ -324,7 +318,7 @@ b2TaskGroup* b2ThreadPoolTaskExecutor::CreateTaskGroup(b2StackAllocator& allocat
 
 void b2ThreadPoolTaskExecutor::DestroyTaskGroup(b2TaskGroup* taskGroup, b2StackAllocator& allocator)
 {
-	b2ThreadPoolTaskGroup* tpTaskGroup = b2GetThreadPoolTaskGroup(taskGroup);
+	b2ThreadPoolTaskGroup* tpTaskGroup = static_cast<b2ThreadPoolTaskGroup*>(taskGroup);
 	b2Assert(tpTaskGroup);
 
 	tpTaskGroup->~b2ThreadPoolTaskGroup();
@@ -345,7 +339,7 @@ void b2ThreadPoolTaskExecutor::PartitionRange(b2TaskType type, uint32 begin, uin
 
 void b2ThreadPoolTaskExecutor::SubmitTask(b2TaskGroup* taskGroup, b2Task* task)
 {
-	b2ThreadPoolTaskGroup* tpTaskGroup = b2GetThreadPoolTaskGroup(taskGroup);
+	b2ThreadPoolTaskGroup* tpTaskGroup = static_cast<b2ThreadPoolTaskGroup*>(taskGroup);
 	b2Assert(tpTaskGroup);
 
 	m_threadPool.SubmitTask(*tpTaskGroup, task);
@@ -353,7 +347,7 @@ void b2ThreadPoolTaskExecutor::SubmitTask(b2TaskGroup* taskGroup, b2Task* task)
 
 void b2ThreadPoolTaskExecutor::SubmitTasks(b2TaskGroup* taskGroup, b2Task** tasks, uint32 count)
 {
-	b2ThreadPoolTaskGroup* tpTaskGroup = b2GetThreadPoolTaskGroup(taskGroup);
+	b2ThreadPoolTaskGroup* tpTaskGroup = static_cast<b2ThreadPoolTaskGroup*>(taskGroup);
 	b2Assert(tpTaskGroup);
 
 	m_threadPool.SubmitTasks(*tpTaskGroup, tasks, count);
@@ -361,7 +355,7 @@ void b2ThreadPoolTaskExecutor::SubmitTasks(b2TaskGroup* taskGroup, b2Task** task
 
 void b2ThreadPoolTaskExecutor::Wait(b2TaskGroup* taskGroup, const b2ThreadContext& ctx)
 {
-	b2ThreadPoolTaskGroup* tpTaskGroup = b2GetThreadPoolTaskGroup(taskGroup);
+	b2ThreadPoolTaskGroup* tpTaskGroup = static_cast<b2ThreadPoolTaskGroup*>(taskGroup);
 	b2Assert(tpTaskGroup);
 
 	m_threadPool.Wait(*tpTaskGroup, ctx);
