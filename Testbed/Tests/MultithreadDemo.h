@@ -35,6 +35,7 @@ public:
 	MultithreadDemo()
 	{
 		m_boxCount = 0;
+		m_thickWallsEnabled = false;
 
 		// Ground
 		{
@@ -53,10 +54,9 @@ public:
 
 			// Marking fixtures as thick walls can avoid expensive TOI checks for non-bullet
 			// contacts with those fixtures. This should only be applied to walls that are
-			// thick enough to prevent tunneling on their own, without TOI.
-#if 1		// Not applied by default so that performance can be fairly compared to Box2D.
-			fd.isThickWall = true;
-#endif
+			// thick enough to prevent tunneling on their own, without TOI. We don't set it
+			// here so that the default performance can be accurately compared to Box2D.
+			// fd.isThickWall = true;
 
 			shape.SetAsBox(25.0f, 2.5f, b2Vec2(0.0f, -2.5f), 0.0f);
 			m_groundBody->CreateFixture(&fd);
@@ -154,6 +154,36 @@ public:
 		{
 			m_slider->SetMotorSpeed(-m_slider->GetMotorSpeed());
 		}
+
+		g_debugDraw.DrawString(5, m_textLine, "Press 't' to toggle isThickWall on all static polygon fixtures");
+		m_textLine += DRAW_STRING_NEW_LINE;
+		g_debugDraw.DrawString(5, m_textLine, "Thick walls: %s", m_thickWallsEnabled ? "enabled" : "disabled");
+		m_textLine += DRAW_STRING_NEW_LINE;
+	}
+
+	void ToggleThickWall()
+	{
+		m_thickWallsEnabled = !m_thickWallsEnabled;
+
+		for (b2Fixture* f = m_groundBody->GetFixtureList(); f; f = f->GetNext())
+		{
+			// All polygons on this body are thick walls.
+			const b2Shape* shape = f->GetShape();
+			if (shape->GetType() == b2Shape::e_polygon)
+			{
+				f->SetThickWall(m_thickWallsEnabled);
+			}
+		}
+	}
+
+	void Keyboard(int key)
+	{
+		switch (key)
+		{
+		case GLFW_KEY_T:
+			ToggleThickWall();
+			break;
+		}
 	}
 
 	void CreateWheel(b2Vec2 position, float32 armLength)
@@ -240,6 +270,7 @@ public:
 	b2PrismaticJoint* m_slider;
 
 	int32 m_boxCount;
+	bool m_thickWallsEnabled;
 };
 
 #endif
