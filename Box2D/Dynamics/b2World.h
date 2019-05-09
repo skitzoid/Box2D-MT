@@ -159,12 +159,6 @@ public:
 	void SetSolveTaskCostThreshold(uint32 cost) { m_solveTaskCostThreshold = cost; }
 	uint32 GetSolveTaskCostThreshold() const { return m_solveTaskCostThreshold; }
 
-	/// Enable/disable consistency sorting. When enabled, the results of multithreaded tasks
-	/// are sorted to ensure run-to-run reproducibility. Default is enabled.
-	/// Note: disabling does not always improve performance.
-	void SetConsistencySorting(bool flag) { m_consistencySorting = flag; }
-	bool GetConsistencySorting() const { return m_consistencySorting; }
-
 	/// Enable/disable sleep.
 	void SetAllowSleeping(bool flag);
 	bool GetAllowSleeping() const { return m_allowSleep; }
@@ -317,7 +311,6 @@ private:
 	uint32 m_solveTaskCostThreshold;
 
 	bool m_allowSleep;
-	bool m_consistencySorting;
 
 	b2DestructionListener* m_destructionListener;
 	b2Draw* m_debugDraw;

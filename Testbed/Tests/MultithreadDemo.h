@@ -58,12 +58,6 @@ public:
 			fd.isThickWall = true;
 #endif
 
-			// Disabling consistency sorting may improve performance at the cost of run-to-run
-			// reproducibility, although I haven't seen measurable gains on this test.
-#if 0
-			m_world->SetConsistencySorting(false);
-#endif
-
 			shape.SetAsBox(25.0f, 2.5f, b2Vec2(0.0f, -2.5f), 0.0f);
 			m_groundBody->CreateFixture(&fd);
 

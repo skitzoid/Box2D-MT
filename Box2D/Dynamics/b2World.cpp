@@ -472,7 +472,6 @@ b2World::b2World(const b2Vec2& gravity)
 	m_jointCost = 10;
 	m_solveTaskCostThreshold = 100;
 
-	m_consistencySorting = true;
 	m_allowSleep = true;
 	m_gravity = gravity;
 
@@ -1067,14 +1066,7 @@ void b2World::FindNewContacts(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 	m_contactManager.m_deferCreates = false;
 
 	SetMtLock(0);
-	if (m_consistencySorting)
-	{
-		m_contactManager.FinishFindNewContacts(executor, taskGroup, m_stackAllocator);
-	}
-	else
-	{
-		m_contactManager.FinishFindNewContacts();
-	}
+	m_contactManager.FinishFindNewContacts(executor, taskGroup, m_stackAllocator);
 }
 
 void b2World::Collide(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
@@ -1097,14 +1089,7 @@ void b2World::Collide(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
 
 	SetMtLock(0);
-	if (m_consistencySorting)
-	{
-		m_contactManager.FinishCollide(executor, taskGroup, m_stackAllocator);
-	}
-	else
-	{
-		m_contactManager.FinishCollide();
-	}
+	m_contactManager.FinishCollide(executor, taskGroup, m_stackAllocator);
 }
 
 void b2World::SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
@@ -1127,14 +1112,7 @@ void b2World::SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup* taskGro
 	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
 
 	SetMtLock(0);
-	if (m_consistencySorting)
-	{
-		m_contactManager.FinishSynchronizeFixtures(executor, taskGroup, m_stackAllocator);
-	}
-	else
-	{
-		m_contactManager.FinishSynchronizeFixtures();
-	}
+	m_contactManager.FinishSynchronizeFixtures(executor, taskGroup, m_stackAllocator);
 }
 
 void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b2TimeStep& step)
@@ -1374,14 +1352,7 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b2Ti
 	m_stackAllocator.Free(allBodies);
 
 	SetMtLock(0);
-	if (m_consistencySorting)
-	{
-		m_contactManager.FinishSolve(executor, taskGroup, m_stackAllocator);
-	}
-	else
-	{
-		m_contactManager.FinishSolve();
-	}
+	m_contactManager.FinishSolve(executor, taskGroup, m_stackAllocator);
 
 	{
 		b2Timer timer;
