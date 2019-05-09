@@ -190,8 +190,13 @@ void b2ThreadPool::Wait(const b2ThreadPoolTaskGroup& group, const b2ThreadContex
 
 void b2ThreadPool::Restart(uint32 threadCount)
 {
+	// Save and restore the busy wait timeout.
+	float32 busyWaitTimeout = m_busyWaitTimeout.load(std::memory_order_relaxed);
+
 	Shutdown();
 	m_signalShutdown = false;
+
+	m_busyWaitTimeout.store(busyWaitTimeout, std::memory_order_relaxed);
 
 	m_threadCount = b2Clamp((int32)threadCount - 1, 0, b2_maxThreads - 1);
 	for (uint32 i = 0; i < m_threadCount; ++i)
