@@ -103,7 +103,7 @@ public:
 
 	/// Restart with the specified number of threads
 	/// @warning must only be called from a single thread while no tasks are being executed.
-	void Restart(int32 threadCount);
+	void Restart(uint32 threadCount);
 
 private:
 
@@ -111,14 +111,13 @@ private:
 	void Shutdown();
 
 	std::thread m_threads[b2_maxThreads - 1];
-	int32 m_threadCount;
+	uint32 m_threadCount;
 
-	std::condition_variable m_workerCond;
+	std::atomic<float32> m_busyWaitTimeout;
+	std::condition_variable m_waitingForTasks;
 
 	mutable std::mutex m_mutex;
-
 	std::atomic<int32> m_pendingTaskCount;
-	std::atomic<float32> m_busyWaitTimeout;
 
 	b2GrowableArray<b2Task*> m_pendingTasks;
 	float32 m_lockMilliseconds;

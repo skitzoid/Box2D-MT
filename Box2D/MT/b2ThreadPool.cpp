@@ -87,7 +87,7 @@ b2ThreadPool::b2ThreadPool(const b2ThreadPoolOptions& options)
 
 	// Minus one for the user thread.
 	m_threadCount = b2Clamp(totalThreadCount - 1, 0, b2_maxThreads - 1);
-	for (int32 i = 0; i < m_threadCount; ++i)
+	for (uint32 i = 0; i < m_threadCount; ++i)
 	{
 		m_threads[i] = std::thread(&b2ThreadPool::WorkerMain, this, 1 + i);
 	}
@@ -118,7 +118,7 @@ void b2ThreadPool::SubmitTasks(b2ThreadPoolTaskGroup& group, b2Task** tasks, uin
 		m_pendingTaskCount.store(m_pendingTasks.size(), std::memory_order_relaxed);
 		group.m_remainingTasks.store(group.m_remainingTasks.load(std::memory_order_relaxed) + count, std::memory_order_relaxed);
 	b2_notifyLockScopeEnd
-	m_workerCond.notify_all();
+	m_waitingForTasks.notify_all();
 }
 
 void b2ThreadPool::SubmitTask(b2ThreadPoolTaskGroup& group, b2Task* task)
@@ -133,7 +133,7 @@ void b2ThreadPool::SubmitTask(b2ThreadPoolTaskGroup& group, b2Task* task)
 		m_pendingTaskCount.store(m_pendingTasks.size(), std::memory_order_relaxed);
 		group.m_remainingTasks.store(group.m_remainingTasks.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
 	b2_notifyLockScopeEnd
-	m_workerCond.notify_one();
+	m_waitingForTasks.notify_one();
 }
 
 void b2ThreadPool::Wait(const b2ThreadPoolTaskGroup& group, const b2ThreadContext& context)
@@ -188,13 +188,13 @@ void b2ThreadPool::Wait(const b2ThreadPoolTaskGroup& group, const b2ThreadContex
 	}
 }
 
-void b2ThreadPool::Restart(int32 threadCount)
+void b2ThreadPool::Restart(uint32 threadCount)
 {
 	Shutdown();
 	m_signalShutdown = false;
 
-	m_threadCount = b2Clamp(threadCount - 1, 0, b2_maxThreads - 1);
-	for (int32 i = 0; i < m_threadCount; ++i)
+	m_threadCount = b2Clamp((int32)threadCount - 1, 0, b2_maxThreads - 1);
+	for (uint32 i = 0; i < m_threadCount; ++i)
 	{
 		m_threads[i] = std::thread(&b2ThreadPool::WorkerMain, this, 1 + i);
 	}
@@ -238,7 +238,7 @@ void b2ThreadPool::WorkerMain(uint32 threadId)
 				continue;
 			}
 
-			m_workerCond.wait(lk, [this]()
+			m_waitingForTasks.wait(lk, [this]()
 			{
 				if (m_pendingTasks.size() > 0)
 				{
@@ -287,10 +287,10 @@ void b2ThreadPool::Shutdown()
 			m_signalShutdown = true;
 			m_busyWaitTimeout.store(0, std::memory_order_relaxed);
 		b2_notifyLockScopeEnd
-		m_workerCond.notify_all();
+		m_waitingForTasks.notify_all();
 	}
 
-	for (int32 i = 0; i < m_threadCount; ++i)
+	for (uint32 i = 0; i < m_threadCount; ++i)
 	{
 		if (m_threads[i].joinable())
 		{
