@@ -36,9 +36,6 @@ struct b2ThreadPoolOptions
 	{
 		totalThreadCount = -1;
 		busyWaitTimeoutMs = 0.03f;
-		setUserThreadAffinity = true;
-		setWorkerThreadAffinity = true;
-		useRelaxedAffinity = false;
 	}
 
 	/// The number of threads to make available for execution. This includes
@@ -49,19 +46,6 @@ struct b2ThreadPoolOptions
 	/// The number of milliseconds that a worker thread will busy wait before
 	/// waiting on a condition variable.
 	float32 busyWaitTimeoutMs;
-
-	/// Should the user thread affinity be set?
-	/// Note: this is only used when b2_hwloc is defined.
-	bool setUserThreadAffinity;
-
-	/// Should the worker thread affinity be set?
-	/// Note: this is only used when b2_hwloc is defined.
-	bool setWorkerThreadAffinity;
-
-	/// When thread affinity is enabled, should threads be assigned to physical
-	/// cores rather than logical cores? This allows the OS to move the thread
-	/// to a different logical core on the same physical core.
-	bool useRelaxedAffinity;
 };
 
 /// A task group is used to wait for completion of a group of tasks.
@@ -140,9 +124,6 @@ private:
 	float32 m_lockMilliseconds;
 
 	bool m_signalShutdown;
-	bool m_setUserThreadAffinity;
-	bool m_setWorkerThreadAffinity;
-	bool m_useRelaxedAffinity;
 };
 
 /// A task executor that uses b2ThreadPool.

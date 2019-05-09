@@ -8,12 +8,6 @@ workspace 'Box2D'
 		description = 'Make a DRD configuration that prevents false positives from b2ThreadPool (valgrind must be installed separately).'
 	}
 
-	newoption
-	{
-		trigger		= 'hwloc',
-		description = 'Use hwloc to set thread affinity in b2ThreadPool (hwloc must be installed separately).'
-	}
-
 	configurations { 'Debug', 'Release' }
 	filter 'options:drd'
 		configurations { 'drd' }

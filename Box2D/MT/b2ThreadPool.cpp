@@ -18,7 +18,6 @@
 
 #include <algorithm>
 #include "Box2D/MT/b2ThreadPool.h"
-#include "Box2D/MT/b2Hardware.h"
 #include "Box2D/Common/b2Math.h"
 #include "Box2D/Common/b2StackAllocator.h"
 #include "Box2D/Dynamics/b2TimeStep.h"
@@ -87,18 +86,10 @@ b2ThreadPool::b2ThreadPool(const b2ThreadPoolOptions& options)
 	m_pendingTaskCount.store(0, std::memory_order_relaxed);
 	m_busyWaitTimeout.store(options.busyWaitTimeoutMs, std::memory_order_relaxed);
 	m_signalShutdown = false;
-	m_setUserThreadAffinity = options.setUserThreadAffinity;
-	m_setWorkerThreadAffinity = options.setWorkerThreadAffinity;
-	m_useRelaxedAffinity = options.useRelaxedAffinity;
 
 	// This prevents DRD from generating false positive data races.
 	b2_drdIgnoreVar(m_pendingTaskCount);
 	b2_drdIgnoreVar(m_busyWaitTimeout);
-
-	if (m_setUserThreadAffinity)
-	{
-		b2Hardware::SetThreadAffinity(0, m_useRelaxedAffinity);
-	}
 
 	// Minus one for the user thread.
 	m_threadCount = b2Clamp(totalThreadCount - 1, 0, b2_maxThreads - 1);
@@ -217,11 +208,6 @@ void b2ThreadPool::Restart(int32 threadCount)
 
 void b2ThreadPool::WorkerMain(uint32 threadId)
 {
-	if (m_setWorkerThreadAffinity)
-	{
-		b2Hardware::SetThreadAffinity(threadId, m_useRelaxedAffinity);
-	}
-
 	b2StackAllocator stack;
 
 	b2ThreadContext context;
