@@ -346,7 +346,7 @@ void b2ThreadPoolTaskExecutor::PartitionRange(b2Task::Type type, uint32 begin, u
 {
 	static_assert(b2_maxThreads <= b2_maxRangeSubTasks, "Increase b2_maxRangeSubTasks.");
 	b2Assert(b2IsRangeTask(type));
-	b2Assert(type < b2Task::e_rangeTaskCount);
+	b2Assert(type < b2Task::e_rangeTypeCount);
 
 	uint32 maxSubTasks = m_threadPool.GetThreadCount();
 	uint32 itemsPerTask = 1;

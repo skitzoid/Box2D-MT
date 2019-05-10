@@ -40,22 +40,22 @@ public:
 	enum Type
 	{
 		// Range tasks.
-		e_broadPhaseFindContactsTask = 0,
-		e_broadPhaseSyncFixturesTask,
-		e_clearContactSolveFlagsTask,
-		e_clearContactSolveToiFlagsTask,
-		e_clearBodySolveFlagsTask,
-		e_clearBodySolveToiFlagsTask,
-		e_clearForcesTask,
-		e_collideTask,
-		e_findMinContactTask,
+		e_broadPhaseFindContacts = 0,
+		e_broadPhaseSyncFixtures,
+		e_clearContactSolveFlags,
+		e_clearContactSolveToiFlags,
+		e_clearBodySolveFlags,
+		e_clearBodySolveToiFlags,
+		e_clearForces,
+		e_collide,
+		e_findMinContact,
 
-		e_rangeTaskCount,
+		e_rangeTypeCount,
 
 		// Non-range tasks.
-		e_mergeTask = e_rangeTaskCount,
-		e_solveTask,
-		e_sortTask,
+		e_merge = e_rangeTypeCount,
+		e_solve,
+		e_sort,
 
 		e_typeCount
 	};
@@ -94,7 +94,7 @@ private:
 /// Is the type a range task?
 inline bool b2IsRangeTask(b2Task::Type type)
 {
-	return type <= b2Task::e_findMinContactTask;
+	return type <= b2Task::e_findMinContact;
 }
 
 /// A range over which a range task executes.
