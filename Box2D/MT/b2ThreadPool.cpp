@@ -342,11 +342,11 @@ void b2ThreadPoolTaskExecutor::DestroyTaskGroup(b2TaskGroup* taskGroup, b2StackA
 	allocator.Free(tpTaskGroup);
 }
 
-void b2ThreadPoolTaskExecutor::PartitionRange(b2TaskType type, uint32 begin, uint32 end, b2PartitionedRange& output)
+void b2ThreadPoolTaskExecutor::PartitionRange(b2Task::Type type, uint32 begin, uint32 end, b2PartitionedRange& output)
 {
 	static_assert(b2_maxThreads <= b2_maxRangeSubTasks, "Increase b2_maxRangeSubTasks.");
 	b2Assert(b2IsRangeTask(type));
-	b2Assert(type < b2_numRangeTasks);
+	b2Assert(type < b2Task::e_rangeTaskCount);
 
 	uint32 maxSubTasks = m_threadPool.GetThreadCount();
 	uint32 itemsPerTask = 1;

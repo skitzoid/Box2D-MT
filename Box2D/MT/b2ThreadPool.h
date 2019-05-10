@@ -154,7 +154,7 @@ public:
 	void DestroyTaskGroup(b2TaskGroup* taskGroup, b2StackAllocator& allocator) override;
 
 	/// Partition a range into sub-ranges that will each be assigned to a range task.
-	void PartitionRange(b2TaskType type, uint32 begin, uint32 end, b2PartitionedRange& output) override;
+	void PartitionRange(b2Task::Type type, uint32 begin, uint32 end, b2PartitionedRange& output) override;
 
 	/// Submit a single task for execution.
 	void SubmitTask(b2TaskGroup* taskGroup, b2Task* task) override;

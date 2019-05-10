@@ -61,7 +61,7 @@ public:
 		, m_comp(comp)
 	{}
 
-	virtual b2TaskType GetType() const override { return e_sortTask; }
+	virtual b2Task::Type GetType() const override { return b2Task::e_sortTask; }
 
 	virtual void Execute(const b2ThreadContext&) override
 	{
@@ -89,7 +89,7 @@ public:
 		, m_comp(comp)
 	{}
 
-	virtual b2TaskType GetType() const override { return e_mergeTask; }
+	virtual b2Task::Type GetType() const override { return b2Task::e_mergeTask; }
 
 	virtual void Execute(const b2ThreadContext&) override
 	{

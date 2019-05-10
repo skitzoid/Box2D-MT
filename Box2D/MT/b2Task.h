@@ -23,35 +23,6 @@
 
 class b2StackAllocator;
 
-#define b2_numRangeTasks 9
-#define b2_numTasks 12
-
-/// This lets executors customize behavior based on task types.
-enum b2TaskType
-{
-	// Range tasks.
-	e_broadPhaseFindContactsTask = 0,
-	e_broadPhaseSyncFixturesTask,
-	e_clearContactSolveFlagsTask,
-	e_clearContactSolveToiFlagsTask,
-	e_clearBodySolveFlagsTask,
-	e_clearBodySolveToiFlagsTask,
-	e_clearForcesTask,
-	e_collideTask,
-	e_findMinContactTask,
-
-	// Non-range tasks.
-	e_mergeTask,
-	e_solveTask,
-	e_sortTask
-};
-
-/// Is the type a range task?
-inline bool b2IsRangeTask(b2TaskType type)
-{
-	return (int32)type <= (int32)e_findMinContactTask;
-}
-
 /// Thread data required for task execution.
 struct b2ThreadContext
 {
@@ -66,6 +37,29 @@ class b2TaskGroup { };
 class b2Task
 {
 public:
+	enum Type
+	{
+		// Range tasks.
+		e_broadPhaseFindContactsTask = 0,
+		e_broadPhaseSyncFixturesTask,
+		e_clearContactSolveFlagsTask,
+		e_clearContactSolveToiFlagsTask,
+		e_clearBodySolveFlagsTask,
+		e_clearBodySolveToiFlagsTask,
+		e_clearForcesTask,
+		e_collideTask,
+		e_findMinContactTask,
+
+		e_rangeTaskCount,
+
+		// Non-range tasks.
+		e_mergeTask = e_rangeTaskCount,
+		e_solveTask,
+		e_sortTask,
+
+		e_typeCount
+	};
+
 	/// Construct a task.
 	b2Task()
 		: m_costEstimate(0)
@@ -76,7 +70,7 @@ public:
 	virtual void Execute(const b2ThreadContext& ctx) = 0;
 
 	/// Get the task type.
-	virtual b2TaskType GetType() const = 0;
+	virtual Type GetType() const = 0;
 
 	virtual ~b2Task() {}
 
@@ -96,6 +90,12 @@ private:
 	uint32 m_costEstimate;
 	b2TaskGroup* m_taskGroup;
 };
+
+/// Is the type a range task?
+inline bool b2IsRangeTask(b2Task::Type type)
+{
+	return type <= b2Task::e_findMinContactTask;
+}
 
 /// A range over which a range task executes.
 struct b2RangeTaskRange

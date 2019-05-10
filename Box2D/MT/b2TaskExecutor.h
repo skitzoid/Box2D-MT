@@ -62,7 +62,7 @@ public:
 
 	/// Partition a range into sub-ranges that will each be assigned to a range task.
 	/// Implementing this is optional (you could instead divide ranges during task submission).
-	virtual void PartitionRange(b2TaskType type, uint32 begin, uint32 end, b2PartitionedRange& output)
+	virtual void PartitionRange(b2Task::Type type, uint32 begin, uint32 end, b2PartitionedRange& output)
 	{
 		B2_NOT_USED(type);
 

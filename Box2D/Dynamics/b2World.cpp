@@ -69,7 +69,7 @@ public:
 
 	b2SolveTask* GetNext() { return m_next; }
 
-	virtual b2TaskType GetType() const override { return e_solveTask; }
+	virtual b2Task::Type GetType() const override { return b2Task::e_solveTask; }
 
 	virtual void Execute(const b2ThreadContext& threadCtx) override
 	{
@@ -106,7 +106,7 @@ public:
 		, m_contactManager(manager)
 	{}
 
-	virtual b2TaskType GetType() const override { return e_collideTask; }
+	virtual b2Task::Type GetType() const override { return b2Task::e_collideTask; }
 
 	virtual void Execute(const b2ThreadContext& threadCtx, const b2RangeTaskRange& range) override
 	{
@@ -127,7 +127,7 @@ public:
 		, m_bodies(bodies)
 	{}
 
-	virtual b2TaskType GetType() const override { return e_broadPhaseSyncFixturesTask; }
+	virtual b2Task::Type GetType() const override { return b2Task::e_broadPhaseSyncFixturesTask; }
 
 	virtual void Execute(const b2ThreadContext& threadCtx, const b2RangeTaskRange& range) override
 	{
@@ -148,7 +148,7 @@ public:
 		, m_contactManager(manager)
 	{}
 
-	virtual b2TaskType GetType() const override { return e_broadPhaseFindContactsTask; }
+	virtual b2Task::Type GetType() const override { return b2Task::e_broadPhaseFindContactsTask; }
 
 	virtual void Execute(const b2ThreadContext& threadCtx, const b2RangeTaskRange& range) override
 	{
@@ -168,7 +168,7 @@ public:
 		, m_contacts(contacts)
 	{}
 
-	virtual b2TaskType GetType() const override { return e_clearContactSolveFlagsTask; }
+	virtual b2Task::Type GetType() const override { return b2Task::e_clearContactSolveFlagsTask; }
 
 	virtual void Execute(const b2ThreadContext&, const b2RangeTaskRange& range) override
 	{
@@ -192,7 +192,7 @@ public:
 		, m_contacts(contacts)
 	{}
 
-	virtual b2TaskType GetType() const override { return e_clearContactSolveToiFlagsTask; }
+	virtual b2Task::Type GetType() const override { return b2Task::e_clearContactSolveToiFlagsTask; }
 
 	virtual void Execute(const b2ThreadContext&, const b2RangeTaskRange& range) override
 	{
@@ -218,7 +218,7 @@ public:
 		, m_bodies(bodies)
 	{}
 
-	virtual b2TaskType GetType() const override { return e_clearBodySolveFlagsTask; }
+	virtual b2Task::Type GetType() const override { return b2Task::e_clearBodySolveFlagsTask; }
 
 	virtual void Execute(const b2ThreadContext&, const b2RangeTaskRange& range) override
 	{
@@ -241,7 +241,7 @@ public:
 		, m_bodies(bodies)
 	{}
 
-	virtual b2TaskType GetType() const override { return e_clearBodySolveToiFlagsTask; }
+	virtual b2Task::Type GetType() const override { return b2Task::e_clearBodySolveToiFlagsTask; }
 
 	virtual void Execute(const b2ThreadContext&, const b2RangeTaskRange& range) override
 	{
@@ -265,7 +265,7 @@ public:
 		, m_bodies(bodies)
 	{}
 
-	virtual b2TaskType GetType() const override { return e_clearForcesTask; }
+	virtual b2Task::Type GetType() const override { return b2Task::e_clearForcesTask; }
 
 	virtual void Execute(const b2ThreadContext&, const b2RangeTaskRange& range) override
 	{
@@ -362,7 +362,7 @@ public:
 		return alpha;
 	}
 
-	virtual b2TaskType GetType() const override { return e_findMinContactTask; }
+	virtual b2Task::Type GetType() const override { return e_findMinContactTask; }
 
 	virtual void Execute(const b2ThreadContext& threadCtx, const b2RangeTaskRange& range) override
 	{
@@ -1055,7 +1055,7 @@ void b2World::FindNewContacts(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 
 	b2BroadphaseFindNewContactsTask tasks[b2_maxRangeSubTasks];
 	b2PartitionedRange ranges;
-	executor.PartitionRange(e_broadPhaseFindContactsTask, 0, m_contactManager.m_broadPhase.GetMoveCount(), ranges);
+	executor.PartitionRange(b2Task::e_broadPhaseFindContactsTask, 0, m_contactManager.m_broadPhase.GetMoveCount(), ranges);
 	for (uint32 i = 0; i < ranges.count; ++i)
 	{
 		tasks[i] = b2BroadphaseFindNewContactsTask(ranges[i], &m_contactManager);
@@ -1080,7 +1080,7 @@ void b2World::Collide(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 
 	b2CollideTask tasks[b2_maxRangeSubTasks];
 	b2PartitionedRange ranges;
-	executor.PartitionRange(e_collideTask, 0, m_contactManager.m_contacts.size(), ranges);
+	executor.PartitionRange(b2Task::e_collideTask, 0, m_contactManager.m_contacts.size(), ranges);
 	for (uint32 i = 0; i < ranges.count; ++i)
 	{
 		tasks[i] = b2CollideTask(ranges[i], &m_contactManager);
@@ -1103,7 +1103,7 @@ void b2World::SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup* taskGro
 
 	b2BroadphaseSyncFixturesTask moveTasks[b2_maxRangeSubTasks];
 	b2PartitionedRange ranges;
-	executor.PartitionRange(e_broadPhaseSyncFixturesTask, 0, m_nonStaticBodies.size(), ranges);
+	executor.PartitionRange(b2Task::e_broadPhaseSyncFixturesTask, 0, m_nonStaticBodies.size(), ranges);
 	for (uint32 i = 0; i < ranges.count; ++i)
 	{
 		moveTasks[i] = b2BroadphaseSyncFixturesTask(ranges[i], &m_contactManager, m_nonStaticBodies.data());
@@ -1383,7 +1383,7 @@ void b2World::ClearPostSolve(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 	if (m_contactManager.m_contacts.size() > 0)
 	{
 		b2PartitionedRange ranges;
-		executor.PartitionRange(e_clearContactSolveFlagsTask, 0, m_contactManager.m_contacts.size(), ranges);
+		executor.PartitionRange(b2Task::e_clearContactSolveFlagsTask, 0, m_contactManager.m_contacts.size(), ranges);
 		for (uint32 i = 0; i < ranges.count; ++i)
 		{
 			contactsTasks[i] = b2ClearContactSolveFlags(ranges[i], m_contactManager.m_contacts.data());
@@ -1394,7 +1394,7 @@ void b2World::ClearPostSolve(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 	if (m_nonStaticBodies.size() > 0)
 	{
 		b2PartitionedRange ranges;
-		executor.PartitionRange(e_clearBodySolveFlagsTask, 0, m_nonStaticBodies.size(), ranges);
+		executor.PartitionRange(b2Task::e_clearBodySolveFlagsTask, 0, m_nonStaticBodies.size(), ranges);
 		for (uint32 i = 0; i < ranges.count; ++i)
 		{
 			bodyTasks[i] = b2ClearBodySolveFlags(ranges[i], m_nonStaticBodies.data());
@@ -1417,7 +1417,7 @@ void b2World::ClearPostSolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup
 	if (m_contactManager.m_contacts.size() > 0)
 	{
 		b2PartitionedRange ranges;
-		executor.PartitionRange(e_clearContactSolveToiFlagsTask, 0, m_contactManager.m_contacts.size(), ranges);
+		executor.PartitionRange(b2Task::e_clearContactSolveToiFlagsTask, 0, m_contactManager.m_contacts.size(), ranges);
 		for (uint32 i = 0; i < ranges.count; ++i)
 		{
 			contactsTasks[i] = b2ClearContactSolveTOIFlags(ranges[i], m_contactManager.m_contacts.data());
@@ -1428,7 +1428,7 @@ void b2World::ClearPostSolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup
 	if (m_nonStaticBodies.size() > 0)
 	{
 		b2PartitionedRange ranges;
-		executor.PartitionRange(e_clearBodySolveToiFlagsTask, 0, m_nonStaticBodies.size(), ranges);
+		executor.PartitionRange(b2Task::e_clearBodySolveToiFlagsTask, 0, m_nonStaticBodies.size(), ranges);
 		for (uint32 i = 0; i < ranges.count; ++i)
 		{
 			bodyTasks[i] = b2ClearBodySolveTOIFlags(ranges[i], m_nonStaticBodies.data());
@@ -1439,7 +1439,7 @@ void b2World::ClearPostSolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup
 	if (m_staticBodies.size() > 0)
 	{
 		b2PartitionedRange ranges;
-		executor.PartitionRange(e_clearBodySolveToiFlagsTask, 0, m_staticBodies.size(), ranges);
+		executor.PartitionRange(b2Task::e_clearBodySolveToiFlagsTask, 0, m_staticBodies.size(), ranges);
 		for (uint32 i = 0; i < ranges.count; ++i)
 		{
 			staticBodyTasks[i] = b2ClearBodySolveTOIFlags(ranges[i], m_staticBodies.data());
@@ -1459,7 +1459,7 @@ void b2World::ClearForces(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 
 	b2ClearForcesTask forcesTasks[b2_maxRangeSubTasks];
 	b2PartitionedRange ranges;
-	executor.PartitionRange(e_clearForcesTask, 0, m_nonStaticBodies.size(), ranges);
+	executor.PartitionRange(b2Task::e_clearForcesTask, 0, m_nonStaticBodies.size(), ranges);
 	for (uint32 i = 0; i < ranges.count; ++i)
 	{
 		forcesTasks[i] = b2ClearForcesTask(ranges[i], m_nonStaticBodies.data());
@@ -1478,7 +1478,7 @@ void b2World::FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup* taskGroup
 
 	b2FindMinToiContactTask tasks[b2_maxRangeSubTasks];
 	b2PartitionedRange ranges;
-	executor.PartitionRange(e_findMinContactTask, 0, m_contactManager.m_toiCount, ranges);
+	executor.PartitionRange(b2Task::e_findMinContactTask, 0, m_contactManager.m_toiCount, ranges);
 	for (uint32 i = 0; i < ranges.count; ++i)
 	{
 		tasks[i] = b2FindMinToiContactTask(ranges[i], m_contactManager.GetToiBegin(), this);
