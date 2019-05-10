@@ -106,7 +106,7 @@ public:
 	void Restart(uint32 threadCount);
 
 private:
-
+	b2Task* PopTask();
 	void WorkerMain(uint32 threadId);
 	void Shutdown();
 
@@ -118,9 +118,10 @@ private:
 
 	mutable std::mutex m_mutex;
 	std::atomic<int32> m_pendingTaskCount;
-
-	b2GrowableArray<b2Task*> m_pendingTasks;
 	float32 m_lockMilliseconds;
+
+	// A heap of tasks sorted by cost.
+	b2GrowableArray<b2Task*> m_taskHeap;
 
 	bool m_signalShutdown;
 };

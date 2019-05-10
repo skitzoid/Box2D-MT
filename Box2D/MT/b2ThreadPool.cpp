@@ -54,6 +54,15 @@ inline bool b2TaskCostLessThan(const b2Task* a, const b2Task* b)
 	return a->GetCost() < b->GetCost();
 }
 
+// Add to an atomic variable without an atomic read-modify-write.
+// We use this for atomics that are only modified while a lock is held.
+template<typename T, typename U>
+void b2NonAtomicAdd(std::atomic<T>& a, U b)
+{
+	T value = a.load(std::memory_order_relaxed) + b;
+	a.store(value, std::memory_order_relaxed);
+}
+
 b2ThreadPoolTaskGroup::b2ThreadPoolTaskGroup(b2ThreadPool& threadPool)
 {
 	m_threadPool = &threadPool;
@@ -112,11 +121,11 @@ void b2ThreadPool::SubmitTasks(b2ThreadPoolTaskGroup& group, b2Task** tasks, uin
 
 		for (uint32 i = 0; i < count; ++i)
 		{
-			m_pendingTasks.push_back(tasks[i]);
-			std::push_heap(m_pendingTasks.begin(), m_pendingTasks.end(), b2TaskCostLessThan);
+			m_taskHeap.push_back(tasks[i]);
+			std::push_heap(m_taskHeap.begin(), m_taskHeap.end(), b2TaskCostLessThan);
 		}
-		m_pendingTaskCount.store(m_pendingTasks.size(), std::memory_order_relaxed);
-		group.m_remainingTasks.store(group.m_remainingTasks.load(std::memory_order_relaxed) + count, std::memory_order_relaxed);
+		b2NonAtomicAdd(m_pendingTaskCount, count);
+		b2NonAtomicAdd(group.m_remainingTasks, count);
 	b2_notifyLockScopeEnd
 	m_waitingForTasks.notify_all();
 }
@@ -128,10 +137,11 @@ void b2ThreadPool::SubmitTask(b2ThreadPoolTaskGroup& group, b2Task* task)
 		std::lock_guard<std::mutex> lk(m_mutex);
 		m_lockMilliseconds += lockTimer.GetMilliseconds();
 
-		m_pendingTasks.push_back(task);
-		std::push_heap(m_pendingTasks.begin(), m_pendingTasks.end(), b2TaskCostLessThan);
-		m_pendingTaskCount.store(m_pendingTasks.size(), std::memory_order_relaxed);
-		group.m_remainingTasks.store(group.m_remainingTasks.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+		m_taskHeap.push_back(task);
+		std::push_heap(m_taskHeap.begin(), m_taskHeap.end(), b2TaskCostLessThan);
+
+		b2NonAtomicAdd(m_pendingTaskCount, 1);
+		b2NonAtomicAdd(group.m_remainingTasks, 1);
 	b2_notifyLockScopeEnd
 	m_waitingForTasks.notify_one();
 }
@@ -152,7 +162,7 @@ void b2ThreadPool::Wait(const b2ThreadPoolTaskGroup& group, const b2ThreadContex
 			return;
 		}
 
-		if (m_pendingTasks.size() == 0)
+		if (m_pendingTaskCount.load(std::memory_order_relaxed) == 0)
 		{
 			lk.unlock();
 			// Busy wait.
@@ -167,9 +177,7 @@ void b2ThreadPool::Wait(const b2ThreadPoolTaskGroup& group, const b2ThreadContex
 		}
 
 		// Execute a task while waiting.
-		std::pop_heap(m_pendingTasks.begin(), m_pendingTasks.end(), b2TaskCostLessThan);
-		b2Task* task = m_pendingTasks.pop_back();
-		m_pendingTaskCount.store(m_pendingTasks.size(), std::memory_order_relaxed);
+		b2Task* task = PopTask();
 
 		lk.unlock();
 
@@ -179,12 +187,9 @@ void b2ThreadPool::Wait(const b2ThreadPoolTaskGroup& group, const b2ThreadContex
 		lk.lock();
 		m_lockMilliseconds += lockTimer.GetMilliseconds();
 
-		// This is not necessarily the group we're waiting on.
+		// This isn't necessarily the group we're waiting on.
 		b2ThreadPoolTaskGroup* executeGroup = static_cast<b2ThreadPoolTaskGroup*>(task->GetTaskGroup());
-
-		// We only modify this while the mutex is locked, so it's okay to do this non-atomically.
-		executeGroup->m_remainingTasks.store(executeGroup->m_remainingTasks.load(std::memory_order_relaxed) - 1,
-			std::memory_order_relaxed);
+		b2NonAtomicAdd(executeGroup->m_remainingTasks, -1);
 	}
 }
 
@@ -205,6 +210,18 @@ void b2ThreadPool::Restart(uint32 threadCount)
 	}
 }
 
+b2Task* b2ThreadPool::PopTask()
+{
+	b2Task* task = nullptr;
+
+	std::pop_heap(m_taskHeap.begin(), m_taskHeap.end(), b2TaskCostLessThan);
+	task = m_taskHeap.pop_back();
+
+	b2NonAtomicAdd(m_pendingTaskCount, -1);
+
+	return task;
+}
+
 void b2ThreadPool::WorkerMain(uint32 threadId)
 {
 	b2StackAllocator stack;
@@ -219,7 +236,7 @@ void b2ThreadPool::WorkerMain(uint32 threadId)
 	while (true)
 	{
 		b2Timer waitTimer;
-		while (m_pendingTasks.size() == 0)
+		while (m_pendingTaskCount.load(std::memory_order_relaxed) == 0)
 		{
 			// Busy wait.
 			bool timedOut = false;
@@ -245,7 +262,7 @@ void b2ThreadPool::WorkerMain(uint32 threadId)
 
 			m_waitingForTasks.wait(lk, [this]()
 			{
-				if (m_pendingTasks.size() > 0)
+				if (m_pendingTaskCount.load(std::memory_order_relaxed) > 0)
 				{
 					return true;
 				}
@@ -259,15 +276,12 @@ void b2ThreadPool::WorkerMain(uint32 threadId)
 			if (m_signalShutdown)
 			{
 				// Shutting down in the middle of processing tasks is not supported.
-				b2Assert(m_pendingTasks.size() == 0);
+				b2Assert(m_pendingTaskCount.load(std::memory_order_relaxed) == 0);
 				return;
 			}
 		}
 
-		std::pop_heap(m_pendingTasks.begin(), m_pendingTasks.end(), b2TaskCostLessThan);
-		b2Task* task = m_pendingTasks.pop_back();
-		m_pendingTaskCount.store(m_pendingTasks.size(), std::memory_order_relaxed);
-
+		b2Task* task = PopTask();
 		b2ThreadPoolTaskGroup* group = static_cast<b2ThreadPoolTaskGroup*>(task->GetTaskGroup());
 
 		lk.unlock();
@@ -278,9 +292,7 @@ void b2ThreadPool::WorkerMain(uint32 threadId)
 		lk.lock();
 		m_lockMilliseconds += lockTimer.GetMilliseconds();
 
-		// We only modify this while the mutex is locked, so it's okay to do this non-atomically.
-		int32 prevRemainingTasks = group->m_remainingTasks.load(std::memory_order_relaxed);
-		group->m_remainingTasks.store(prevRemainingTasks - 1, std::memory_order_relaxed);
+		b2NonAtomicAdd(group->m_remainingTasks, -1);
 	}
 }
 
