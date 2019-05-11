@@ -174,9 +174,8 @@ typedef double			float64;
 /// The maximum number of islands per solve task.
 #define b2_maxIslandsPerSolveTask				16
 
-/// Get the estimated cost of solving an island with the specified attributes
-int32 b2GetIslandCost(int32 bodyCount, int32 contactCount, int32 jointCount);
-
+/// The number of task groups used by a world's step. Do not change this value.
+#define b2_maxWorldStepTaskGroups				1
 
 // Memory Allocation
 

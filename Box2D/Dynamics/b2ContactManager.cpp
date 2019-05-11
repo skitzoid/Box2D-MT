@@ -405,11 +405,11 @@ void b2ContactManager::FinishCollide(b2TaskExecutor& executor, b2TaskGroup* task
 			preSolves.IsSubmitRequired() == false && destroys.IsSubmitRequired() == false)
 		{
 			ConsumeAwakes();
-			executor.Wait(taskGroup, b2MainThreadCtx(allocator));
+			executor.Wait(taskGroup, b2MainThreadCtx(&allocator));
 			break;
 		}
 
-		executor.Wait(taskGroup, b2MainThreadCtx(allocator));
+		executor.Wait(taskGroup, b2MainThreadCtx(&allocator));
 	}
 
 	for (auto it = begins.begin(); it != begins.end(); ++it)

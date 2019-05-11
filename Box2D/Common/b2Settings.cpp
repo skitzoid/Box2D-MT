@@ -26,11 +26,6 @@ b2Version b2_mtVersion = { 0, 1, 0 };
 
 b2Version b2_version = { 2, 3, 2 };
 
-int32 b2GetIslandCost(int32 bodyCount, int32 contactCount, int32 jointCount)
-{
-	return bodyCount + contactCount * 10 + jointCount * 10;
-}
-
 // Memory allocators. Modify these to use your own allocator.
 void* b2Alloc(int32 size)
 {

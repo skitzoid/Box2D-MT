@@ -269,6 +269,7 @@ protected:
 	bool m_bombSpawning;
 	bool m_visible;
 	b2Vec2 m_mouseWorld;
+	float32 m_timeStep;
 	int32 m_stepCount;
 	int32 m_smoothProfileStepCount;
 

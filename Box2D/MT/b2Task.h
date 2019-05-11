@@ -57,7 +57,11 @@ public:
 		e_solve,
 		e_sort,
 
-		e_typeCount
+		// Number of tasks defined by Box2D-MT
+		e_typeCount,
+
+		// The starting value for any user-defined tasks. Used by the testbed.
+		e_userTask = e_typeCount
 	};
 
 	/// Construct a task.
@@ -70,7 +74,7 @@ public:
 	virtual void Execute(const b2ThreadContext& ctx) = 0;
 
 	/// Get the task type.
-	virtual Type GetType() const = 0;
+	virtual Type GetType() const { return e_userTask; };
 
 	virtual ~b2Task() {}
 
@@ -146,7 +150,9 @@ public:
 	/// Execute the task over the stored range.
 	virtual void Execute(const b2ThreadContext& ctx) final;
 
+	/// Get/set the range.
 	const b2RangeTaskRange& GetRange() const;
+	void SetRange(const b2RangeTaskRange& range);
 
 protected:
 	b2RangeTaskRange m_range;
@@ -193,6 +199,11 @@ inline void b2RangeTask::Execute(const b2ThreadContext& ctx)
 inline const b2RangeTaskRange& b2RangeTask::GetRange() const
 {
 	return m_range;
+}
+
+inline void b2RangeTask::SetRange(const b2RangeTaskRange& range)
+{
+	m_range = range;
 }
 
 #endif

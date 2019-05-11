@@ -68,7 +68,13 @@ b2ThreadPoolTaskGroup::b2ThreadPoolTaskGroup(b2ThreadPool& threadPool)
 	m_threadPool = &threadPool;
 	m_remainingTasks.store(0, std::memory_order_relaxed);
 
-	// This prevents DRD from generating false positive data races.
+	b2_drdIgnoreVar(m_remainingTasks);
+}
+
+b2ThreadPoolTaskGroup::b2ThreadPoolTaskGroup()
+	: m_threadPool(nullptr)
+	, m_remainingTasks(0)
+{
 	b2_drdIgnoreVar(m_remainingTasks);
 }
 
@@ -316,37 +322,48 @@ void b2ThreadPool::Shutdown()
 	}
 }
 
-void b2ThreadPoolTaskExecutor::StepBegin(b2World& world)
+b2TaskGroup* b2ThreadPoolTaskExecutor::AcquireTaskGroup()
 {
-	B2_NOT_USED(world);
+	for (uint32 i = 0; i < b2_maxWorldStepTaskGroups; ++i)
+	{
+		if (m_taskGroupInUse[i] == false)
+		{
+			m_taskGroupInUse[i] = true;
+			return m_taskGroups + i;
+		}
+	}
+
+	// No task groups available.
+	// Did you forget to release a task group?
+	// Or are you stepping worlds from multiple threads with the same executor?
+	// You can implement b2TaskExecutor if you need support for that.
+	b2Assert(false);
+	return nullptr;
 }
 
-void b2ThreadPoolTaskExecutor::StepEnd(b2World& world)
+void b2ThreadPoolTaskExecutor::ReleaseTaskGroup(b2TaskGroup* taskGroup)
 {
-	B2_NOT_USED(world);
-}
+	for (uint32 i = 0; i < b2_maxWorldStepTaskGroups; ++i)
+	{
+		b2ThreadPoolTaskGroup* tpTaskGroup = m_taskGroups + i;
+		if (tpTaskGroup == taskGroup)
+		{
+			b2Assert(tpTaskGroup->m_remainingTasks.load(std::memory_order_relaxed) == 0);
 
-b2TaskGroup* b2ThreadPoolTaskExecutor::CreateTaskGroup(b2StackAllocator& allocator)
-{
-	b2ThreadPoolTaskGroup* tpTaskGroup = (b2ThreadPoolTaskGroup*)allocator.Allocate(sizeof(b2ThreadPoolTaskGroup));
-	new(tpTaskGroup) b2ThreadPoolTaskGroup(m_threadPool);
-	return tpTaskGroup;
-}
+			m_taskGroupInUse[i] = false;
+			return;
+		}
+	}
 
-void b2ThreadPoolTaskExecutor::DestroyTaskGroup(b2TaskGroup* taskGroup, b2StackAllocator& allocator)
-{
-	b2ThreadPoolTaskGroup* tpTaskGroup = static_cast<b2ThreadPoolTaskGroup*>(taskGroup);
-	b2Assert(tpTaskGroup);
-
-	tpTaskGroup->~b2ThreadPoolTaskGroup();
-	allocator.Free(tpTaskGroup);
+	// Task group not found.
+	b2Assert(false);
 }
 
 void b2ThreadPoolTaskExecutor::PartitionRange(b2Task::Type type, uint32 begin, uint32 end, b2PartitionedRange& output)
 {
 	static_assert(b2_maxThreads <= b2_maxRangeSubTasks, "Increase b2_maxRangeSubTasks.");
-	b2Assert(b2IsRangeTask(type));
-	b2Assert(type < b2Task::e_rangeTypeCount);
+	b2Assert(b2IsRangeTask(type) || type >= b2Task::e_userTask);
+	b2Assert(type < b2Task::e_rangeTypeCount || type >= b2Task::e_userTask);
 
 	uint32 maxSubTasks = m_threadPool.GetThreadCount();
 	uint32 itemsPerTask = 1;

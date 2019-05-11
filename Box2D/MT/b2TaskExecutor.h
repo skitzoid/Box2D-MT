@@ -32,49 +32,18 @@ public:
 	/// Must be between 1 and b2_maxThreads.
 	virtual uint32 GetThreadCount() const = 0;
 
-	/// Called when a world's step begins.
-	virtual void StepBegin(b2World& world)
-	{
-		B2_NOT_USED(world);
-	}
-
-	/// Called when a world's step ends.
-	virtual void StepEnd(b2World& world)
-	{
-		B2_NOT_USED(world);
-	}
-
-	/// Create a task group.
-	/// The allocator can provide storage for the task group if needed.
-	virtual b2TaskGroup* CreateTaskGroup(b2StackAllocator& allocator)
-	{
-		B2_NOT_USED(allocator);
-		b2TaskGroup* taskGroup(nullptr);
-		return taskGroup;
-	}
-
-	/// Destroy the task group, freeing any allocations made by CreateTaskGroup.
-	virtual void DestroyTaskGroup(b2TaskGroup* taskGroup, b2StackAllocator& allocator)
-	{
-		B2_NOT_USED(taskGroup);
-		B2_NOT_USED(allocator);
-	}
-
-	/// Partition a range into sub-ranges that will each be assigned to a range task.
-	/// Implementing this is optional (you could instead divide ranges during task submission).
-	virtual void PartitionRange(b2Task::Type type, uint32 begin, uint32 end, b2PartitionedRange& output)
-	{
-		B2_NOT_USED(type);
-
-		output[0] = b2RangeTaskRange(begin, end);
-		output.count = 1;
-	}
-
 	/// Submit a single task for execution.
 	virtual void SubmitTask(b2TaskGroup* taskGroup, b2Task* task)
 	{
 		B2_NOT_USED(taskGroup);
 		B2_NOT_USED(task);
+	}
+
+	/// Wait for all tasks in the group to finish.
+	virtual void Wait(b2TaskGroup* taskGroup, const b2ThreadContext& ctx)
+	{
+		B2_NOT_USED(taskGroup);
+		B2_NOT_USED(ctx);
 	}
 
 	/// Submit multiple tasks for execution.
@@ -86,11 +55,26 @@ public:
 		}
 	}
 
-	/// Wait for all tasks in the group to finish.
-	virtual void Wait(b2TaskGroup* taskGroup, const b2ThreadContext& ctx)
+	/// Acquire a task group.
+	virtual b2TaskGroup* AcquireTaskGroup()
+	{
+		return nullptr;
+	}
+
+	/// Release the task group.
+	virtual void ReleaseTaskGroup(b2TaskGroup* taskGroup)
 	{
 		B2_NOT_USED(taskGroup);
-		B2_NOT_USED(ctx);
+	}
+
+	/// Partition a range into sub-ranges that will each be assigned to a range task.
+	virtual void PartitionRange(b2Task::Type type, uint32 begin, uint32 end, b2PartitionedRange& output)
+	{
+		B2_NOT_USED(type);
+
+		output.ranges[0].begin = begin;
+		output.ranges[0].end = end;
+		output.count = 1;
 	}
 };
 

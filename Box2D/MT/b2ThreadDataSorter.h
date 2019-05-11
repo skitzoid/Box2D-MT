@@ -433,7 +433,7 @@ void b2Sort(Sorter& sorter, b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2
 	while (sorter.IsSubmitRequired())
 	{
 		sorter.SubmitSortTask(executor, taskGroup);
-		executor.Wait(taskGroup, b2MainThreadCtx(allocator));
+		executor.Wait(taskGroup, b2MainThreadCtx(&allocator));
 	}
 }
 

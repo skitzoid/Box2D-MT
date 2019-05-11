@@ -48,6 +48,7 @@
 #include "Mobile.h"
 #include "MobileBalanced.h"
 #include "MotorJoint.h"
+#include "ManyBodies.h"
 #include "MultithreadDemo.h"
 #include "OneSidedPlatform.h"
 #include "Pinball.h"
@@ -76,6 +77,11 @@
 
 TestEntry g_testEntries[] =
 {
+	{"Many Bodies 1", ManyBodies1::Create, 480},
+	{"Many Bodies 2", ManyBodies2::Create, 480},
+	{"Many Bodies 3", ManyBodies3::Create, 480},
+	{"Many Bodies 4", ManyBodies4::Create, 480},
+	{"Many Bodies 5", ManyBodies5::Create, 480},
 	{"Multithread Demo", MultithreadDemo::Create, 1800},
 	{"Tunneling Test", TunnelingTest::Create, 1800},
 	{"Shape Cast", ShapeCast::Create, 60},

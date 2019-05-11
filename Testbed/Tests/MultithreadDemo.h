@@ -155,7 +155,7 @@ public:
 			m_slider->SetMotorSpeed(-m_slider->GetMotorSpeed());
 		}
 
-		g_debugDraw.DrawString(5, m_textLine, "Press 't' to toggle isThickWall on all static polygon fixtures");
+		g_debugDraw.DrawString(5, m_textLine, "Press 't' to classify static polygons as thick walls (disables non-bullet TOI on them)");
 		m_textLine += DRAW_STRING_NEW_LINE;
 		g_debugDraw.DrawString(5, m_textLine, "Thick walls: %s", m_thickWallsEnabled ? "enabled" : "disabled");
 		m_textLine += DRAW_STRING_NEW_LINE;

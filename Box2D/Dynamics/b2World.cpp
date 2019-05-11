@@ -419,7 +419,7 @@ public:
 				// but advancing a sweep here would cause a data race, so we do that later on the
 				// user thread. Any contacts that are created during SolveTOI will have their sweeps
 				// synchronized during creation to avoid this path, but the sweeps of existing
-				// non-touching contacts could have become out of sync during SolveTOI.
+				// non-touching contacts could get out of sync during SolveTOI.
 				if (bA->m_sweep.alpha0 != bB->m_sweep.alpha0)
 				{
 					deferredFindMinContacts.push_back(c);
@@ -841,6 +841,7 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b
 	b2Island island(bodies, contacts, velocities, positions);
 
 	// Find TOI events and solve them.
+	bool needClearPostSolveTOI = false;
 	for (;;)
 	{
 		// Find the first TOI.
@@ -852,11 +853,20 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b
 			m_profile.solveTOIFindMinContact += timer.GetMilliseconds();
 		}
 
+		if (minContact)
+		{
+			// If we find any TOI events then we need to clear TOI flags.
+			needClearPostSolveTOI = true;
+		}
+
 		if (minContact == nullptr || 1.0f - 10.0f * b2_epsilon < minAlpha)
 		{
 			// No more TOI events. Done!
 			m_stepComplete = true;
-			ClearPostSolveTOI(executor, taskGroup);
+			if (needClearPostSolveTOI)
+			{
+				ClearPostSolveTOI(executor, taskGroup);
+			}
 			break;
 		}
 
@@ -1062,7 +1072,7 @@ void b2World::FindNewContacts(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 	}
 	m_contactManager.m_deferCreates = true;
 	b2SubmitTasks(executor, taskGroup, tasks, ranges.count);
-	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
+	executor.Wait(taskGroup, b2MainThreadCtx(&m_stackAllocator));
 	m_contactManager.m_deferCreates = false;
 
 	SetMtLock(0);
@@ -1086,7 +1096,7 @@ void b2World::Collide(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 		tasks[i] = b2CollideTask(ranges[i], &m_contactManager);
 	}
 	b2SubmitTasks(executor, taskGroup, tasks, ranges.count);
-	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
+	executor.Wait(taskGroup, b2MainThreadCtx(&m_stackAllocator));
 
 	SetMtLock(0);
 	m_contactManager.FinishCollide(executor, taskGroup, m_stackAllocator);
@@ -1109,7 +1119,7 @@ void b2World::SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup* taskGro
 		moveTasks[i] = b2BroadphaseSyncFixturesTask(ranges[i], &m_contactManager, m_nonStaticBodies.data());
 	}
 	b2SubmitTasks(executor, taskGroup, moveTasks, ranges.count);
-	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
+	executor.Wait(taskGroup, b2MainThreadCtx(&m_stackAllocator));
 
 	SetMtLock(0);
 	m_contactManager.FinishSynchronizeFixtures(executor, taskGroup, m_stackAllocator);
@@ -1327,7 +1337,7 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b2Ti
 	m_profile.solveTraversal += traversalTimer.GetMilliseconds();
 
 	// Wait for solve tasks to finish.
-	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
+	executor.Wait(taskGroup, b2MainThreadCtx(&m_stackAllocator));
 
 	// Deallocate tasks.
 	while (solveTaskList)
@@ -1408,7 +1418,7 @@ void b2World::ClearPostSolve(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 		j->m_islandFlag = false;
 	}
 
-	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
+	executor.Wait(taskGroup, b2MainThreadCtx(&m_stackAllocator));
 }
 
 void b2World::ClearPostSolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
@@ -1447,7 +1457,7 @@ void b2World::ClearPostSolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup
 		b2SubmitTasks(executor, taskGroup, staticBodyTasks, ranges.count);
 	}
 
-	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
+	executor.Wait(taskGroup, b2MainThreadCtx(&m_stackAllocator));
 }
 
 void b2World::ClearForces(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
@@ -1466,7 +1476,7 @@ void b2World::ClearForces(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 	}
 	b2SubmitTasks(executor, taskGroup, forcesTasks, ranges.count);
 
-	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
+	executor.Wait(taskGroup, b2MainThreadCtx(&m_stackAllocator));
 }
 
 void b2World::FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2Contact** contactOut, float32* alphaOut)
@@ -1485,7 +1495,7 @@ void b2World::FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup* taskGroup
 	}
 	b2SubmitTasks(executor, taskGroup, tasks, ranges.count);
 
-	executor.Wait(taskGroup, b2MainThreadCtx(m_stackAllocator));
+	executor.Wait(taskGroup, b2MainThreadCtx(&m_stackAllocator));
 
 	b2Contact* minContact = tasks[0].GetMinContact();
 	float32 minAlpha = tasks[0].GetMinAlpha();
@@ -1541,8 +1551,6 @@ void b2World::FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup* taskGroup
 
 void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIterations, b2TaskExecutor& executor)
 {
-	executor.StepBegin(*this);
-
 	uint32 threadCount = executor.GetThreadCount();
 
 	b2Timer stepTimer;
@@ -1553,7 +1561,7 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 		memset(&m_contactManager.m_perThreadData[i].m_profile, 0, sizeof(b2Profile));
 	}
 
-	b2TaskGroup* taskGroup = executor.CreateTaskGroup(m_stackAllocator);
+	b2TaskGroup* taskGroup = executor.AcquireTaskGroup();
 
 	// If new fixtures were added, we need to find the new contacts.
 	if (m_flags & e_newFixture)
@@ -1623,7 +1631,7 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 
 	m_flags &= ~e_locked;
 
-	executor.DestroyTaskGroup(taskGroup, m_stackAllocator);
+	executor.ReleaseTaskGroup(taskGroup);
 
 	// Add per-thread profile times.
 	for (uint32 i = 0; i < threadCount; ++i)
@@ -1636,8 +1644,6 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 
 	m_profile.step = stepTimer.GetMilliseconds();
 	stepTimer.Reset();
-
-	executor.StepEnd(*this);
 
 	m_profile.step += stepTimer.GetMilliseconds();
 }

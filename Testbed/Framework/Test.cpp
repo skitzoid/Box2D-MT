@@ -51,6 +51,7 @@ Test::Test()
 	m_bombSpawning = false;
 	m_visible = true;
 
+	m_timeStep = 0.0f;
 	m_stepCount = 0;
 	m_smoothProfileStepCount = 0;
 
@@ -282,7 +283,7 @@ void Test::Step(Settings* settings)
 		m_threadPoolExec.GetThreadPool()->Restart(settings->threadCount);
 	}
 
-	float32 timeStep = settings->hz > 0.0f ? 1.0f / settings->hz : float32(0.0f);
+	m_timeStep = settings->hz > 0.0f ? 1.0f / settings->hz : float32(0.0f);
 
 	if (settings->pause)
 	{
@@ -292,7 +293,7 @@ void Test::Step(Settings* settings)
 		}
 		else
 		{
-			timeStep = 0.0f;
+			m_timeStep = 0.0f;
 		}
 
 		g_debugDraw.DrawString(5, m_textLine, "****PAUSED****");
@@ -313,11 +314,11 @@ void Test::Step(Settings* settings)
 
 	memset(&m_pointCount, 0, sizeof(m_pointCount));
 
-	if (timeStep > 0.0f)
+	if (m_timeStep > 0.0f)
 	{
 		b2ThreadPool* tp = m_threadPoolExec.GetThreadPool();
 		tp->ResetTimers();
-		m_world->Step(timeStep, settings->velocityIterations, settings->positionIterations, m_threadPoolExec);
+		m_world->Step(m_timeStep, settings->velocityIterations, settings->positionIterations, m_threadPoolExec);
 		m_world->SetLockingTime(tp->GetLockMilliseconds());
 	}
 
@@ -331,7 +332,7 @@ void Test::Step(Settings* settings)
 		g_debugDraw.Finish();
 	}
 
-	if (timeStep > 0.0f)
+	if (m_timeStep > 0.0f)
 	{
 		++m_stepCount;
 		++m_smoothProfileStepCount;
@@ -354,7 +355,7 @@ void Test::Step(Settings* settings)
 	}
 
 	// Track maximum profile times
-	if (timeStep > 0.0f)
+	if (m_timeStep > 0.0f)
 	{
 		const b2Profile& p = m_world->GetProfile();
 		m_maxProfile.step = b2Max(m_maxProfile.step, p.step);

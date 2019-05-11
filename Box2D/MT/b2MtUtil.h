@@ -44,12 +44,31 @@ inline void b2SubmitTasks(b2TaskExecutor& executor, b2TaskGroup* taskGroup, Task
 }
 
 // Initialize a thread context for the user thread.
-inline b2ThreadContext b2MainThreadCtx(b2StackAllocator& stackAllocator)
+inline b2ThreadContext b2MainThreadCtx(b2StackAllocator* stackAllocator)
 {
 	b2ThreadContext threadCtx;
-	threadCtx.stack = &stackAllocator;
+	threadCtx.stack = stackAllocator;
 	threadCtx.threadId = 0;
 	return threadCtx;
+}
+
+// Convenience function for executing a user range task.
+template<typename RangeTaskType, typename... Args>
+inline void b2ExecuteRangeTask(b2TaskExecutor& executor, RangeTaskType& task)
+{
+	b2TaskGroup* taskGroup = executor.AcquireTaskGroup();
+	RangeTaskType tasks[b2_maxRangeSubTasks];
+	b2RangeTaskRange r = task.GetRange();
+	b2PartitionedRange ranges;
+	executor.PartitionRange(task.GetType(), r.begin, r.end, ranges);
+	for (uint32 i = 0; i < ranges.count; ++i)
+	{
+		tasks[i] = task;
+		tasks[i].SetRange(ranges[i]);
+	}
+	b2SubmitTasks(executor, taskGroup, tasks, ranges.count);
+	executor.Wait(taskGroup, b2MainThreadCtx(nullptr));
+	executor.ReleaseTaskGroup(taskGroup);
 }
 
 // Replace an element in a vector

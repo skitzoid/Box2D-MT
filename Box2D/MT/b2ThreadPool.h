@@ -57,7 +57,10 @@ public:
 	~b2ThreadPoolTaskGroup();
 
 private:
+	b2ThreadPoolTaskGroup();
+
 	friend class b2ThreadPool;
+	friend class b2ThreadPoolTaskExecutor;
 
 	b2ThreadPool* m_threadPool;
 	std::atomic<uint32> m_remainingTasks;
@@ -127,6 +130,7 @@ private:
 };
 
 /// A task executor that uses b2ThreadPool.
+/// @warning this class must not be accessed by multiple threads simultaneously.
 class b2ThreadPoolTaskExecutor : public b2TaskExecutor
 {
 public:
@@ -140,18 +144,11 @@ public:
 	/// Get the number of threads available for execution.
 	uint32 GetThreadCount() const override;
 
-	/// Called when the step begins.
-	void StepBegin(b2World& world) override;
+	/// Acquire a task group.
+	b2TaskGroup* AcquireTaskGroup() override;
 
-	/// Called when the step ends.
-	void StepEnd(b2World& profile) override;
-
-	/// Create a task group.
-	/// The allocator can provide storage for the task group if needed.
-	b2TaskGroup* CreateTaskGroup(b2StackAllocator& allocator) override;
-
-	/// Destroy the task group, freeing any allocations made in CreateTaskGroup.
-	void DestroyTaskGroup(b2TaskGroup* taskGroup, b2StackAllocator& allocator) override;
+	/// Release the task group.
+	void ReleaseTaskGroup(b2TaskGroup* taskGroup) override;
 
 	/// Partition a range into sub-ranges that will each be assigned to a range task.
 	void PartitionRange(b2Task::Type type, uint32 begin, uint32 end, b2PartitionedRange& output) override;
@@ -167,6 +164,8 @@ public:
 
 private:
 	b2ThreadPool m_threadPool;
+	b2ThreadPoolTaskGroup m_taskGroups[b2_maxWorldStepTaskGroups];
+	bool m_taskGroupInUse[b2_maxWorldStepTaskGroups];
 };
 
 inline b2ThreadPoolTaskGroup::~b2ThreadPoolTaskGroup()
@@ -195,7 +194,11 @@ inline void b2ThreadPool::ResetTimers()
 inline b2ThreadPoolTaskExecutor::b2ThreadPoolTaskExecutor(const b2ThreadPoolOptions& options)
 	: m_threadPool(options)
 {
-
+	for (uint32 i = 0; i < b2_maxWorldStepTaskGroups; ++i)
+	{
+		m_taskGroups[i].m_threadPool = &m_threadPool;
+		m_taskGroupInUse[i] = false;
+	}
 }
 
 inline b2ThreadPool* b2ThreadPoolTaskExecutor::GetThreadPool()

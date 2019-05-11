@@ -436,8 +436,6 @@ private:
 	friend class b2WeldJoint;
 	friend class b2WheelJoint;
 
-	friend bool b2BodyPointerLessThan(const b2Body* lhs, const b2Body* rhs);
-
 	// m_flags
 	enum
 	{
@@ -506,11 +504,6 @@ private:
 
 	void* m_userData;
 };
-
-inline bool b2BodyPointerLessThan(const b2Body* lhs, const b2Body* rhs)
-{
-	return lhs->m_worldIndex < rhs->m_worldIndex;
-}
 
 inline b2BodyType b2Body::GetType() const
 {
