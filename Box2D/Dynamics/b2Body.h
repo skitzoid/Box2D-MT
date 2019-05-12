@@ -435,6 +435,7 @@ private:
 	friend class b2RopeJoint;
 	friend class b2WeldJoint;
 	friend class b2WheelJoint;
+	friend bool b2BodyPointerLessThan(const b2Body*, const b2Body*);
 
 	// m_flags
 	enum
@@ -504,6 +505,11 @@ private:
 
 	void* m_userData;
 };
+
+inline bool b2BodyPointerLessThan(const b2Body* a, const b2Body* b)
+{
+	return a->m_worldIndex < b->m_worldIndex;
+}
 
 inline b2BodyType b2Body::GetType() const
 {
@@ -677,29 +683,6 @@ inline void b2Body::SetGravityScale(float32 scale)
 inline bool b2Body::IsBullet() const
 {
 	return (m_flags & e_bulletFlag) == e_bulletFlag;
-}
-
-inline void b2Body::SetAwake(bool flag)
-{
-	if (VerifyMtUnlocked() == false)
-	{
-		return;
-	}
-
-	if (flag)
-	{
-		m_flags |= e_awakeFlag;
-		m_sleepTime = 0.0f;
-	}
-	else
-	{
-		m_flags &= ~e_awakeFlag;
-		m_sleepTime = 0.0f;
-		m_linearVelocity.SetZero();
-		m_angularVelocity = 0.0f;
-		m_force.SetZero();
-		m_torque = 0.0f;
-	}
 }
 
 inline bool b2Body::IsAwake() const

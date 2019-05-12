@@ -38,6 +38,7 @@ class b2Draw;
 class b2Fixture;
 class b2Joint;
 class b2TaskExecutor;
+class b2Island;
 
 /// The world class manages all physics entities, dynamic simulation,
 /// and asynchronous queries. The world also contains efficient memory
@@ -257,7 +258,11 @@ private:
 	friend class b2ContactManager;
 	friend class b2Controller;
 	friend class b2FindMinToiContactTask;
+	friend class b2SolveTask;
 
+	void StepSolveTOI(const b2TimeStep& step, b2Island& island, b2Contact* minContact, float32 minaAlpha);
+
+	void BaselineSolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b2TimeStep& step);
 	void SolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b2TimeStep& step);
 	void SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
 	void FindNewContacts(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
@@ -265,11 +270,15 @@ private:
 	void Solve(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b2TimeStep& step);
 	void ClearPostSolve(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
 	void ClearPostSolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
+	void ClearSortedToiFlags(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
 	void ClearForces(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
-	void FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2Contact** contactOut, float32* alphaOut);
+	void FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2Contact** contactOut, float* alphaOut);
+	void FindMinToiContact(b2Contact** contactOut, float* alphaOut);
 
 	void RecalculateToiCandidacy(b2Body* b);
 	void RecalculateToiCandidacy(b2Fixture* f);
+
+	void RecalculateSleeping(b2Body* b);
 
 	void DrawJoint(b2Joint* joint);
 	void DrawShape(b2Fixture* shape, const b2Transform& xf, const b2Color& color);
@@ -278,9 +287,14 @@ private:
 	bool IsMtCollisionLocked() const;
 	bool IsMtSolveLocked() const;
 
+	void FindMinContactSanityCheck(b2Contact* minContact, float32 minAlpha);
+
+	static float32 ComputeToi(b2Contact* contact);
+	static float32 ComputeToi(b2Contact* contact, float32 alpha0);
+
 	struct PerThreadData
 	{
-		b2GrowableArray<b2Contact*> m_findMinContacts;
+		b2GrowableArray<b2Contact*> m_outOfSyncSweeps;
 
 		uint8 _padding[b2_cacheLineSize];
 	};

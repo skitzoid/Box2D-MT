@@ -19,6 +19,7 @@
 #ifndef B2_GROWABLE_ARRAY_H
 #define B2_GROWABLE_ARRAY_H
 #include "Box2D/Common/b2Settings.h"
+#include "Box2D/Common/b2Math.h"
 #include <cstring>
 
 /// This is a growable array, meant for internal use only.
@@ -29,14 +30,14 @@ public:
 	b2GrowableArray(uint32 startCapacity = 128)
 	{
 		m_capacity = startCapacity;
-		m_count = 0;
+		m_size = 0;
 
 		m_array = (T*)b2Alloc(m_capacity * sizeof(T));
 	}
 
 	b2GrowableArray(b2GrowableArray&& rhs)
 		: m_array(rhs.m_array)
-		, m_count(rhs.m_count)
+		, m_size(rhs.m_size)
 	{
 		rhs.m_array = nullptr;
 	}
@@ -52,35 +53,76 @@ public:
 
 	void push_back(T element)
 	{
-		if (m_count == m_capacity)
+		if (m_size == m_capacity)
 		{
-			m_capacity *= 2;
-			T* old = m_array;
-			m_array = (T*)b2Alloc(m_capacity * sizeof(T));
-			memcpy(m_array, old, m_count * sizeof(T));
-			b2Free(old);
+			reserve(m_capacity * 2);
 		}
-
-		m_array[m_count] = element;
-		++m_count;
+		m_array[m_size] = element;
+		++m_size;
 	}
 
 	T pop_back()
 	{
-		b2Assert(m_count > 0);
-		--m_count;
-		return m_array[m_count];
+		b2Assert(m_size > 0);
+		--m_size;
+		return m_array[m_size];
 	}
 
-	T& back() const
+	void assign(T* inputBegin, T* inputEnd)
 	{
-		b2Assert(m_count > 0);
-		return m_array[m_count - 1];
+		uint32 size = (uint32)(inputEnd - inputBegin);
+		if (size > m_capacity)
+		{
+			reserve(b2NextPowerOfTwo(size));
+		}
+		T* dest = begin();
+		for(T* it = inputBegin; it != inputEnd; ++it)
+		{
+			*dest = *it;
+			++dest;
+		}
+		m_size = size;
+	}
+
+	void reserve(uint32 capacity)
+	{
+		if (capacity > m_capacity)
+		{
+			m_capacity = capacity;
+			T* old = m_array;
+			m_array = (T*)b2Alloc(m_capacity * sizeof(T));
+			memcpy(m_array, old, m_size * sizeof(T));
+			b2Free(old);
+		}
+	}
+
+	const T& front() const
+	{
+		b2Assert(m_size > 0);
+		return m_array[0];
+	}
+
+	T& front()
+	{
+		b2Assert(m_size > 0);
+		return m_array[0];
+	}
+
+	const T& back() const
+	{
+		b2Assert(m_size > 0);
+		return m_array[m_size - 1];
+	}
+
+	T& back()
+	{
+		b2Assert(m_size > 0);
+		return m_array[m_size - 1];
 	}
 
 	void clear()
 	{
-		m_count = 0;
+		m_size = 0;
 	}
 
 	T& operator[](size_t i)
@@ -95,7 +137,7 @@ public:
 
 	uint32 size() const
 	{
-		return m_count;
+		return m_size;
 	}
 
 	T* data()
@@ -120,18 +162,18 @@ public:
 
 	T* end()
 	{
-		return m_array + m_count;
+		return m_array + m_size;
 	}
 
 	const T* end() const
 	{
-		return m_array + m_count;
+		return m_array + m_size;
 	}
 
 private:
 	T* m_array;
-	int32 m_count;
-	int32 m_capacity;
+	uint32 m_size;
+	uint32 m_capacity;
 };
 
 #endif

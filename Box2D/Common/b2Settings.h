@@ -31,11 +31,7 @@
 
 #define B2_NOT_USED(x) ((void)(x))
 
-#if !defined(NDEBUG)
-	#define b2Assert(A) assert(A)
-#else
-	#define b2Assert(A) B2_NOT_USED(A)
-#endif
+#define b2Assert(A) assert(A)
 
 typedef std::int8_t		int8;
 typedef std::int16_t	int16;

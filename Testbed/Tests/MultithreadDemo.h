@@ -52,11 +52,11 @@ public:
 			b2FixtureDef fd;
 			fd.shape = &shape;
 
-			// Marking fixtures as thick walls can avoid expensive TOI checks for non-bullet
+			// Marking fixtures as thick shapes can avoid expensive TOI checks for non-bullet
 			// contacts with those fixtures. This should only be applied to walls that are
 			// thick enough to prevent tunneling on their own, without TOI. We don't set it
 			// here so that the default performance can be accurately compared to Box2D.
-			// fd.isThickWall = true;
+			// fd.thickShape = true;
 
 			shape.SetAsBox(25.0f, 2.5f, b2Vec2(0.0f, -2.5f), 0.0f);
 			m_groundBody->CreateFixture(&fd);
@@ -155,23 +155,23 @@ public:
 			m_slider->SetMotorSpeed(-m_slider->GetMotorSpeed());
 		}
 
-		g_debugDraw.DrawString(5, m_textLine, "Press 't' to classify static polygons as thick walls (disables non-bullet TOI on them)");
+		g_debugDraw.DrawString(5, m_textLine, "Press 't' to classify static polygons as thick shapes (disables non-bullet TOI on them)");
 		m_textLine += DRAW_STRING_NEW_LINE;
-		g_debugDraw.DrawString(5, m_textLine, "Thick walls: %s", m_thickWallsEnabled ? "enabled" : "disabled");
+		g_debugDraw.DrawString(5, m_textLine, "Thick shapes: %s", m_thickWallsEnabled ? "enabled" : "disabled");
 		m_textLine += DRAW_STRING_NEW_LINE;
 	}
 
-	void ToggleThickWall()
+	void ToggleThickShape()
 	{
 		m_thickWallsEnabled = !m_thickWallsEnabled;
 
 		for (b2Fixture* f = m_groundBody->GetFixtureList(); f; f = f->GetNext())
 		{
-			// All polygons on this body are thick walls.
+			// All polygons on this body are thick.
 			const b2Shape* shape = f->GetShape();
 			if (shape->GetType() == b2Shape::e_polygon)
 			{
-				f->SetThickWall(m_thickWallsEnabled);
+				f->SetThickShape(m_thickWallsEnabled);
 			}
 		}
 	}
@@ -181,7 +181,7 @@ public:
 		switch (key)
 		{
 		case GLFW_KEY_T:
-			ToggleThickWall();
+			ToggleThickShape();
 			break;
 		}
 	}

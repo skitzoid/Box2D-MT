@@ -77,12 +77,18 @@
 
 TestEntry g_testEntries[] =
 {
+	{"Many Bodies 6", ManyBodies6::Create, 480}, // TEMP_MT
+
+	{"Multithread Demo", MultithreadDemo::Create, 1800},
+// These tests run too slowly with drd.
+#ifndef b2_drd
 	{"Many Bodies 1", ManyBodies1::Create, 480},
 	{"Many Bodies 2", ManyBodies2::Create, 480},
 	{"Many Bodies 3", ManyBodies3::Create, 480},
 	{"Many Bodies 4", ManyBodies4::Create, 480},
 	{"Many Bodies 5", ManyBodies5::Create, 480},
-	{"Multithread Demo", MultithreadDemo::Create, 1800},
+#endif
+	{"Many Bodies 6", ManyBodies6::Create, 480},
 	{"Tunneling Test", TunnelingTest::Create, 1800},
 	{"Shape Cast", ShapeCast::Create, 60},
 	{"Time of Impact", TimeOfImpact::Create, 60},

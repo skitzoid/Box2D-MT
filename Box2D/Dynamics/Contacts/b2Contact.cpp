@@ -126,6 +126,8 @@ b2Contact::b2Contact(b2Fixture* fA, int32 indexA, b2Fixture* fB, int32 indexB)
 {
 	m_flags = e_enabledFlag;
 
+	m_managerIndex = -1;
+
 	m_fixtureA = fA;
 	m_fixtureB = fB;
 
@@ -309,9 +311,9 @@ bool b2Contact::IsToiCandidate(b2Fixture* fA, b2Fixture* fB)
 		else
 		{
 			bool includesNonDynamic = bA->GetType() != b2_dynamicBody || bB->GetType() != b2_dynamicBody;
-			bool neitherIsThickWall = fA->IsThickWall() == false && fB->IsThickWall() == false;
+			bool neitherIsThickShape = fA->IsThickShape() == false && fB->IsThickShape() == false;
 
-			if (includesNonDynamic && neitherIsThickWall)
+			if (includesNonDynamic && neitherIsThickShape)
 			{
 				return true;
 			}
@@ -319,4 +321,14 @@ bool b2Contact::IsToiCandidate(b2Fixture* fA, b2Fixture* fB)
 	}
 
 	return false;
+}
+
+bool b2Contact::ToiLessThan(float32 alpha0, const b2Contact* contact0, float32 alpha1, const b2Contact* contact1)
+{
+	if (alpha0 == alpha1)
+	{
+		return b2ContactPointerLessThan(contact0, contact1);
+	}
+
+	return alpha0 < alpha1;
 }

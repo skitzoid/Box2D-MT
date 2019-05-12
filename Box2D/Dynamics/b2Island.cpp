@@ -148,7 +148,7 @@ However, we can compute sin+cos of the same angle fast.
 
 b2Island::b2Island()
 {
-	m_td = nullptr;
+
 }
 
 b2Island::b2Island(b2Body** bodies, b2Contact** contacts,
@@ -157,8 +157,6 @@ b2Island::b2Island(b2Body** bodies, b2Contact** contacts,
 	m_bodyCount = 0;
 	m_contactCount = 0;
 	m_jointCount = 0;
-
-	m_td = nullptr;
 
 	m_bodies = bodies;
 	m_contacts = contacts;
@@ -175,8 +173,6 @@ b2Island::b2Island(int32 bodyCount, int32 contactCount, int32 jointCount,
 	m_contactCount = contactCount;
 	m_jointCount = jointCount;
 
-	m_td = nullptr;
-
 	m_bodies = bodies;
 	m_contacts = contacts;
 	m_joints = joints;
@@ -186,7 +182,8 @@ b2Island::b2Island(int32 bodyCount, int32 contactCount, int32 jointCount,
 }
 
 void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& gravity, b2StackAllocator* allocator,
-		b2ContactListener* listener, uint32 threadId, bool allowSleep)
+		b2ContactListener* listener, uint32 threadId, bool allowSleep, b2GrowableArray<b2DeferredPostSolve>& postSolves,
+		b2GrowableArray<b2Body*>& sleeps)
 {
 	b2Timer timer;
 
@@ -354,7 +351,7 @@ void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& g
 
 	profile->solvePosition += timer.GetMilliseconds();
 
-	Report<false>(contactSolver.m_velocityConstraints, listener, threadId);
+	Report<false>(contactSolver.m_velocityConstraints, listener, threadId, &postSolves);
 
 	if (allowSleep)
 	{
@@ -392,7 +389,7 @@ void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& g
 				b2Body* b = m_bodies[i];
 				if (b->GetType() != b2_staticBody)
 				{
-					b->SetAwake(false);
+					sleeps.push_back(b);
 				}
 			}
 		}
@@ -530,18 +527,18 @@ void b2Island::SolveTOI(const b2TimeStep& subStep, int32 toiIndexA, int32 toiInd
 		body->SynchronizeTransform();
 	}
 
-	Report<true>(contactSolver.m_velocityConstraints, listener, 0);
+	Report<true>(contactSolver.m_velocityConstraints, listener, 0, nullptr);
 }
 
 template<bool isSingleThread>
-void b2Island::Report(const b2ContactVelocityConstraint* constraints, b2ContactListener* listener, uint32 threadId)
+void b2Island::Report(const b2ContactVelocityConstraint* constraints, b2ContactListener* listener, uint32 threadId,
+	b2GrowableArray<b2DeferredPostSolve>* postSolves)
 {
 	if (listener == nullptr)
 	{
 		return;
 	}
 
-	b2ContactManagerPerThreadData* td = m_td;
 	for (int32 i = 0; i < m_contactCount; ++i)
 	{
 		b2Contact* c = m_contacts[i];
@@ -567,7 +564,7 @@ void b2Island::Report(const b2ContactVelocityConstraint* constraints, b2ContactL
 				b2DeferredPostSolve postSolve;
 				postSolve.contact = c;
 				postSolve.impulse = impulse;
-				td->m_postSolves.push_back(postSolve);
+				postSolves->push_back(postSolve);
 			}
 		}
 	}

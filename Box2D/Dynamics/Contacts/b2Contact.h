@@ -171,7 +171,8 @@ protected:
 	friend class b2ClearContactSolveFlags;
 	friend class b2ClearContactSolveTOIFlags;
 	friend class b2FindMinToiContactTask;
-	friend bool b2ContactPointerLessThan(const b2Contact* l, const b2Contact* r);
+	friend bool b2ContactPointerLessThan(const b2Contact*, const b2Contact*);
+	friend bool b2ToiContactPointerLessThan(const b2Contact*, const b2Contact*);
 
 	// Flags stored in m_flags
 	enum
@@ -198,9 +199,6 @@ protected:
 		e_toiCandidateFlag	= 0x0040
 	};
 
-	/// Flag this contact for filtering. Filtering will occur the next time step.
-	void FlagForFiltering();
-
 	static void AddType(b2ContactCreateFcn* createFcn, b2ContactDestroyFcn* destroyFcn,
 						b2Shape::Type typeA, b2Shape::Type typeB);
 	static void InitializeRegisters();
@@ -218,14 +216,18 @@ protected:
 	template <bool isSingleThread>
 	void UpdateImpl(b2ContactManagerPerThreadData* td, b2ContactListener* listener, uint32 threadId);
 
+	bool IsMinToiCandidate() const;
+	void ClearToi();
+
 	static bool IsToiCandidate(b2Fixture* fA, b2Fixture* fB);
+	static bool ToiLessThan(float32 alpha0, const b2Contact* contact0, float32 alpha1, const b2Contact* contact1);
 
 	static b2ContactRegister s_registers[b2Shape::e_typeCount][b2Shape::e_typeCount];
 	static bool s_initialized;
 
 	uint32 m_flags;
 
-	uint32 m_managerIndex;
+	int32 m_managerIndex;
 
 	// Nodes for connecting bodies.
 	b2ContactEdge m_nodeA;
@@ -356,11 +358,6 @@ inline int32 b2Contact::GetChildIndexB() const
 	return m_indexB;
 }
 
-inline void b2Contact::FlagForFiltering()
-{
-	m_flags |= e_filterFlag;
-}
-
 inline void b2Contact::SetFriction(float32 friction)
 {
 	m_friction = friction;
@@ -399,6 +396,30 @@ inline void b2Contact::SetTangentSpeed(float32 speed)
 inline float32 b2Contact::GetTangentSpeed() const
 {
 	return m_tangentSpeed;
+}
+
+inline bool b2Contact::IsMinToiCandidate() const
+{
+	// Is this contact disabled?
+	if (IsEnabled() == false)
+	{
+		return false;
+	}
+
+	// Prevent excessive sub-stepping.
+	if (m_toiCount > b2_maxSubSteps)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+inline void b2Contact::ClearToi()
+{
+	m_flags &= ~(b2Contact::e_toiFlag | b2Contact::e_islandFlag);
+	m_toiCount = 0;
+	m_toi = 1.0f;
 }
 
 #endif

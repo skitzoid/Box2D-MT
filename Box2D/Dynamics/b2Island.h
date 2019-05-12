@@ -20,6 +20,7 @@
 #ifndef B2_ISLAND_H
 #define B2_ISLAND_H
 
+#include "Box2D/Common/b2GrowableArray.h"
 #include "Box2D/Common/b2Math.h"
 #include "Box2D/Dynamics/b2Body.h"
 #include "Box2D/Dynamics/b2TimeStep.h"
@@ -30,7 +31,7 @@ class b2StackAllocator;
 class b2ContactListener;
 struct b2ContactVelocityConstraint;
 struct b2Profile;
-struct b2ContactManagerPerThreadData;
+struct b2DeferredPostSolve;
 
 /// This is an internal class.
 class b2Island
@@ -51,7 +52,8 @@ public:
 	}
 
 	void Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& gravity, b2StackAllocator* allocator,
-		b2ContactListener* listener, uint32 threadId, bool allowSleep);
+		b2ContactListener* listener, uint32 threadId, bool allowSleep, b2GrowableArray<b2DeferredPostSolve>& postSolves,
+		b2GrowableArray<b2Body*>& sleeps);
 
 	void SolveTOI(const b2TimeStep& subStep, int32 toiIndexA, int32 toiIndexB, b2StackAllocator* allocator,
 		b2ContactListener* listener);
@@ -74,9 +76,8 @@ public:
 	}
 
 	template<bool isSingleThread>
-	void Report(const b2ContactVelocityConstraint* constraints, b2ContactListener* listener, uint32 threadId);
-
-	b2ContactManagerPerThreadData* m_td;
+	void Report(const b2ContactVelocityConstraint* constraints, b2ContactListener* listener, uint32 threadId,
+		b2GrowableArray<b2DeferredPostSolve>* postSolves);
 
 	b2Body** m_bodies;
 	b2Contact** m_contacts;

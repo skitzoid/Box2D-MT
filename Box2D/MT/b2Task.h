@@ -48,7 +48,7 @@ public:
 		e_clearBodySolveToiFlags,
 		e_clearForces,
 		e_collide,
-		e_findMinContact,
+		e_findMinToiContact,
 
 		e_rangeTypeCount,
 
@@ -98,7 +98,7 @@ private:
 /// Is the type a range task?
 inline bool b2IsRangeTask(b2Task::Type type)
 {
-	return type <= b2Task::e_findMinContact;
+	return type < b2Task::e_rangeTypeCount;
 }
 
 /// A range over which a range task executes.

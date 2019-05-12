@@ -113,19 +113,19 @@ and non-dynamic bodies, which can be expensive.
 If your static body only has a few thin shapes that are subject to tunneling, and
 many thick shapes that are not, then most of that expense is unnecessary.
 
-Box2D-MT lets you avoid that expense by marking specific fixtures as thick walls,
+Box2D-MT lets you avoid that expense by marking specific fixtures as thick shapes,
 which means they only generate TOI events for contacts with bullet bodies.
 
 ```
-/// Set whether this fixture is treated like a thick wall for continuous collision detection.
-/// Note: thick walls only get TOI events for contacts with bullet bodies.
-void SetThickWall(bool flag);
+/// Set whether this fixture is treated like a thick shape for continuous collision detection.
+/// Note: thick shapes only get TOI events for contacts with bullet bodies.
+void SetThickShape(bool flag);
 
-/// Is this fixture treated like a thick wall for continuous collision detection?
-bool IsThickWall() const;
+/// Is this fixture treated like a thick shape for continuous collision detection?
+bool IsThickShape() const;
 ```
 
-You can also set isThickWall in the fixture def before you create the fixture.
+You can also set thickShape in the fixture def before you create the fixture.
 
 ### Partitioning Contacts Based on TOI Eligibility
 
@@ -138,7 +138,7 @@ Visiting these contacts can take up a significant portion of the step.
 Box2D-MT avoids this overhead by evaluating TOI eligibility when the contact is
 created, and partitioning the contact list so that TOI eligible contacts come
 before ineligible contacts. This shifts the cost into functions that are called
-infrequently; b2Fixture::SetSensor, b2Fixture::SetThickWall, and b2Body::SetBullet
+infrequently; b2Fixture::SetSensor, b2Fixture::SetThickShape, and b2Body::SetBullet
 must traverse the body's contacts to reevaluate TOI eligibility.
 
 ## Thread Error Detection

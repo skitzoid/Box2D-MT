@@ -23,7 +23,7 @@ struct Floater
 {
 	b2Body* body;
 	float32 speed;
-	bool instantAcceleration;
+	bool isBullet;
 };
 
 class UpdateFloaterTask : public b2RangeTask
@@ -46,7 +46,7 @@ public:
 			b2Body* body = m_floaters[i].body;
 			float32 targetSpeed = m_floaters[i].speed;
 			float32 maxAcceleration = targetSpeed;
-			if (m_floaters[i].instantAcceleration == false)
+			if (m_floaters[i].isBullet == false)
 			{
 				maxAcceleration *= m_dt * kMaxAccelerationScale;
 			}
@@ -112,13 +112,16 @@ public:
 		const float32 kBorderHalfLength = m_params.borderHalfLength;
 		const float32 kBorderHalfWidth = 5.0f;
 
+		// For consistent profiling
+		srand(0);
+
 		// Borders
 		{
 			b2PolygonShape shape;
 
 			b2FixtureDef fd;
 			fd.shape = &shape;
-			fd.isThickWall = m_params.thickWalls;
+			fd.thickShape = m_params.thickWalls;
 
 			shape.SetAsBox(kBorderHalfLength, kBorderHalfWidth, b2Vec2(0, kBorderHalfLength), 0.0f);
 			m_groundBody->CreateFixture(&fd);
@@ -143,7 +146,7 @@ public:
 
 			b2FixtureDef fd;
 			fd.shape = &shape;
-			fd.isThickWall = m_params.thickWalls;
+			fd.thickShape = m_params.thickWalls;
 
 			for (int32 i = 0; i < m_params.staticBoxCount; ++i)
 			{
@@ -156,7 +159,7 @@ public:
 				shape.SetAsBox(hx, hy, b2Vec2(x, y), a);
 				m_groundBody->CreateFixture(&fd);
 			}
-			fd.isThickWall = false;
+			fd.thickShape = false;
 
 			fd.isSensor = true;
 			for (int32 i = 0; i < m_params.staticSensorCount; ++i)
@@ -219,12 +222,15 @@ public:
 				float32 y = RandomFloat(-kPositionRange, kPositionRange);
 				float32 a = RandomFloat(0, 2 * b2_pi);
 
+				fd.density = 1.0f;
+
 				bd.bullet = false;
 				if (i < m_params.bulletFloaterCount)
 				{
 					speed = kBulletSpeed;
 					radius = kMinRadius;
 					bd.bullet = true;
+					fd.density = 25.0f;
 				}
 
 				bd.position = b2Vec2(x, y);
@@ -237,7 +243,6 @@ public:
 					n.Normalize();
 					bd.linearVelocity = speed * n;
 					bd.linearDamping = 0.0f;
-					fd.density = 1.0f;
 				}
 				else
 				{
@@ -284,8 +289,7 @@ public:
 				if (radius > m_params.thickFloaterThresholdRadius)
 				{
 					// If the shape is thick enough then we don't need TOI, even against static edge shapes.
-					// TODO_JUSTIN: change this to thickShape so that it seems sensible for dynamic bodies.
-					fd.isThickWall = true;
+					fd.thickShape = true;
 				}
 
 				body->CreateFixture(&fd);
@@ -294,7 +298,7 @@ public:
 				{
 					m_floaters[i].body = body;
 					m_floaters[i].speed = speed;
-					m_floaters[i].instantAcceleration = bd.bullet;
+					m_floaters[i].isBullet = bd.bullet;
 				}
 			}
 		}
@@ -323,7 +327,7 @@ public:
 	Floater m_floaters[e_maxFloaterCount];
 };
 
-// Bound by FindNewContacts.
+// Primarily pressures FindNewContacts.
 struct ManyBodies1
 {
 	static Test* Create()
@@ -339,7 +343,7 @@ struct ManyBodies1
 	}
 };
 
-// Bound by FindNewContacts, also puts pressure on areas other than Collide.
+// Primarily pressures FindNewContacts.
 struct ManyBodies2
 {
 	static Test* Create()
@@ -357,7 +361,7 @@ struct ManyBodies2
 	}
 };
 
-// Bound by SynchronizeFixtures.
+// Primarily pressures SynchronizeFixtures.
 struct ManyBodies3
 {
 	static Test* Create()
@@ -370,7 +374,7 @@ struct ManyBodies3
 	}
 };
 
-// Bound by Solve island traversal.
+// Primarily pressures island traversal.
 struct ManyBodies4
 {
 	static Test* Create()
@@ -384,7 +388,7 @@ struct ManyBodies4
 	}
 };
 
-// Bound by SolveTOI.
+// Primarily pressures SolveTOI (more so than the other tests at least).
 struct ManyBodies5
 {
 	static Test* Create()
@@ -399,5 +403,24 @@ struct ManyBodies5
 		return new ManyBodiesImpl(params);
 	}
 };
+
+// A reduced size test that can run in acceptable time with drd.
+struct ManyBodies6
+{
+	static Test* Create()
+	{
+		ManyBodiesImpl::Params params;
+		params.borderHalfLength = 500.0f;
+		params.floaterCount = 2000;
+		params.bulletFloaterCount = 500;
+		params.sleeperCount = 0;
+		params.staticBoxCount = 25;
+		params.staticEdgeCount = 25;
+		params.minStaticHalfExtent = 5.0f;
+		params.maxStaticHalfExtent = 50.0f;
+		return new ManyBodiesImpl(params);
+	}
+};
+
 
 #endif

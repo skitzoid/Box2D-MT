@@ -104,19 +104,19 @@ struct TunnelingCell
 		constexpr uint32 bulletFlag = 0x4;
 
 		bool isSensor = (wallMask & sensorFlag) == sensorFlag;
-		bool isThickWall = (wallMask & thickWallFlag) == thickWallFlag;
+		bool isThickShape = (wallMask & thickWallFlag) == thickWallFlag;
 		bool isBullet = (wallMask & bulletFlag) == bulletFlag;
 
 		m_wallFixture->SetSensor(isSensor);
-		m_wallFixture->SetThickWall(isThickWall);
+		m_wallFixture->SetThickShape(isThickShape);
 		m_wallBody->SetBullet(isBullet);
 
 		isSensor = (ballMask & sensorFlag) == sensorFlag;
-		isThickWall = (ballMask & thickWallFlag) == thickWallFlag;
+		isThickShape = (ballMask & thickWallFlag) == thickWallFlag;
 		isBullet = (ballMask & bulletFlag) == bulletFlag;
 
 		m_ballFixture->SetSensor(isSensor);
-		m_ballFixture->SetThickWall(isThickWall);
+		m_ballFixture->SetThickShape(isThickShape);
 		m_ballBody->SetBullet(isBullet);
 	}
 
@@ -126,8 +126,8 @@ struct TunnelingCell
 	{
 		if (m_wallFixture->IsSensor() == false && m_ballFixture->IsSensor() == false)
 		{
-			// Technically a static body can be a bullet and a fixture on a dynamic body can be a thick wall,
-			// which is linguistically strange but it doesn't cause any actual problems.
+			// Technically a static body can be a bullet, and a fixture on a dynamic body can be a thick shape,
+			// which is strange but it doesn't cause any problems.
 			if (m_wallBody->IsBullet() || m_ballBody->IsBullet())
 			{
 				return false;
@@ -136,7 +136,7 @@ struct TunnelingCell
 			{
 				b2Assert(m_wallBody->GetType() != b2_dynamicBody);
 
-				if (m_wallFixture->IsThickWall() == false && m_ballFixture->IsThickWall() == false)
+				if (m_wallFixture->IsThickShape() == false && m_ballFixture->IsThickShape() == false)
 				{
 					return false;
 				}

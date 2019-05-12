@@ -70,12 +70,16 @@ bool b2DeferredMoveProxyLessThan(const b2DeferredMoveProxy& l, const b2DeferredM
 bool b2DeferredPreSolveLessThan(const b2DeferredPreSolve& l, const b2DeferredPreSolve& r);
 bool b2DeferredPostSolveLessThan(const b2DeferredPostSolve& l, const b2DeferredPostSolve& r);
 
+/// This is used to sort contacts by TOI.
+bool b2ToiContactPointerLessThan(const b2Contact* l, const b2Contact* r);
+
 struct b2ContactManagerPerThreadData
 {
 	b2GrowableArray<b2Contact*> m_beginContacts;
 	b2GrowableArray<b2Contact*> m_endContacts;
 	b2GrowableArray<b2DeferredPreSolve> m_preSolves;
 	b2GrowableArray<b2DeferredPostSolve> m_postSolves;
+	b2GrowableArray<b2Body*> m_sleeps;
 	b2GrowableArray<b2Contact*> m_awakes;
 	b2GrowableArray<b2Contact*> m_destroys;
 	b2GrowableArray<b2DeferredContactCreate> m_creates;
@@ -93,6 +97,9 @@ public:
 
 	// Broad-phase callback.
 	void AddPair(void* proxyUserDataA, void* proxyUserDataB, uint32 threadId);
+
+	// This is called before running the multithreaded task.
+	void StartCollide();
 
 	// These are called from multithreaded tasks.
 	void FindNewContacts(uint32 moveBegin, uint32 moveEnd, uint32 threadId);
@@ -122,30 +129,47 @@ public:
 	void RecalculateToiCandidacy(b2Body* body);
 	void RecalculateToiCandidacy(b2Fixture* fixture);
 
+	// Reorder contacts when sleeping state changes.
+	void RecalculateSleeping(b2Body* body);
+
+	// Flag the contact for filtering on the next step.
+	void FlagForFiltering(b2Contact* contact);
+
 	b2BroadPhase m_broadPhase;
 	b2Contact* m_contactList;
+	b2Contact* m_contactListLastFiltering;
 	b2ContactFilter* m_contactFilter;
 	b2ContactListener* m_contactListener;
 	b2BlockAllocator* m_allocator;
 
 	// This contacts array makes it easier to assign ranges of contacts to different tasks.
-	// Note: TOI partitioning is also done in this array rather than in the world's contact
-	// list, but it might be better to do that in the contact list.
+	// Note: TOI partitioning is also done in this array rather than in the contact list,
+	// but it might be better to do that in the contact list.
 	b2GrowableArray<b2Contact*> m_contacts;
 	uint32 m_toiCount;
+
+	// Contacts sorted by TOI.
+	b2GrowableArray<b2Contact*> m_sortedToi;
 
 	b2ContactManagerPerThreadData m_perThreadData[b2_maxThreads];
 
 	bool m_deferCreates;
 
 private:
-	void ConsumeAwakes();
+	static bool IsContactActive(b2Contact* contact);
+
 	void ConsumeCreate(const b2DeferredContactCreate& create);
 
 	void RecalculateToiCandidacy(b2Contact* contact);
 	void OnContactCreate(b2Contact* contact, b2ContactProxyIds proxyIds);
-	void PushContact(b2Contact* contact);
-	void RemoveContact(b2Contact* contact);
+	void AddToContactArray(b2Contact* contact);
+	void RemoveFromContactArray(b2Contact* contact);
+	void AddToContactList(b2Contact* contact);
+	void RemoveFromContactList(b2Contact* contact);
+
+	void SanityCheck();
+
+	uint32 m_minToiIndex;
 };
 
 inline b2Contact** b2ContactManager::GetToiBegin()
@@ -155,7 +179,7 @@ inline b2Contact** b2ContactManager::GetToiBegin()
 
 inline b2Contact** b2ContactManager::GetNonToiBegin()
 {
-	return m_contacts.data() + m_toiCount;
+	return m_contacts.begin() + m_toiCount;
 }
 
 inline uint32 b2ContactManager::GetNonToiCount()
