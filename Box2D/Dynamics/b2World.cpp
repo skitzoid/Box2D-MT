@@ -333,9 +333,7 @@ public:
 
 			// MT Note: the sweeps need to be on the same time interval for b2TimeOfImpact,
 			// but advancing a sweep here would cause a data race, so we do that later on the
-			// user thread. Any contacts that are created during SolveTOI will have their sweeps
-			// synchronized during creation to avoid this path, but the sweeps of existing
-			// non-touching contacts could get out of sync during SolveTOI.
+			// user thread.
 			if (bA->m_sweep.alpha0 != bB->m_sweep.alpha0)
 			{
 				outOfSyncSweeps.push_back(c);
@@ -1031,7 +1029,7 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b
 		{
 			b2Timer timer;
 			FindMinToiContact(executor, taskGroup, &minContact, &minAlpha);
-			m_profile.solveTOIComputeTOI += timer.GetMilliseconds();
+			m_profile.solveTOIFindMinContact += timer.GetMilliseconds();
 
 			useMultithreadedFind = false;
 			if (minContact != nullptr)
@@ -1041,7 +1039,9 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b
 		}
 		else
 		{
+			b2Timer timer;
 			FindMinToiContact(&minContact, &minAlpha);
+			m_profile.solveTOIFindMinContact += timer.GetMilliseconds();
 		}
 
 		if (minContact == nullptr || 1.0f - 10.0f * b2_epsilon < minAlpha)
@@ -1477,23 +1477,6 @@ void b2World::ClearPostSolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup
 	executor.Wait(taskGroup, b2MainThreadCtx(&m_stackAllocator));
 }
 
-void b2World::ClearSortedToiFlags(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
-{
-	b2ClearContactSolveTOIFlags contactsTasks[b2_maxRangeSubTasks];
-	if (m_contactManager.m_sortedToi.size() > 0)
-	{
-		b2PartitionedRange ranges;
-		executor.PartitionRange(b2Task::e_clearContactSolveToiFlags, 0, m_contactManager.m_sortedToi.size(), ranges);
-		for (uint32 i = 0; i < ranges.count; ++i)
-		{
-			contactsTasks[i] = b2ClearContactSolveTOIFlags(ranges[i], m_contactManager.m_sortedToi.data());
-		}
-		b2SubmitTasks(executor, taskGroup, contactsTasks, ranges.count);
-	}
-
-	executor.Wait(taskGroup, b2MainThreadCtx(&m_stackAllocator));
-}
-
 void b2World::ClearForces(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 {
 	if (m_nonStaticBodies.size() == 0)
@@ -1663,7 +1646,6 @@ void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIteration
 	{
 		b2Timer timer;
 		SolveTOI(executor, taskGroup, step);
-		//BaselineSolveTOI(executor, taskGroup, step);
 		m_profile.solveTOI += timer.GetMilliseconds();
 	}
 

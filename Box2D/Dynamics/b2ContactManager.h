@@ -70,9 +70,6 @@ bool b2DeferredMoveProxyLessThan(const b2DeferredMoveProxy& l, const b2DeferredM
 bool b2DeferredPreSolveLessThan(const b2DeferredPreSolve& l, const b2DeferredPreSolve& r);
 bool b2DeferredPostSolveLessThan(const b2DeferredPostSolve& l, const b2DeferredPostSolve& r);
 
-/// This is used to sort contacts by TOI.
-bool b2ToiContactPointerLessThan(const b2Contact* l, const b2Contact* r);
-
 struct b2ContactManagerPerThreadData
 {
 	b2GrowableArray<b2Contact*> m_beginContacts;
@@ -148,9 +145,6 @@ public:
 	b2GrowableArray<b2Contact*> m_contacts;
 	uint32 m_toiCount;
 
-	// Contacts sorted by TOI.
-	b2GrowableArray<b2Contact*> m_sortedToi;
-
 	b2ContactManagerPerThreadData m_perThreadData[b2_maxThreads];
 
 	bool m_deferCreates;
@@ -168,8 +162,6 @@ private:
 	void RemoveFromContactList(b2Contact* contact);
 
 	void SanityCheck();
-
-	uint32 m_minToiIndex;
 };
 
 inline b2Contact** b2ContactManager::GetToiBegin()

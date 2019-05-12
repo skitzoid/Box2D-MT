@@ -116,7 +116,6 @@ b2ContactManager::b2ContactManager()
 	m_allocator = nullptr;
 	m_deferCreates = false;
 	m_toiCount = 0;
-	m_minToiIndex = 0;
 }
 
 void b2ContactManager::Destroy(b2Contact* c)

@@ -270,7 +270,6 @@ private:
 	void Solve(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b2TimeStep& step);
 	void ClearPostSolve(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
 	void ClearPostSolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
-	void ClearSortedToiFlags(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
 	void ClearForces(b2TaskExecutor& executor, b2TaskGroup* taskGroup);
 	void FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2Contact** contactOut, float* alphaOut);
 	void FindMinToiContact(b2Contact** contactOut, float* alphaOut);

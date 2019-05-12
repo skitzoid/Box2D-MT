@@ -63,6 +63,7 @@
 #include "SensorTest.h"
 #include "ShapeCast.h"
 #include "ShapeEditing.h"
+#include "SleepCollidePerf.h"
 #include "SliderCrank.h"
 #include "SphereStack.h"
 #include "TheoJansen.h"
@@ -77,8 +78,6 @@
 
 TestEntry g_testEntries[] =
 {
-	{"Many Bodies 6", ManyBodies6::Create, 480}, // TEMP_MT
-
 	{"Multithread Demo", MultithreadDemo::Create, 1800},
 // These tests run too slowly with drd.
 #ifndef b2_drd
@@ -89,6 +88,7 @@ TestEntry g_testEntries[] =
 	{"Many Bodies 5", ManyBodies5::Create, 480},
 #endif
 	{"Many Bodies 6", ManyBodies6::Create, 480},
+	{"SleepCollidePerf", SleepCollidePerf::Create, 1800},
 	{"Tunneling Test", TunnelingTest::Create, 1800},
 	{"Shape Cast", ShapeCast::Create, 60},
 	{"Time of Impact", TimeOfImpact::Create, 60},

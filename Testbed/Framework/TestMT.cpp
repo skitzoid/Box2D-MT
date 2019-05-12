@@ -158,7 +158,7 @@ static void RunTest(FILE* csv, Settings* settings, int testIndex, int* inconsist
         profile.solvePosition,
         profile.solveVelocity,
         profile.solveTOI,
-        profile.solveTOIComputeTOI,
+        profile.solveTOIFindMinContact,
         profile.locking);
 
     if (inconsistentStep != -1)
@@ -183,7 +183,7 @@ void TestMT(Settings* settings, int testIndex)
     FILE* csv = fopen(filename, "w");
 
     fputs("Name, Test Result, Inconsistent Index, Step, Broadphase, Broadphase Find Contacts, Broadphase Sync Fixtures, Collide, "
-        "Solve, Solve Traversal, Solve Init, Solve Position, Solve Velocity, Solve TOI, Compute TOIs, Locking\n", csv);
+        "Solve, Solve Traversal, Solve Init, Solve Position, Solve Velocity, Solve TOI, Find Min TOI, Locking\n", csv);
 
     int inconsistencyCount = 0;
     int failCount = 0;

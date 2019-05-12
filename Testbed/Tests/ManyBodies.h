@@ -388,7 +388,7 @@ struct ManyBodies4
 	}
 };
 
-// Primarily pressures SolveTOI (more so than the other tests at least).
+// Primarily pressures SolveTOI.
 struct ManyBodies5
 {
 	static Test* Create()
