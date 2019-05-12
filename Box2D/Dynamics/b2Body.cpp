@@ -488,34 +488,9 @@ void b2Body::SynchronizeFixtures()
 	}
 }
 
-void b2Body::SetAwake(bool flag)
+void b2Body::RecalculateSleeping()
 {
-	if (VerifyMtUnlocked() == false)
-	{
-		return;
-	}
-
-	bool status = (m_flags & e_awakeFlag) == e_awakeFlag;
-
-	if (flag)
-	{
-		m_flags |= e_awakeFlag;
-		m_sleepTime = 0.0f;
-	}
-	else
-	{
-		m_flags &= ~e_awakeFlag;
-		m_sleepTime = 0.0f;
-		m_linearVelocity.SetZero();
-		m_angularVelocity = 0.0f;
-		m_force.SetZero();
-		m_torque = 0.0f;
-	}
-
-	if (status != flag)
-	{
-		m_world->RecalculateSleeping(this);
-	}
+	m_world->RecalculateSleeping(this);
 }
 
 void b2Body::SetActive(bool flag)
