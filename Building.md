@@ -41,7 +41,7 @@ DRD compatible build (http://valgrind.org/docs/manual/drd-manual.html):
 - Command line: `premake5 gmake --drd`
 - Command line: `make -C Build config=drd_x86_64`
 - Command line: `cd Testbed`
-- Command line: `valgrind --tool=drd ../Build/bin/x86_64/drd/Testbed`
+- Command line: `valgrind --tool=drd ../Build/bin/x86_64/DRD/Testbed`
 
 If using Mesa, you may need to override the OpenGL version.
 - Command line: `MESA_GL_VERSION_OVERRIDE=3.3COMPAT ../Build/bin/x86_64/Debug/Testbed`

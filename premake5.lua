@@ -8,9 +8,15 @@ workspace 'Box2D'
 		description = 'Make a DRD configuration that prevents false positives from b2ThreadPool (valgrind must be installed separately).'
 	}
 
+	newoption
+	{
+		trigger		= 'symbols',
+		description = 'Enable symbols in Release.'
+	}
+
 	configurations { 'Debug', 'Release' }
 	filter 'options:drd'
-		configurations { 'drd' }
+		configurations { 'DRD' }
 	filter {}
 	startproject 'Testbed'
 	location 'Build'
@@ -34,6 +40,9 @@ workspace 'Box2D'
 	filter 'configurations:Release'
 		defines { 'NDEBUG' }
 		optimize 'On'
+		filter 'options:symbols'
+			symbols 'On'
+		filter {}
 	filter 'configurations:drd'
 		defines { 'NDEBUG', 'b2_drd' }
 		optimize 'On'
@@ -46,10 +55,6 @@ project 'Box2D'
 	includedirs { '.' }
 	filter 'system:linux'
 		links { 'pthread' }
-	filter 'options:hwloc'
-		defines { 'b2_hwloc' }
-		links { 'hwloc' }
-	filter {}
 
 project 'HelloWorld'
 	kind 'ConsoleApp'
@@ -58,20 +63,12 @@ project 'HelloWorld'
 	links { 'Box2D' }
 	filter 'system:linux'
 		links { 'pthread' }
-	filter 'options:hwloc'
-		defines { 'b2_hwloc' }
-		links { 'hwloc' }
-	filter {}
 
 project 'Testbed'
 	kind 'ConsoleApp'
 	debugdir 'Testbed'
 	warnings 'Default'
 	includedirs { '.' }
-	filter 'options:hwloc'
-		defines { 'b2_hwloc' }
-		links { 'hwloc' }
-	filter {}
 
 	files
 	{
