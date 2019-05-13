@@ -79,7 +79,7 @@
 TestEntry g_testEntries[] =
 {
 	{"Multithread Demo", MultithreadDemo::Create, 1800},
-// These tests run too slowly with drd.
+// These tests are too slow with drd.
 #ifndef b2_drd
 	{"Many Bodies 1", ManyBodies1::Create, 480},
 	{"Many Bodies 2", ManyBodies2::Create, 480},

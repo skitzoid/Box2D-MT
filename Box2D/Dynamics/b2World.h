@@ -150,10 +150,12 @@ public:
 
 	/// Get/set the body, contact, and joint contributions to the estimated island solving cost.
 	/// islandCost = bodyCost * bodyCount + contactCost * contactCount + jointCost * jointCount
-	void SetIslandCostScales(uint32 bodyCost, uint32 contactCost, uint32 jointCost);
 	uint32 GetBodyCostScale() const { return m_bodyCost; }
 	uint32 GetContactCostScale() const { return m_contactCost; }
-	uint32 SetJointCostScale() const { return m_jointCost; }
+	uint32 GetJointCostScale() const { return m_jointCost; }
+	void SetBodyCostScale(uint32 bodyCost) { m_bodyCost = bodyCost; }
+	void SetContactCostScale(uint32 contactCost) { m_contactCost = contactCost; }
+	void SetJointCostScale(uint32 jointCost) { m_jointCost = jointCost; }
 
 	/// Get/set the solve task cost threshold. Islands will be added to the same solve task until
 	/// this cost threshold is reached.
@@ -405,13 +407,6 @@ inline bool b2World::IsLocked() const
 inline bool b2World::IsMtLocked() const
 {
 	return (m_flags & e_mtLocked) == e_mtLocked;
-}
-
-inline void b2World::SetIslandCostScales(uint32 bodyCost, uint32 contactCost, uint32 jointCost)
-{
-	m_bodyCost = bodyCost;
-	m_contactCost = contactCost;
-	m_jointCost = jointCost;
 }
 
 inline void b2World::SetAutoClearForces(bool flag)
