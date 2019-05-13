@@ -99,11 +99,11 @@ an issue if you want to discuss it.
 
 ## Time of Impact (TOI) Changes
 
-Since TOI is still processed on a single thread, it's important that it doesn't
+Since much of TOI is still processed on a single thread, it's important that it doesn't
 do more work than necessary.
 
 SolveTOI was accounting for 66% of the step time on the multithread demo, but
-these changes brought that down to 3%.
+these changes brought that down to 3% (and additional changes brought that to 1%).
 
 ### Finer-grained Continuous Collision Detection (CCD) Control
 
@@ -126,6 +126,11 @@ bool IsThickShape() const;
 ```
 
 You can also set thickShape in the fixture def before you create the fixture.
+
+```
+b2FixtureDef fd;
+fd.thickShape = true;
+```
 
 ### Partitioning Contacts Based on TOI Eligibility
 
