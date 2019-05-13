@@ -55,6 +55,7 @@ project 'Box2D'
 	includedirs { '.' }
 	filter 'system:linux'
 		links { 'pthread' }
+	filter {}
 
 project 'HelloWorld'
 	kind 'ConsoleApp'
@@ -63,6 +64,7 @@ project 'HelloWorld'
 	links { 'Box2D' }
 	filter 'system:linux'
 		links { 'pthread' }
+	filter {}
 
 project 'Testbed'
 	kind 'ConsoleApp'
