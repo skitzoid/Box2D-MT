@@ -439,6 +439,7 @@ static void sInterface()
 		ImGui::Text("Profile Smoothing");
 		ImGui::SliderInt("##Profile Smoothing", &settings.stepsPerProfileUpdate, 1, 60);
 
+		ImGui::Checkbox("Sub Trees", &settings.drawSubTrees);
 		ImGui::Checkbox("Shapes", &settings.drawShapes);
 		ImGui::Checkbox("Joints", &settings.drawJoints);
 		ImGui::Checkbox("AABBs", &settings.drawAABBs);

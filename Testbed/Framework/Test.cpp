@@ -305,6 +305,7 @@ void Test::Step(Settings* settings)
 	flags += settings->drawJoints			* b2Draw::e_jointBit;
 	flags += settings->drawAABBs			* b2Draw::e_aabbBit;
 	flags += settings->drawCOMs				* b2Draw::e_centerOfMassBit;
+	flags += settings->drawSubTrees			* b2Draw::e_subTreesBit;
 	g_debugDraw.SetFlags(flags);
 
 	m_world->SetAllowSleeping(settings->enableSleep);

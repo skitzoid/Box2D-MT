@@ -109,6 +109,13 @@ public:
 	ManyBodiesImpl(const Params& params)
 		: m_params(params)
 	{
+		// Splitting the broad-phase AABB tree into smaller sub-trees improves tree quality
+		// when there are many fixtures (better FindNewContacts performance). It can also
+		// improve parallelism of AABB updates (not yet implemented). TODO_MT parallel SynchronizeFixtures.
+#ifdef b2_dynamicTreeOfTrees
+		m_world->SetSubTreeSize(500.0f, 500.0f);
+#endif
+
 		const float32 kBorderHalfLength = m_params.borderHalfLength;
 		const float32 kBorderHalfWidth = 5.0f;
 
@@ -304,8 +311,6 @@ public:
 		}
 
 		m_world->SetGravity(b2Vec2_zero);
-
-		m_world->Step(m_timeStep, 0, 0, m_threadPoolExec);
 	}
 
 	void Step(Settings* settings)

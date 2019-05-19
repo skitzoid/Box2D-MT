@@ -39,6 +39,7 @@
 #include "DistanceTest.h"
 #include "Dominos.h"
 #include "DumpShell.h"
+#include "DuplicateProxyTest.h"
 #include "DynamicTreeTest.h"
 #include "EdgeShapes.h"
 #include "EdgeTest.h"
@@ -90,8 +91,9 @@ TestEntry g_testEntries[] =
 	{"Many Bodies 6", ManyBodies6::Create, 480},
 	{"SleepCollidePerf", SleepCollidePerf::Create, 1800},
 	{"Tunneling Test", TunnelingTest::Create, 1800},
-	{"Shape Cast", ShapeCast::Create, 60},
-	{"Time of Impact", TimeOfImpact::Create, 60},
+	{"Query Test", QueryTest::Create, 1},
+	{"Shape Cast", ShapeCast::Create, 1},
+	{"Time of Impact", TimeOfImpact::Create, 1},
 	{"Character Collision", CharacterCollision::Create, 240},
 	{"Tiles", Tiles::Create, 1020},
 	{"Heavy on Light", HeavyOnLight::Create, 480},

@@ -173,6 +173,10 @@ typedef double			float64;
 /// The number of task groups used by a world's step. Do not change this value.
 #define b2_maxWorldStepTaskGroups				1
 
+/// Defining this enables a modified broad-phase that tends to perform better with
+/// many fixtures.
+//#define b2_dynamicTreeOfTrees
+
 // Memory Allocation
 
 /// Implement this function to use your own memory allocator.

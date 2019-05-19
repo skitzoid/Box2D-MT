@@ -34,6 +34,10 @@ public:
 
 	MultithreadDemo()
 	{
+#ifdef b2_dynamicTreeOfTrees
+		m_world->SetSubTreeSize(15.0f, 15.0f);
+#endif
+
 		m_boxCount = 0;
 		m_thickWallsEnabled = false;
 

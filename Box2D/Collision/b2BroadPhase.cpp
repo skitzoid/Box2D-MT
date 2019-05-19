@@ -34,6 +34,15 @@ b2BroadPhase::~b2BroadPhase()
 
 }
 
+#ifdef b2_dynamicTreeOfTrees
+void b2BroadPhase::Reset(float32 subTreeWidth, float32 subTreeHeight)
+{
+	m_tree.Reset(subTreeWidth, subTreeHeight);
+	m_proxyCount = 0;
+	b2Assert(m_moveBuffer.size() == 0);
+}
+#endif
+
 int32 b2BroadPhase::CreateProxy(const b2AABB& aabb, void* userData)
 {
 	int32 proxyId = m_tree.CreateProxy(aabb, userData);

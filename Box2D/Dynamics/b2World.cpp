@@ -504,6 +504,31 @@ b2World::~b2World()
 	}
 }
 
+#ifdef b2_dynamicTreeOfTrees
+void b2World::SetSubTreeSize(float32 subTreeWidth, float32 subTreeHeight)
+{
+	m_contactManager.m_broadPhase.Reset(subTreeWidth, subTreeHeight);
+
+	// Re-create all fixture proxies.
+	b2Body* b = m_bodyList;
+	while (b)
+	{
+		b2Body* bNext = b->m_next;
+
+		b2Fixture* f = b->m_fixtureList;
+		while (f)
+		{
+			b2Fixture* fNext = f->m_next;
+			f->m_proxyCount = 0;
+			f->CreateProxies(&m_contactManager.m_broadPhase, b->GetTransform());
+			f = fNext;
+		}
+
+		b = bNext;
+	}
+}
+#endif
+
 void b2World::SetDestructionListener(b2DestructionListener* listener)
 {
 	m_destructionListener = listener;
@@ -1429,7 +1454,7 @@ void b2World::ClearPostSolve(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 		b2SubmitTasks(executor, taskGroup, bodyTasks, ranges.count);
 	}
 
-	// TODO_JUSTIN: MT
+	// TODO_MT
 	for (b2Joint* j = m_jointList; j; j = j->m_next)
 	{
 		j->m_islandFlag = false;
@@ -1720,12 +1745,12 @@ struct b2WorldQueryWrapper
 	b2QueryCallback* callback;
 };
 
-void b2World::QueryAABB(b2QueryCallback* callback, const b2AABB& aabb) const
+void b2World::QueryAABB(b2QueryCallback* callback, const b2AABB& aabb)
 {
 	b2WorldQueryWrapper wrapper;
 	wrapper.broadPhase = &m_contactManager.m_broadPhase;
 	wrapper.callback = callback;
-	m_contactManager.m_broadPhase.Query(&wrapper, aabb);
+	m_contactManager.m_broadPhase.Query(&wrapper, aabb, 0);
 }
 
 struct b2WorldRayCastWrapper
@@ -1753,7 +1778,7 @@ struct b2WorldRayCastWrapper
 	b2RayCastCallback* callback;
 };
 
-void b2World::RayCast(b2RayCastCallback* callback, const b2Vec2& point1, const b2Vec2& point2) const
+void b2World::RayCast(b2RayCastCallback* callback, const b2Vec2& point1, const b2Vec2& point2)
 {
 	b2WorldRayCastWrapper wrapper;
 	wrapper.broadPhase = &m_contactManager.m_broadPhase;
@@ -1762,7 +1787,7 @@ void b2World::RayCast(b2RayCastCallback* callback, const b2Vec2& point1, const b
 	input.maxFraction = 1.0f;
 	input.p1 = point1;
 	input.p2 = point2;
-	m_contactManager.m_broadPhase.RayCast(&wrapper, input);
+	m_contactManager.m_broadPhase.RayCast(&wrapper, input, 0);
 }
 
 void b2World::DrawShape(b2Fixture* fixture, const b2Transform& xf, const b2Color& color)
@@ -1998,6 +2023,38 @@ void b2World::DrawDebugData()
 			m_debugDraw->DrawTransform(xf);
 		}
 	}
+
+#ifdef b2_dynamicTreeOfTrees
+	struct b2DrawSubTree
+	{
+		bool QueryCallback(int32 proxyId)
+		{
+			b2Color color(0.8f, 0.8f, 0.4f);
+
+			b2AABB aabb = broadPhase->GetFatAABB(proxyId);
+			b2Vec2 vs[4];
+			vs[0].Set(aabb.lowerBound.x, aabb.lowerBound.y);
+			vs[1].Set(aabb.upperBound.x, aabb.lowerBound.y);
+			vs[2].Set(aabb.upperBound.x, aabb.upperBound.y);
+			vs[3].Set(aabb.lowerBound.x, aabb.upperBound.y);
+
+			debugDraw->DrawPolygon(vs, 4, color);
+
+			return true;
+		}
+
+		const b2BroadPhase* broadPhase;
+		b2Draw* debugDraw;
+	};
+
+	if (flags & b2Draw::e_subTreesBit)
+	{
+		b2DrawSubTree baseTreeVisitor;
+		baseTreeVisitor.broadPhase = &m_contactManager.m_broadPhase;
+		baseTreeVisitor.debugDraw = m_debugDraw;
+		m_contactManager.m_broadPhase.VisitBaseTree(&baseTreeVisitor);
+	}
+#endif
 }
 
 int32 b2World::GetProxyCount() const

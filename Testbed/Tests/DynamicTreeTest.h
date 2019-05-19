@@ -29,6 +29,9 @@ public:
 	};
 
 	DynamicTreeTest()
+#ifdef b2_dynamicTreeOfTrees
+		: m_tree(5.0f, 5.0f)
+#endif
 	{
 		m_worldExtent = 15.0f;
 		m_proxyExtent = 0.5f;
@@ -131,6 +134,35 @@ public:
 			g_debugDraw.DrawString(5, m_textLine, "dynamic tree height = %d", height);
 			m_textLine += DRAW_STRING_NEW_LINE;
 		}
+
+#ifdef b2_dynamicTreeOfTrees
+		struct b2DrawSubTree
+		{
+			bool QueryCallback(int32 proxyId)
+			{
+				b2Color color(0.8f, 0.8f, 0.4f);
+
+				b2AABB aabb = tree->GetFatAABB(proxyId);
+				b2Vec2 vs[4];
+				vs[0].Set(aabb.lowerBound.x, aabb.lowerBound.y);
+				vs[1].Set(aabb.upperBound.x, aabb.lowerBound.y);
+				vs[2].Set(aabb.upperBound.x, aabb.upperBound.y);
+				vs[3].Set(aabb.lowerBound.x, aabb.upperBound.y);
+
+				debugDraw->DrawPolygon(vs, 4, color);
+
+				return true;
+			}
+
+			const b2DynamicTreeOfTrees* tree;
+			DebugDraw* debugDraw;
+		};
+
+		b2DrawSubTree baseTreeVisitor;
+		baseTreeVisitor.tree = &m_tree;
+		baseTreeVisitor.debugDraw = &g_debugDraw;
+		m_tree.VisitBaseTree(&baseTreeVisitor);
+#endif
 
 		++m_stepCount;
 	}
@@ -291,7 +323,11 @@ private:
 
 	void Query()
 	{
+#ifdef b2_dynamicTreeOfTrees
+		m_tree.Query(this, m_queryAABB, 0);
+#else
 		m_tree.Query(this, m_queryAABB);
+#endif
 
 		for (int32 i = 0; i < e_actorCount; ++i)
 		{
@@ -313,7 +349,11 @@ private:
 		b2RayCastInput input = m_rayCastInput;
 
 		// Ray cast against the dynamic tree.
+#ifdef b2_dynamicTreeOfTrees
+		m_tree.RayCast(this, input, 0);
+#else
 		m_tree.RayCast(this, input);
+#endif
 
 		// Brute force ray cast.
 		Actor* bruteActor = NULL;
@@ -344,7 +384,11 @@ private:
 	float32 m_worldExtent;
 	float32 m_proxyExtent;
 
+#ifdef b2_dynamicTreeOfTrees
+	b2DynamicTreeOfTrees m_tree;
+#else
 	b2DynamicTree m_tree;
+#endif
 	b2AABB m_queryAABB;
 	b2RayCastInput m_rayCastInput;
 	b2RayCastOutput m_rayCastOutput;

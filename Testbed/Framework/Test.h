@@ -72,6 +72,7 @@ struct Settings
 		mtProfileIterations = 4;
 		mtConsistencyIterations = 2;
 		mtCurrentTestOnly = false;
+		drawSubTrees = true;
 		drawShapes = true;
 		drawJoints = true;
 		drawAABBs = false;
@@ -98,6 +99,7 @@ struct Settings
 	int32 mtProfileIterations;
 	int32 mtConsistencyIterations;
 	bool mtCurrentTestOnly;
+	bool drawSubTrees;
 	bool drawShapes;
 	bool drawJoints;
 	bool drawAABBs;

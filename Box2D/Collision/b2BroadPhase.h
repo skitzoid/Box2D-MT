@@ -21,7 +21,11 @@
 #define B2_BROAD_PHASE_H
 
 #include "Box2D/Collision/b2Collision.h"
+#ifdef b2_dynamicTreeOfTrees
+#include "Box2D/MT/b2DynamicTreeOfTrees.h"
+#else
 #include "Box2D/Collision/b2DynamicTree.h"
+#endif
 #include "Box2D/Common/b2GrowableArray.h"
 #include <algorithm>
 
@@ -55,6 +59,15 @@ public:
 
 	b2BroadPhase();
 	~b2BroadPhase();
+
+#ifdef b2_dynamicTreeOfTrees
+	/// Destroy all proxies and set the sub-tree dimensions.
+	void Reset(float32 subTreeWidth, float32 subTreeHeight);
+
+	/// Visit every leaf in the base tree.
+	template <typename T>
+	void VisitBaseTree(T* callback) const;
+#endif
 
 	/// Create a proxy with an initial AABB. Pairs are not reported until
 	/// UpdatePairs is called.
@@ -92,7 +105,7 @@ public:
 	/// Query an AABB for overlapping proxies. The callback class
 	/// is called for each proxy that overlaps the supplied AABB.
 	template <typename T>
-	void Query(T* callback, const b2AABB& aabb) const;
+	void Query(T* callback, const b2AABB& aabb, uint32 threadId);
 
 	/// Ray-cast against the proxies in the tree. This relies on the callback
 	/// to perform a exact ray-cast in the case were the proxy contains a shape.
@@ -102,7 +115,7 @@ public:
 	/// @param input the ray-cast input data. The ray extends from p1 to p1 + maxFraction * (p2 - p1).
 	/// @param callback a callback class that is called for each proxy that is hit by the ray.
 	template <typename T>
-	void RayCast(T* callback, const b2RayCastInput& input) const;
+	void RayCast(T* callback, const b2RayCastInput& input, uint32 threadId);
 
 	/// Get the height of the embedded tree.
 	int32 GetTreeHeight() const;
@@ -130,8 +143,11 @@ private:
 
 	void BufferMove(int32 proxyId);
 	void UnBufferMove(int32 proxyId);
-
+#ifdef b2_dynamicTreeOfTrees
+	b2DynamicTreeOfTrees m_tree;
+#else
 	b2DynamicTree m_tree;
+#endif
 
 	int32 m_proxyCount;
 	b2GrowableArray<int32> m_moveBuffer;
@@ -206,14 +222,16 @@ void b2BroadPhase::UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback, uint
 			continue;
 		}
 
-		b2AABB fatAABB;
-
 		// We have to query the tree with the fat AABB so that
 		// we don't fail to create a pair that may touch later.
-		fatAABB = m_tree.GetFatAABB(td->m_queryProxyId);
+		b2AABB fatAABB = m_tree.GetFatAABB(td->m_queryProxyId);
 
 		// Query the tree, create pairs and add them pair buffer.
+#ifdef b2_dynamicTreeOfTrees
+		m_tree.Query(td, fatAABB, threadId);
+#else
 		m_tree.Query(td, fatAABB);
+#endif
 	}
 
 	// Sort the pair buffer to expose duplicates.
@@ -249,16 +267,34 @@ void b2BroadPhase::UpdatePairs(int32 moveBegin, int32 moveEnd, T* callback, uint
 }
 
 template <typename T>
-inline void b2BroadPhase::Query(T* callback, const b2AABB& aabb) const
+inline void b2BroadPhase::Query(T* callback, const b2AABB& aabb, uint32 threadId)
 {
+#ifdef b2_dynamicTreeOfTrees
+	m_tree.Query(callback, aabb, threadId);
+#else
+	B2_NOT_USED(threadId);
 	m_tree.Query(callback, aabb);
+#endif
 }
 
 template <typename T>
-inline void b2BroadPhase::RayCast(T* callback, const b2RayCastInput& input) const
+inline void b2BroadPhase::RayCast(T* callback, const b2RayCastInput& input, uint32 threadId)
 {
+#ifdef b2_dynamicTreeOfTrees
+	m_tree.RayCast(callback, input, threadId);
+#else
+	B2_NOT_USED(threadId);
 	m_tree.RayCast(callback, input);
+#endif
 }
+
+#ifdef b2_dynamicTreeOfTrees
+template <typename T>
+inline void b2BroadPhase::VisitBaseTree(T* callback) const
+{
+	m_tree.VisitBaseTree(callback);
+}
+#endif
 
 inline void b2BroadPhase::ShiftOrigin(const b2Vec2& newOrigin)
 {
