@@ -65,6 +65,7 @@
 #include "ShapeCast.h"
 #include "ShapeEditing.h"
 #include "SleepCollidePerf.h"
+#include "SleepCollideTest.h"
 #include "SliderCrank.h"
 #include "SphereStack.h"
 #include "TheoJansen.h"
@@ -89,7 +90,8 @@ TestEntry g_testEntries[] =
 	{"Many Bodies 5", ManyBodies5::Create, 480},
 #endif
 	{"Many Bodies 6", ManyBodies6::Create, 480},
-	{"SleepCollidePerf", SleepCollidePerf::Create, 1800},
+	{"Sleep Collide Perf", SleepCollidePerf::Create, 1800},
+	{"Sleep Collide Test", SleepCollideTest::Create, 1800},
 	{"Tunneling Test", TunnelingTest::Create, 1800},
 	{"Query Test", QueryTest::Create, 1},
 	{"Shape Cast", ShapeCast::Create, 1},
