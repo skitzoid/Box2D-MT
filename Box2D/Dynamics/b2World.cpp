@@ -1764,6 +1764,55 @@ void b2World::QueryAABB(b2QueryCallback* callback, const b2AABB& aabb)
 	m_contactManager.m_broadPhase.Query(&wrapper, aabb, 0);
 }
 
+class b2QueryAABBTask : public b2RangeTask
+{
+public:
+	b2QueryAABBTask() {}
+	b2QueryAABBTask(const b2RangeTaskRange& range, b2ContactManager* contactManager, b2QueryCallback** callbacks, const b2AABB* aabbs)
+		: b2RangeTask(range)
+		, m_contactManager(contactManager)
+		, m_callbacks(callbacks)
+		, m_aabbs(aabbs)
+	{}
+
+	virtual b2Task::Type GetType() const override { return b2Task::e_queryAABB; }
+
+	virtual void Execute(const b2ThreadContext& threadCtx, const b2RangeTaskRange& range) override
+	{
+		for (uint32 i = range.begin; i < range.end; ++i)
+		{
+			b2WorldQueryWrapper wrapper;
+			wrapper.broadPhase = &m_contactManager->m_broadPhase;
+			wrapper.callback = m_callbacks[i];
+			m_contactManager->m_broadPhase.Query(&wrapper, m_aabbs[i], threadCtx.threadId);
+		}
+	}
+
+private:
+	b2ContactManager* m_contactManager;
+	b2QueryCallback** m_callbacks;
+	const b2AABB* m_aabbs;
+};
+
+void b2World::ExecuteQueryAABBs(b2QueryCallback** callbacks, const b2AABB* aabbs, uint32 count, b2TaskExecutor& executor)
+{
+	SetMtLock(e_mtLocked);
+	b2TaskGroup* taskGroup = executor.AcquireTaskGroup();
+
+	b2QueryAABBTask tasks[b2_maxRangeSubTasks];
+	b2PartitionedRange ranges;
+	executor.PartitionRange(b2Task::e_queryAABB, 0, count, ranges);
+	for (uint32 i = 0; i < ranges.count; ++i)
+	{
+		tasks[i] = b2QueryAABBTask(ranges[i], &m_contactManager, callbacks, aabbs);
+	}
+	b2SubmitTasks(executor, taskGroup, tasks, ranges.count);
+	executor.Wait(taskGroup, b2MainThreadCtx(&m_stackAllocator));
+
+	executor.ReleaseTaskGroup(taskGroup);
+	SetMtLock(0);
+}
+
 struct b2WorldRayCastWrapper
 {
 	float32 RayCastCallback(const b2RayCastInput& input, int32 proxyId)
@@ -1799,6 +1848,63 @@ void b2World::RayCast(b2RayCastCallback* callback, const b2Vec2& point1, const b
 	input.p1 = point1;
 	input.p2 = point2;
 	m_contactManager.m_broadPhase.RayCast(&wrapper, input, 0);
+}
+
+class b2RayCastTask : public b2RangeTask
+{
+public:
+	b2RayCastTask() {}
+	b2RayCastTask(const b2RangeTaskRange& range, b2ContactManager* contactManager, b2RayCastCallback** callbacks,
+		const b2Vec2* points1, const b2Vec2* points2)
+		: b2RangeTask(range)
+		, m_contactManager(contactManager)
+		, m_callbacks(callbacks)
+		, m_points1(points1)
+		, m_points2(points2)
+	{}
+
+	virtual b2Task::Type GetType() const override { return b2Task::e_queryAABB; }
+
+	virtual void Execute(const b2ThreadContext&, const b2RangeTaskRange& range) override
+	{
+		for (uint32 i = range.begin; i < range.end; ++i)
+		{
+			b2WorldRayCastWrapper wrapper;
+			wrapper.broadPhase = &m_contactManager->m_broadPhase;
+			wrapper.callback = m_callbacks[i];
+			b2RayCastInput input;
+			input.maxFraction = 1.0f;
+			input.p1 = m_points1[i];
+			input.p2 = m_points2[i];
+			m_contactManager->m_broadPhase.RayCast(&wrapper, input, 0);
+		}
+	}
+
+private:
+	b2ContactManager* m_contactManager;
+	b2RayCastCallback** m_callbacks;
+	const b2Vec2* m_points1;
+	const b2Vec2* m_points2;
+};
+
+void b2World::ExecuteRayCasts(b2RayCastCallback** callbacks, const b2Vec2* points1, const b2Vec2* points2, uint32 count,
+	b2TaskExecutor& executor)
+{
+	SetMtLock(e_mtLocked);
+	b2TaskGroup* taskGroup = executor.AcquireTaskGroup();
+
+	b2RayCastTask tasks[b2_maxRangeSubTasks];
+	b2PartitionedRange ranges;
+	executor.PartitionRange(b2Task::e_raycast, 0, count, ranges);
+	for (uint32 i = 0; i < ranges.count; ++i)
+	{
+		tasks[i] = b2RayCastTask(ranges[i], &m_contactManager, callbacks, points1, points2);
+	}
+	b2SubmitTasks(executor, taskGroup, tasks, ranges.count);
+	executor.Wait(taskGroup, b2MainThreadCtx(&m_stackAllocator));
+
+	executor.ReleaseTaskGroup(taskGroup);
+	SetMtLock(0);
 }
 
 void b2World::DrawShape(b2Fixture* fixture, const b2Transform& xf, const b2Color& color)

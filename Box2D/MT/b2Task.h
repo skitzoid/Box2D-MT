@@ -49,6 +49,8 @@ public:
 		e_clearForces,
 		e_collide,
 		e_findMinToiContact,
+		e_raycast,
+		e_queryAABB,
 
 		e_rangeTypeCount,
 
