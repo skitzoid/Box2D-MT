@@ -41,6 +41,21 @@
 static int32 b2_toiBodyCapacity = 2 * b2_maxTOIContacts;
 static int32 b2_toiContactCapacity = b2_maxTOIContacts;
 
+inline bool b2IsContactActive(b2Contact* c)
+{
+	b2Body* bodyA = c->GetFixtureA()->GetBody();
+	b2Body* bodyB = c->GetFixtureB()->GetBody();
+
+	// At least one body must be awake and it must be dynamic or kinematic.
+	if ((bodyA->IsAwake() && bodyA->GetType() != b2_staticBody) ||
+		(bodyB->IsAwake() && bodyB->GetType() != b2_staticBody))
+	{
+		return true;
+	}
+
+	return false;
+}
+
 class b2SolveTask : public b2Task
 {
 public:
@@ -84,7 +99,7 @@ public:
 			b2Island& island = m_islands[islandIndex];
 
 			island.Solve(&td.m_profile, timestep, gravity, threadCtx.stack, contactListener,
-				threadCtx.threadId, allowSleep, td.m_postSolves, td.m_sleeps);
+				threadCtx.threadId, allowSleep, td.m_postSolves);
 		}
 	}
 
@@ -322,10 +337,10 @@ public:
 			b2Body* bA = fA->GetBody();
 			b2Body* bB = fB->GetBody();
 
-			// Inactive contacts are filtered out.
-			bool activeA = bA->IsAwake() && bA->GetType() != b2_staticBody;
-			bool activeB = bB->IsAwake() && bB->GetType() != b2_staticBody;
-			b2Assert (activeA || activeB);
+			if (b2IsContactActive(c) == false)
+			{
+				continue;
+			}
 
 			b2BodyType typeA = bA->GetType();
 			b2BodyType typeB = bB->GetType();
@@ -374,13 +389,10 @@ b2_forceInline float32 b2World::ComputeToi(b2Contact* c)
 
 	b2Assert(b2Contact::IsToiCandidate(fA, fB));
 
+	b2Assert(b2IsContactActive(c));
+
 	b2Body* bA = fA->GetBody();
 	b2Body* bB = fB->GetBody();
-
-	// Inactive contacts are filtered out.
-	bool activeA = bA->IsAwake() && bA->GetType() != b2_staticBody;
-	bool activeB = bB->IsAwake() && bB->GetType() != b2_staticBody;
-	b2Assert (activeA || activeB);
 
 	b2BodyType typeA = bA->GetType();
 	b2BodyType typeB = bB->GetType();
@@ -727,7 +739,7 @@ b2Joint* b2World::CreateJoint(const b2JointDef* def)
 			{
 				// Flag the contact for filtering at the next time step (where either
 				// body is awake).
-				m_contactManager.FlagForFiltering(edge->contact);
+				edge->contact->m_flags |= b2Contact::e_filterFlag;
 			}
 
 			edge = edge->next;
@@ -826,7 +838,7 @@ void b2World::DestroyJoint(b2Joint* j)
 			{
 				// Flag the contact for filtering at the next time step (where either
 				// body is awake).
-				m_contactManager.FlagForFiltering(edge->contact);
+				edge->contact->m_flags |= b2Contact::e_filterFlag;
 			}
 
 			edge = edge->next;
@@ -1127,8 +1139,6 @@ void b2World::Collide(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 		return;
 	}
 
-	m_contactManager.StartCollide();
-
 	SetMtLock(e_mtLocked | e_mtCollisionLocked);
 
 	b2CollideTask tasks[b2_maxRangeSubTasks];
@@ -1244,6 +1254,9 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b2Ti
 			{
 				continue;
 			}
+
+			// Make sure the body is awake (without resetting sleep timer).
+			b->m_flags |= b2Body::e_awakeFlag;
 
 			// Search all contacts connected to this body.
 			for (b2ContactEdge* ce = b->m_contactList; ce; ce = ce->next)
@@ -1591,6 +1604,11 @@ void b2World::FindMinToiContact(b2Contact** contactOut, float* alphaOut)
 			continue;
 		}
 
+		if (b2IsContactActive(c) == false)
+		{
+			continue;
+		}
+
 		float32 alpha = ComputeToi(c);
 
 		if (minContact == nullptr || b2Contact::ToiLessThan(alpha, c, minAlpha, minContact))
@@ -1715,13 +1733,6 @@ void b2World::RecalculateToiCandidacy(b2Fixture* f)
 	b2Assert(IsMtLocked() == false);
 
 	m_contactManager.RecalculateToiCandidacy(f);
-}
-
-void b2World::RecalculateSleeping(b2Body* b)
-{
-	b2Assert(IsMtLocked() == false);
-
-	m_contactManager.RecalculateSleeping(b);
 }
 
 void b2World::ClearForces()

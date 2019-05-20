@@ -52,8 +52,7 @@ public:
 	}
 
 	void Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& gravity, b2StackAllocator* allocator,
-		b2ContactListener* listener, uint32 threadId, bool allowSleep, b2GrowableArray<b2DeferredPostSolve>& postSolves,
-		b2GrowableArray<b2Body*>& sleeps);
+		b2ContactListener* listener, uint32 threadId, bool allowSleep, b2GrowableArray<b2DeferredPostSolve>& postSolves);
 
 	void SolveTOI(const b2TimeStep& subStep, int32 toiIndexA, int32 toiIndexB, b2StackAllocator* allocator,
 		b2ContactListener* listener);

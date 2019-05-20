@@ -182,8 +182,7 @@ b2Island::b2Island(int32 bodyCount, int32 contactCount, int32 jointCount,
 }
 
 void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& gravity, b2StackAllocator* allocator,
-		b2ContactListener* listener, uint32 threadId, bool allowSleep, b2GrowableArray<b2DeferredPostSolve>& postSolves,
-		b2GrowableArray<b2Body*>& sleeps)
+		b2ContactListener* listener, uint32 threadId, bool allowSleep, b2GrowableArray<b2DeferredPostSolve>& postSolves)
 {
 	b2Timer timer;
 
@@ -389,7 +388,7 @@ void b2Island::Solve(b2Profile* profile, const b2TimeStep& step, const b2Vec2& g
 				b2Body* b = m_bodies[i];
 				if (b->GetType() != b2_staticBody)
 				{
-					sleeps.push_back(b);
+					b->SetAwake(false);
 				}
 			}
 		}

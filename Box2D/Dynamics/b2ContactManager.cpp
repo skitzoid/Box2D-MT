@@ -91,26 +91,10 @@ bool b2ToiContactPointerLessThan(const b2Contact* a, const b2Contact* b)
 	return b2Contact::ToiLessThan(a->m_toi, a, b->m_toi, b);
 }
 
-inline bool b2ContactManager::IsContactActive(b2Contact* c)
-{
-	b2Body* bodyA = c->m_nodeB.other;
-	b2Body* bodyB = c->m_nodeA.other;
-
-	// At least one body must be awake and it must be dynamic or kinematic.
-	if ((bodyA->IsAwake() && bodyA->GetType() != b2_staticBody) ||
-		(bodyB->IsAwake() && bodyB->GetType() != b2_staticBody))
-	{
-		return true;
-	}
-
-	return false;
-}
-
 b2ContactManager::b2ContactManager()
 	: m_perThreadData{}
 {
 	m_contactList = nullptr;
-	m_contactListLastFiltering = nullptr;
 	m_contactFilter = &b2_defaultFilter;
 	m_contactListener = &b2_defaultListener;
 	m_allocator = nullptr;
@@ -184,11 +168,40 @@ void b2ContactManager::Collide(uint32 contactsBegin, uint32 contactsEnd, uint32 
 	{
 		b2Contact* c = m_contacts[i];
 
-		// Filtering is handled before collision.
-		b2Assert ((c->m_flags & b2Contact::e_filterFlag) == 0);
+		b2Fixture* fixtureA = c->GetFixtureA();
+		b2Fixture* fixtureB = c->GetFixtureB();
+		b2Body* bodyA = fixtureA->GetBody();
+		b2Body* bodyB = fixtureB->GetBody();
 
-		// Inactive contacts are removed from the contact array.
-		b2Assert(IsContactActive(c));
+		// Is this contact flagged for filtering?
+		if (c->m_flags & b2Contact::e_filterFlag)
+		{
+			// Should these bodies collide?
+			if (bodyB->ShouldCollide(bodyA) == false)
+			{
+				td.m_destroys.push_back(c);
+				continue;
+			}
+
+			// Check user filtering.
+			if (m_contactFilter && m_contactFilter->ShouldCollide(fixtureA, fixtureB, threadId) == false)
+			{
+				td.m_destroys.push_back(c);
+				continue;
+			}
+
+			// Clear the filtering flag.
+			c->m_flags &= ~b2Contact::e_filterFlag;
+		}
+
+		bool activeA = bodyA->IsAwake() && bodyA->m_type != b2_staticBody;
+		bool activeB = bodyB->IsAwake() && bodyB->m_type != b2_staticBody;
+
+		// At least one body must be awake and it must be dynamic or kinematic.
+		if (activeA == false && activeB == false)
+		{
+			continue;
+		}
 
 		bool overlap = m_broadPhase.TestOverlap(c->m_proxyIds.low, c->m_proxyIds.high);
 
@@ -202,56 +215,6 @@ void b2ContactManager::Collide(uint32 contactsBegin, uint32 contactsEnd, uint32 
 		// The contact persists.
 		c->Update(td, m_contactListener, threadId);
 	}
-}
-
-// Process filtering for any contacts that need it.
-// MT note: this was moved out of Collide because we remove inactive contacts from the contact
-// array, but they can still require filtering.
-void b2ContactManager::StartCollide()
-{
-	if (m_contactListLastFiltering == nullptr)
-	{
-		return;
-	}
-
-	b2Contact* c = m_contactList;
-	b2Contact* filteringEnd = m_contactListLastFiltering->GetNext();
-	while (c != filteringEnd)
-	{
-		b2Fixture* fixtureA = c->GetFixtureA();
-		b2Fixture* fixtureB = c->GetFixtureB();
-		b2Body* bodyA = fixtureA->GetBody();
-		b2Body* bodyB = fixtureB->GetBody();
-
-		// Is this contact flagged for filtering?
-		if (c->m_flags & b2Contact::e_filterFlag)
-		{
-			// Should these bodies collide?
-			if (bodyB->ShouldCollide(bodyA) == false)
-			{
-				b2Contact* cNuke = c;
-				c = cNuke->GetNext();
-				Destroy(cNuke);
-				continue;
-			}
-
-			// Check user filtering.
-			if (m_contactFilter && m_contactFilter->ShouldCollide(fixtureA, fixtureB, 0) == false)
-			{
-				b2Contact* cNuke = c;
-				c = cNuke->GetNext();
-				Destroy(cNuke);
-				continue;
-			}
-
-			// Clear the filtering flag.
-			c->m_flags &= ~b2Contact::e_filterFlag;
-		}
-
-		c = c->GetNext();
-	}
-
-	m_contactListLastFiltering = nullptr;
 }
 
 void b2ContactManager::FindNewContacts(uint32 moveBegin, uint32 moveEnd, uint32 threadId)
@@ -424,30 +387,22 @@ void b2ContactManager::FinishCollide(b2TaskExecutor& executor, b2TaskGroup* task
 	auto destroys = b2MakeStackAllocThreadDataSorter<b2Contact*>(m_perThreadData,
 		&b2ContactManagerPerThreadData::m_destroys, b2ContactPointerLessThan, allocator);
 
-	auto awakes = b2MakeStackAllocThreadDataSorter<b2Contact*>(m_perThreadData,
-		&b2ContactManagerPerThreadData::m_awakes, b2ContactPointerLessThan, allocator);
-
-	while (begins.IsSubmitRequired() || ends.IsSubmitRequired() ||
-		preSolves.IsSubmitRequired() || destroys.IsSubmitRequired() ||
-		awakes.IsSubmitRequired())
+	while (true)
 	{
 		begins.SubmitSortTask(executor, taskGroup);
 		ends.SubmitSortTask(executor, taskGroup);
 		preSolves.SubmitSortTask(executor, taskGroup);
 		destroys.SubmitSortTask(executor, taskGroup);
-		awakes.SubmitSortTask(executor, taskGroup);
+
+		if (begins.IsSubmitRequired() == false && ends.IsSubmitRequired() == false &&
+			preSolves.IsSubmitRequired() == false && destroys.IsSubmitRequired() == false)
+		{
+			ConsumeAwakes();
+			executor.Wait(taskGroup, b2MainThreadCtx(&allocator));
+			break;
+		}
 
 		executor.Wait(taskGroup, b2MainThreadCtx(&allocator));
-	}
-
-	for (auto it = awakes.begin(); it != awakes.end(); ++it)
-	{
-		b2Contact* c = *it;
-		b2Body* bodyA = c->m_nodeB.other;
-		b2Body* bodyB = c->m_nodeB.other;
-
-		bodyA->SetAwake(true);
-		bodyB->SetAwake(true);
 	}
 
 	for (auto it = begins.begin(); it != begins.end(); ++it)
@@ -489,27 +444,32 @@ void b2ContactManager::FinishSolve(b2TaskExecutor& executor, b2TaskGroup* taskGr
 	auto postSolves = b2MakeStackAllocThreadDataSorter<b2DeferredPostSolve>(m_perThreadData,
 		&b2ContactManagerPerThreadData::m_postSolves, b2DeferredPostSolveLessThan, allocator);
 
-	auto sleeps = b2MakeStackAllocThreadDataSorter<b2Body*>(m_perThreadData,
-		&b2ContactManagerPerThreadData::m_sleeps, b2BodyPointerLessThan, allocator);
-
-	while (postSolves.IsSubmitRequired() || sleeps.IsSubmitRequired())
+	while (postSolves.IsSubmitRequired())
 	{
 		postSolves.SubmitSortTask(executor, taskGroup);
-		sleeps.SubmitSortTask(executor, taskGroup);
 
 		executor.Wait(taskGroup, b2MainThreadCtx(&allocator));
-	}
-
-	for (auto it = sleeps.begin(); it != sleeps.end(); ++it)
-	{
-		b2Body* b = *it;
-
-		b->SetAwake(false);
 	}
 
 	for (auto it = postSolves.begin(); it != postSolves.end(); ++it)
 	{
 		m_contactListener->PostSolve(it->contact, &it->impulse);
+	}
+}
+
+void b2ContactManager::ConsumeAwakes()
+{
+	for (uint32 i = 0; i < b2_maxThreads; ++i)
+	{
+		while (m_perThreadData[i].m_awakes.size())
+		{
+			b2Contact* c = m_perThreadData[i].m_awakes.pop_back();
+			b2Body* bodyA = c->m_nodeB.other;
+			b2Body* bodyB = c->m_nodeB.other;
+
+			bodyA->SetAwake(true);
+			bodyB->SetAwake(true);
+		}
 	}
 }
 
@@ -582,10 +542,7 @@ inline void b2ContactManager::OnContactCreate(b2Contact* c, b2ContactProxyIds pr
 
 	// Insert into the world.
 	AddToContactList(c);
-	if (IsContactActive(c))
-	{
-		AddToContactArray(c);
-	}
+	AddToContactArray(c);
 }
 
 void b2ContactManager::RecalculateToiCandidacy(b2Body* body)
@@ -638,7 +595,6 @@ void b2ContactManager::RecalculateToiCandidacy(b2Contact* c)
 
 	if (c->m_managerIndex == -1)
 	{
-		b2Assert(IsContactActive(c) == false);
 		SanityCheck();
 		return;
 	}
@@ -660,37 +616,6 @@ void b2ContactManager::RecalculateToiCandidacy(b2Contact* c)
 		m_contacts[c->m_managerIndex] = m_contacts[m_toiCount];
 		m_contacts[m_toiCount] = c;
 		c->m_managerIndex = m_toiCount;
-	}
-
-	SanityCheck();
-}
-
-void b2ContactManager::RecalculateSleeping(b2Body* body)
-{
-	for (b2ContactEdge* ce = body->GetContactList(); ce; ce = ce->next)
-	{
-		b2Contact* c = ce->contact;
-
-		if (c->m_managerIndex == -1 && IsContactActive(c))
-		{
-			AddToContactArray(c);
-		}
-		else if (c->m_managerIndex != -1 && IsContactActive(c) == false)
-		{
-			RemoveFromContactArray(c);
-		}
-	}
-
-	SanityCheck();
-}
-
-void b2ContactManager::FlagForFiltering(b2Contact* c)
-{
-	if ((c->m_flags & b2Contact::e_filterFlag) == 0)
-	{
-		RemoveFromContactList(c);
-		c->m_flags |= b2Contact::e_filterFlag;
-		AddToContactList(c);
 	}
 
 	SanityCheck();
@@ -754,28 +679,13 @@ inline void b2ContactManager::RemoveFromContactArray(b2Contact* c)
 
 inline void b2ContactManager::AddToContactList(b2Contact* c)
 {
-	bool needsFiltering = (c->m_flags & b2Contact::e_filterFlag) == b2Contact::e_filterFlag;
-
-	if (needsFiltering == false && m_contactListLastFiltering)
+	c->m_prev = nullptr;
+	c->m_next = m_contactList;
+	if (m_contactList != nullptr)
 	{
-		c->m_prev = m_contactListLastFiltering;
-		c->m_next = m_contactListLastFiltering->m_next;
-		m_contactListLastFiltering->m_next = c;
+		m_contactList->m_prev = c;
 	}
-	else
-	{
-		c->m_prev = nullptr;
-		c->m_next = m_contactList;
-		if (m_contactList != nullptr)
-		{
-			m_contactList->m_prev = c;
-		}
-		m_contactList = c;
-		if (needsFiltering && m_contactListLastFiltering == nullptr)
-		{
-			m_contactListLastFiltering = c;
-		}
-	}
+	m_contactList = c;
 }
 
 inline void b2ContactManager::RemoveFromContactList(b2Contact* c)
@@ -792,10 +702,6 @@ inline void b2ContactManager::RemoveFromContactList(b2Contact* c)
 	{
 		m_contactList = c->m_next;
 	}
-	if (c == m_contactListLastFiltering)
-	{
-		m_contactListLastFiltering = c->m_prev;
-	}
 }
 
 void b2ContactManager::SanityCheck()
@@ -809,25 +715,17 @@ void b2ContactManager::SanityCheck()
 
 	for (b2Contact* c = m_contactList; c; c = c->m_next)
 	{
-		bool isActive = IsContactActive(c);
 		int32 index = c->m_managerIndex;
-		if (index == -1)
+		b2Assert(index > -1);
+		b2Contact* other = m_contacts[index];
+		b2Assert(c == other);
+		if (b2Contact::IsToiCandidate(c->GetFixtureA(), c->GetFixtureB()))
 		{
-			b2Assert(isActive == false);
+			b2Assert(index < (int32)m_toiCount);
 		}
 		else
 		{
-			b2Assert(isActive);
-			b2Contact* other = m_contacts[index];
-			b2Assert(c == other);
-			if (b2Contact::IsToiCandidate(c->GetFixtureA(), c->GetFixtureB()))
-			{
-				b2Assert(index < (int32)m_toiCount);
-			}
-			else
-			{
-				b2Assert(index >= (int32)m_toiCount);
-			}
+			b2Assert(index >= (int32)m_toiCount);
 		}
 	}
 #endif

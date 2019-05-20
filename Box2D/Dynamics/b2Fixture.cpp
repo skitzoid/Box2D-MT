@@ -203,7 +203,7 @@ void b2Fixture::Refilter()
 		b2Fixture* fixtureB = contact->GetFixtureB();
 		if (fixtureA == this || fixtureB == this)
 		{
-			world->m_contactManager.FlagForFiltering(contact);
+			contact->m_flags |= b2Contact::e_filterFlag;
 		}
 
 		edge = edge->next;

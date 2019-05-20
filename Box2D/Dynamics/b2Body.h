@@ -466,8 +466,6 @@ private:
 	bool VerifyMtUnlocked();
 	bool VerifyMtCollisionUnlocked();
 
-	void RecalculateSleeping();
-
 	b2ContactEdge* m_contactList;
 	b2JointEdge* m_jointList;
 
@@ -694,8 +692,6 @@ inline void b2Body::SetAwake(bool flag)
 		return;
 	}
 
-	bool status = (m_flags & e_awakeFlag) == e_awakeFlag;
-
 	if (flag)
 	{
 		m_flags |= e_awakeFlag;
@@ -709,11 +705,6 @@ inline void b2Body::SetAwake(bool flag)
 		m_angularVelocity = 0.0f;
 		m_force.SetZero();
 		m_torque = 0.0f;
-	}
-
-	if (status != flag)
-	{
-		RecalculateSleeping();
 	}
 }
 

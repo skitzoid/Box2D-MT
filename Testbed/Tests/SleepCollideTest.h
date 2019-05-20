@@ -19,7 +19,7 @@
 #ifndef SLEEP_COLLIDE_TEST_H
 #define SLEEP_COLLIDE_TEST_H
 
-// Detect a bug where collisions with sleeping bodies were ignored.
+// Regression test for a bug where collisions between sleeping bodies were ignored.
 class SleepCollideTest : public Test
 {
 public:

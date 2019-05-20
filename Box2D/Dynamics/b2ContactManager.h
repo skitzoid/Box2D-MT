@@ -76,7 +76,6 @@ struct b2ContactManagerPerThreadData
 	b2GrowableArray<b2Contact*> m_endContacts;
 	b2GrowableArray<b2DeferredPreSolve> m_preSolves;
 	b2GrowableArray<b2DeferredPostSolve> m_postSolves;
-	b2GrowableArray<b2Body*> m_sleeps;
 	b2GrowableArray<b2Contact*> m_awakes;
 	b2GrowableArray<b2Contact*> m_destroys;
 	b2GrowableArray<b2DeferredContactCreate> m_creates;
@@ -94,9 +93,6 @@ public:
 
 	// Broad-phase callback.
 	void AddPair(void* proxyUserDataA, void* proxyUserDataB, uint32 threadId);
-
-	// This is called before running the multithreaded task.
-	void StartCollide();
 
 	// These are called from multithreaded tasks.
 	void FindNewContacts(uint32 moveBegin, uint32 moveEnd, uint32 threadId);
@@ -126,15 +122,8 @@ public:
 	void RecalculateToiCandidacy(b2Body* body);
 	void RecalculateToiCandidacy(b2Fixture* fixture);
 
-	// Reorder contacts when sleeping state changes.
-	void RecalculateSleeping(b2Body* body);
-
-	// Flag the contact for filtering on the next step.
-	void FlagForFiltering(b2Contact* contact);
-
 	b2BroadPhase m_broadPhase;
 	b2Contact* m_contactList;
-	b2Contact* m_contactListLastFiltering;
 	b2ContactFilter* m_contactFilter;
 	b2ContactListener* m_contactListener;
 	b2BlockAllocator* m_allocator;
@@ -150,8 +139,7 @@ public:
 	bool m_deferCreates;
 
 private:
-	static bool IsContactActive(b2Contact* contact);
-
+	void ConsumeAwakes();
 	void ConsumeCreate(const b2DeferredContactCreate& create);
 
 	void RecalculateToiCandidacy(b2Contact* contact);
