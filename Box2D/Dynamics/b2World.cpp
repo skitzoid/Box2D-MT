@@ -1020,8 +1020,6 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b
 	// If the step is not complete then they were modified during a previous sub step.
 	bool clearPostSolveTOI = m_stepComplete == false;
 
-	uint32 tempCounter = 0;
-
 	// Find TOI events and solve them.
 	for (;;)
 	{
@@ -1052,11 +1050,8 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b
 			{
 				ClearPostSolveTOI(executor, taskGroup);
 			}
-			printf("SolveTOI: %d\n", tempCounter);
 			break;
 		}
-
-		++tempCounter;
 
 		StepSolveTOI(step, island, minContact, minAlpha);
 
@@ -1556,7 +1551,7 @@ void b2World::FindMinToiContact(b2Contact** contactOut, float* alphaOut)
 
 		if (c->IsMinToiCandidate() == false)
 		{
-			//continue;
+			continue;
 		}
 
 		float32 alpha = ComputeToi(c);
