@@ -34,10 +34,6 @@ public:
 
 	SleepCollidePerf()
 	{
-#ifdef b2_dynamicTreeOfTrees
-		m_world->SetSubTreeSize(15.0f, 15.0f);
-#endif
-
         m_tumblerSize = 0;
 
 		{
@@ -90,7 +86,7 @@ public:
 
         // Tumbler
         {
-            float32 x = -30.0f * e_tumblerCount * 0.5f + 10.0f;
+            float32 x = -30.0f * e_tumblerCount * 0.5f + 15.0f;
             for (int32 i = 0; i < e_tumblerCount; ++i)
             {
                 b2BodyDef bd;
@@ -131,7 +127,7 @@ public:
 
 		if (m_tumblerSize < e_tumblerSize * e_tumblerCount)
 		{
-            float32 x = -30.0f * e_tumblerCount * 0.5f + 10.0f;
+            float32 x = -30.0f * e_tumblerCount * 0.5f + 15.0f;
             for (int32 i = 0; i < e_tumblerCount; ++i)
             {
                 b2BodyDef bd;
