@@ -196,7 +196,10 @@ protected:
 		e_toiFlag			= 0x0020,
 
 		// This contact must be checked for TOI events.
-		e_toiCandidateFlag	= 0x0040
+		e_toiCandidateFlag	= 0x0040,
+
+		// Neither body is awake and non-static.
+		e_inactiveFlag		= 0x0080
 	};
 
 	static void AddType(b2ContactCreateFcn* createFcn, b2ContactDestroyFcn* destroyFcn,

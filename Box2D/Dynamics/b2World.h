@@ -284,6 +284,8 @@ private:
 	void RecalculateToiCandidacy(b2Body* b);
 	void RecalculateToiCandidacy(b2Fixture* f);
 
+	void RecalculateSleeping(b2Body* b);
+
 	void DrawJoint(b2Joint* joint);
 	void DrawShape(b2Fixture* shape, const b2Transform& xf, const b2Color& color);
 

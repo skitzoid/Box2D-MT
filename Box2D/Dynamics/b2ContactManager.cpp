@@ -91,6 +91,21 @@ bool b2ToiContactPointerLessThan(const b2Contact* a, const b2Contact* b)
 	return b2Contact::ToiLessThan(a->m_toi, a, b->m_toi, b);
 }
 
+inline bool b2ContactManager::IsContactActive(b2Contact* c)
+{
+	b2Body* bodyA = c->m_nodeB.other;
+	b2Body* bodyB = c->m_nodeA.other;
+
+	// At least one body must be awake and it must be dynamic or kinematic.
+	if ((bodyA->IsAwake() && bodyA->GetType() != b2_staticBody) ||
+		(bodyB->IsAwake() && bodyB->GetType() != b2_staticBody))
+	{
+		return true;
+	}
+
+	return false;
+}
+
 b2ContactManager::b2ContactManager()
 	: m_perThreadData{}
 {
@@ -194,11 +209,7 @@ void b2ContactManager::Collide(uint32 contactsBegin, uint32 contactsEnd, uint32 
 			c->m_flags &= ~b2Contact::e_filterFlag;
 		}
 
-		bool activeA = bodyA->IsAwake() && bodyA->m_type != b2_staticBody;
-		bool activeB = bodyB->IsAwake() && bodyB->m_type != b2_staticBody;
-
-		// At least one body must be awake and it must be dynamic or kinematic.
-		if (activeA == false && activeB == false)
+		if (c->m_flags & b2Contact::e_inactiveFlag)
 		{
 			continue;
 		}
@@ -540,6 +551,12 @@ inline void b2ContactManager::OnContactCreate(b2Contact* c, b2ContactProxyIds pr
 	}
 	bodyB->m_contactList = &c->m_nodeB;
 
+	// Is the contact inactive?
+	if (IsContactActive(c) == false)
+	{
+		c->m_flags |= b2Contact::e_inactiveFlag;
+	}
+
 	// Insert into the world.
 	AddToContactList(c);
 	AddToContactArray(c);
@@ -619,6 +636,23 @@ void b2ContactManager::RecalculateToiCandidacy(b2Contact* c)
 	}
 
 	SanityCheck();
+}
+
+void b2ContactManager::RecalculateSleeping(b2Body* body)
+{
+	for (b2ContactEdge* ce = body->GetContactList(); ce; ce = ce->next)
+	{
+		b2Contact* c = ce->contact;
+
+		if (IsContactActive(c) == false)
+		{
+			c->m_flags |= b2Contact::e_inactiveFlag;
+		}
+		else
+		{
+			c->m_flags &= ~b2Contact::e_inactiveFlag;
+		}
+	}
 }
 
 inline void b2ContactManager::AddToContactArray(b2Contact* c)
