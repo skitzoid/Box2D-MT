@@ -39,8 +39,10 @@ std::mutex g_debugMutex;
 uint32 g_debugCounter;
 uint32 g_debugFinishMoveProxyCounter;
 
-#define b2_debugPrintCondition() (nodeId == 17943)
-#define b2_debugPrintExtra()
+#define b2_debugPrintCondition() (nodeId == 17945 || nodeId == 17943 || nodeId == 17942)
+#define b2_debugPrintExtra() \
+b2Log("[%d] m_nodes[17943].subTreeRoot: %d\n", g_debugCounter++, m_nodes[17943].subTreeRoot); \
+b2Log("[%d] m_nodes[17942].parent: %d\n", g_debugCounter++, m_nodes[17942].parent)
 
 #endif
 
@@ -710,8 +712,6 @@ void b2DynamicTreeOfTrees::FinishMoveProxies(b2TaskExecutor& executor, b2TaskGro
 	allocator.Free(removalBaseLeaves);
 	allocator.Free(tasks);
 
-	DebugCheck();
-
 #ifdef b2_validateTree
 	Validate();
 #endif
@@ -885,17 +885,23 @@ void b2DynamicTreeOfTrees::InsertNewSubTree(const SubTreePosition& subTreePositi
 		m_nodes[baseTreeLeaf].subTreePosition = subTreePosition;
 		m_nodes[baseTreeLeaf].isBaseTreeLeaf = true;
 		SubTreeInsertLeaf<false>(&m_root, baseTreeLeaf);
+
+		// Insert the sub-proxy into the new sub-tree.
+		m_nodes[baseTreeLeaf].subTreeRoot = subProxy;
+		m_nodes[subProxy].baseTreeLeaf = baseTreeLeaf;
+		m_nodes[subProxy].parent = b2_nullNode;
+		DebugInsert(subProxy);
+
+		++m_subTreeCount;
 	}
+	else
+	{
+		b2Assert(m_nodes[baseTreeLeaf].isBaseTreeLeaf);
 
-	b2Assert(m_nodes[baseTreeLeaf].isBaseTreeLeaf);
-
-	// Insert the sub-proxy into the sub-tree.
-	m_nodes[baseTreeLeaf].subTreeRoot = subProxy;
-	m_nodes[subProxy].baseTreeLeaf = baseTreeLeaf;
-	m_nodes[subProxy].parent = b2_nullNode;
-	DebugInsert(subProxy);
-
-	++m_subTreeCount;
+		// Insert the sub-proxy into the existing sub-tree.
+		m_nodes[subProxy].baseTreeLeaf = baseTreeLeaf;
+		SubTreeInsertLeaf<false>(&m_nodes[baseTreeLeaf].subTreeRoot, subProxy);
+	}
 
 	DebugCheck();
 }

@@ -35,7 +35,7 @@ public:
 	SleepCollidePerf()
 	{
 #ifdef b2_dynamicTreeOfTrees
-		m_world->SetSubTreeSize(40.0f, 40.0f);
+		m_world->SetSubTreeSize(15.0f, 15.0f);
 #endif
 
         m_tumblerSize = 0;
