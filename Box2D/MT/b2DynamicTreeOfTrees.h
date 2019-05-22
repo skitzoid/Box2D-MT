@@ -150,10 +150,9 @@ private:
 			SubTreePosition subTreePosition;
 		};
 
-		int32 parent; // TEMP_MT combine with next
-
 		union
 		{
+			int32 parent;
 			int32 next;
 		};
 
@@ -172,22 +171,18 @@ private:
 			// leaf = invalid, free node = -1
 			int32 height;
 
+			// The base tree leaf for a sub-tree leaf.
+			int32 baseTreeLeaf;
 
+			// The sub-tree root for a base tree leaf.
+			int32 subTreeRoot;
 		};
 
-		// The base tree leaf for a sub-tree leaf.
-		int32 baseTreeLeaf; // TEMP_MT: Combine with height
-
-		// The sub-tree root for a base tree leaf.
-		int32 subTreeRoot; // TEMP_MT: Combine with height
-
-		// The user-facing proxy id for a sub-tree leaf. This is the head of the nextProxy list.
+		// The user-facing proxy for a sub-tree leaf. This is the head of the nextProxy list.
 		int32 proxy;
 
 		// This is used for thread-safe node allocations through a base tree leaf.
 		int32 subTreeNextFree;
-
-		bool isBaseTreeLeaf; // TEMP_MT
 	};
 
 	struct DeferredInsertNewSubTree

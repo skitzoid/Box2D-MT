@@ -31,6 +31,7 @@
 
 #include <bitset>
 #include <mutex>
+
 static const int32 kAllocationBitCount = 131072;
 std::bitset<kAllocationBitCount> g_debugAllocated;
 std::bitset<kAllocationBitCount> g_debugInBaseLeafFreeList;
@@ -39,10 +40,8 @@ std::mutex g_debugMutex;
 uint32 g_debugCounter;
 uint32 g_debugFinishMoveProxyCounter;
 
-#define b2_debugPrintCondition() (nodeId == 17945 || nodeId == 17943 || nodeId == 17942)
-#define b2_debugPrintExtra() \
-b2Log("[%d] m_nodes[17943].subTreeRoot: %d\n", g_debugCounter++, m_nodes[17943].subTreeRoot); \
-b2Log("[%d] m_nodes[17942].parent: %d\n", g_debugCounter++, m_nodes[17942].parent)
+#define b2_debugPrintCondition() (nodeId == b2_nullNode)
+#define b2_debugPrintExtra()
 
 #endif
 
@@ -353,7 +352,6 @@ void b2DynamicTreeOfTrees::QueueMoveProxy(int32 proxyId, const b2AABB& aabb1, co
 		DebugCheck();
 
 		int32 baseTreeLeaf = m_nodes[subProxy].baseTreeLeaf;
-		b2Assert(m_nodes[baseTreeLeaf].isBaseTreeLeaf);
 		int32 x = m_nodes[baseTreeLeaf].subTreePosition.x;
 		int32 y = m_nodes[baseTreeLeaf].subTreePosition.y;
 
@@ -418,7 +416,6 @@ void b2DynamicTreeOfTrees::QueueMoveProxy(int32 proxyId, const b2AABB& aabb1, co
 				while (subProxy != b2_nullNode)
 				{
 					int32 baseTreeLeaf = m_nodes[subProxy].baseTreeLeaf;
-					b2Assert(m_nodes[baseTreeLeaf].isBaseTreeLeaf);
 					int32 subProxyX = m_nodes[baseTreeLeaf].subTreePosition.x;
 					int32 subProxyY = m_nodes[baseTreeLeaf].subTreePosition.y;
 
@@ -457,7 +454,6 @@ void b2DynamicTreeOfTrees::QueueMoveProxy(int32 proxyId, const b2AABB& aabb1, co
 				DeferredInsert insert;
 				insert.aabb = aabb;
 				insert.baseLeaf = findQuery.m_leaf;
-				b2Assert(m_nodes[insert.baseLeaf].isBaseTreeLeaf);
 				insert.proxy = proxyId;
 				td.m_inserts.push_back(insert);
 			}
@@ -815,7 +811,6 @@ int32 b2DynamicTreeOfTrees::AllocateNode()
 	m_nodes[nodeId].userData = nullptr;
 	m_nodes[nodeId].proxy = nodeId;
 	m_nodes[nodeId].subTreeNextFree = b2_nullNode;
-	m_nodes[nodeId].isBaseTreeLeaf = false;
 	++m_nodeCount;
 	return nodeId;
 }
@@ -835,7 +830,6 @@ void b2DynamicTreeOfTrees::FreeNode(int32 nodeId)
 
 int32 b2DynamicTreeOfTrees::SubTreeAllocateNode(int32 proxy, int32 baseLeaf)
 {
-	b2Assert(m_nodes[baseLeaf].isBaseTreeLeaf);
 	int32 nodeId = m_nodes[baseLeaf].subTreeNextFree;
 	DebugNodeSubTreeAllocate(nodeId);
 	b2Assert(nodeId != b2_nullNode);
@@ -847,13 +841,11 @@ int32 b2DynamicTreeOfTrees::SubTreeAllocateNode(int32 proxy, int32 baseLeaf)
 	m_nodes[nodeId].userData = nullptr;
 	m_nodes[nodeId].proxy = proxy;
 	m_nodes[nodeId].subTreeNextFree = b2_nullNode;
-	m_nodes[nodeId].isBaseTreeLeaf = false;
 	return nodeId;
 }
 
 void b2DynamicTreeOfTrees::SubTreeFreeNode(int32 nodeId, int32 baseLeaf)
 {
-	b2Assert(m_nodes[baseLeaf].isBaseTreeLeaf);
 	b2Assert(0 <= nodeId && nodeId < m_nodeCapacity);
 	b2Assert(0 < m_nodeCount);
 	b2Assert(m_nodes[baseLeaf].subTreeNextFree != nodeId);
@@ -883,7 +875,6 @@ void b2DynamicTreeOfTrees::InsertNewSubTree(const SubTreePosition& subTreePositi
 		m_nodes[baseTreeLeaf].aabb.lowerBound = subTreeCenter - b2Vec2(m_subTreeWidth * 0.5f, m_subTreeHeight * 0.5f);
 		m_nodes[baseTreeLeaf].aabb.upperBound = subTreeCenter + b2Vec2(m_subTreeWidth * 0.5f, m_subTreeHeight * 0.5f);
 		m_nodes[baseTreeLeaf].subTreePosition = subTreePosition;
-		m_nodes[baseTreeLeaf].isBaseTreeLeaf = true;
 		SubTreeInsertLeaf<false>(&m_root, baseTreeLeaf);
 
 		// Insert the sub-proxy into the new sub-tree.
@@ -896,8 +887,6 @@ void b2DynamicTreeOfTrees::InsertNewSubTree(const SubTreePosition& subTreePositi
 	}
 	else
 	{
-		b2Assert(m_nodes[baseTreeLeaf].isBaseTreeLeaf);
-
 		// Insert the sub-proxy into the existing sub-tree.
 		m_nodes[subProxy].baseTreeLeaf = baseTreeLeaf;
 		SubTreeInsertLeaf<false>(&m_nodes[baseTreeLeaf].subTreeRoot, subProxy);
@@ -1026,7 +1015,6 @@ struct b2InsertLeafQueryCallback
 
     bool QueryCallback(int32 baseTreeLeaf)
     {
-		b2Assert(m_tree->m_nodes[baseTreeLeaf].isBaseTreeLeaf);
 		m_tree->DebugCheck();
 
 		b2Assert(m_tree->m_nodes[baseTreeLeaf].subTreePosition.x < 10000); // TEMP_MT
@@ -1180,7 +1168,6 @@ b2_forceInline void b2DynamicTreeOfTrees::RemoveLeaf(int32 proxy)
     while (currentProxy != b2_nullNode)
     {
         int32 baseTreeLeaf = m_nodes[currentProxy].baseTreeLeaf;
-		b2Assert(m_nodes[baseTreeLeaf].isBaseTreeLeaf);
         SubTreeRemoveLeaf<false>(&m_nodes[baseTreeLeaf].subTreeRoot, currentProxy);
         if (m_nodes[baseTreeLeaf].subTreeRoot == b2_nullNode)
         {
