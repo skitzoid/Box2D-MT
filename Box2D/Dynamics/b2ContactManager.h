@@ -124,6 +124,9 @@ public:
 	void RecalculateToiCandidacy(b2Body* body);
 	void RecalculateToiCandidacy(b2Fixture* fixture);
 
+	// Update the active flag for this body's contacts.
+	void RecalculateSleeping(b2Body* body);
+
 	b2BroadPhase m_broadPhase;
 	b2Contact* m_contactList;
 	b2ContactFilter* m_contactFilter;
@@ -141,6 +144,8 @@ public:
 	bool m_deferCreates;
 
 private:
+	static bool IsContactActive(b2Contact* contact);
+
 	void ConsumeAwakes();
 	void ConsumeCreate(const b2DeferredContactCreate& create);
 

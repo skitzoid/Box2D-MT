@@ -488,6 +488,11 @@ void b2Body::SynchronizeFixtures()
 	}
 }
 
+void b2Body::RecalculateSleeping()
+{
+	m_world->RecalculateSleeping(this);
+}
+
 void b2Body::SetActive(bool flag)
 {
 	b2Assert(m_world->IsLocked() == false);

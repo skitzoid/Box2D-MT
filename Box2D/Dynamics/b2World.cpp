@@ -41,21 +41,6 @@
 static int32 b2_toiBodyCapacity = 2 * b2_maxTOIContacts;
 static int32 b2_toiContactCapacity = b2_maxTOIContacts;
 
-inline bool b2IsContactActive(b2Contact* c)
-{
-	b2Body* bodyA = c->GetFixtureA()->GetBody();
-	b2Body* bodyB = c->GetFixtureB()->GetBody();
-
-	// At least one body must be awake and it must be dynamic or kinematic.
-	if ((bodyA->IsAwake() && bodyA->GetType() != b2_staticBody) ||
-		(bodyB->IsAwake() && bodyB->GetType() != b2_staticBody))
-	{
-		return true;
-	}
-
-	return false;
-}
-
 class b2SolveTask : public b2Task
 {
 public:
@@ -309,6 +294,11 @@ public:
 
 			b2Assert((c->m_flags & b2Contact::e_toiFlag) == 0);
 
+			if (c->m_flags & b2Contact::e_inactiveFlag)
+			{
+				continue;
+			}
+
 			if (c->IsMinToiCandidate() == false)
 			{
 				continue;
@@ -316,11 +306,6 @@ public:
 
 			b2Body* bA = fA->GetBody();
 			b2Body* bB = fB->GetBody();
-
-			if (b2IsContactActive(c) == false)
-			{
-				continue;
-			}
 
 			b2BodyType typeA = bA->GetType();
 			b2BodyType typeB = bB->GetType();
@@ -369,7 +354,7 @@ b2_forceInline float32 b2World::ComputeToi(b2Contact* c)
 
 	b2Assert(b2Contact::IsToiCandidate(fA, fB));
 
-	b2Assert(b2IsContactActive(c));
+	b2Assert((c->m_flags & b2Contact::e_inactiveFlag) == 0);
 
 	b2Body* bA = fA->GetBody();
 	b2Body* bB = fB->GetBody();
@@ -1564,12 +1549,12 @@ void b2World::FindMinToiContact(b2Contact** contactOut, float* alphaOut)
 	{
 		b2Contact* c = m_contactManager.m_contacts[i];
 
-		if (c->IsMinToiCandidate() == false)
+		if (c->m_flags & b2Contact::e_inactiveFlag)
 		{
 			continue;
 		}
 
-		if (b2IsContactActive(c) == false)
+		if (c->IsMinToiCandidate() == false)
 		{
 			//continue;
 		}
@@ -1698,6 +1683,11 @@ void b2World::RecalculateToiCandidacy(b2Fixture* f)
 	b2Assert(IsMtLocked() == false);
 
 	m_contactManager.RecalculateToiCandidacy(f);
+}
+
+void b2World::RecalculateSleeping(b2Body* b)
+{
+	m_contactManager.RecalculateSleeping(b);
 }
 
 void b2World::ClearForces()
