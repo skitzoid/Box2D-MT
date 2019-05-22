@@ -90,6 +90,7 @@ public:
 			staticSensorCount = 0;
 			minStaticHalfExtent = 5.0f;
 			maxStaticHalfExtent = 50.0f;
+			subTreeWidth = 500.0f;
 			thickWalls = true;
 		}
 		float32 borderHalfLength;
@@ -103,6 +104,7 @@ public:
 		uint32 staticSensorCount;
 		float32 minStaticHalfExtent;
 		float32 maxStaticHalfExtent;
+		float32 subTreeWidth;
 		bool thickWalls;
 	};
 
@@ -110,10 +112,10 @@ public:
 		: m_params(params)
 	{
 		// Splitting the broad-phase AABB tree into smaller sub-trees improves tree quality
-		// when there are many fixtures (better FindNewContacts performance). It can also
-		// improve parallelism of AABB updates (not yet implemented). TODO_MT parallel SynchronizeFixtures.
+		// when there are many fixtures (better FindNewContacts performance) and improves
+		// parallelism of AABB updates (better SynchronizeFixtures performance).
 #ifdef b2_dynamicTreeOfTrees
-		m_world->SetSubTreeSize(500.0f, 500.0f);
+		m_world->SetSubTreeSize(params.subTreeWidth, params.subTreeWidth);
 #endif
 
 		const float32 kBorderHalfLength = m_params.borderHalfLength;
@@ -344,6 +346,7 @@ struct ManyBodies1
 		params.staticBoxCount = 2000;
 		params.minStaticHalfExtent = 5.0f;
 		params.maxStaticHalfExtent = 50.0f;
+		params.subTreeWidth = 500.0f;
 		return new ManyBodiesImpl(params);
 	}
 };
@@ -362,6 +365,7 @@ struct ManyBodies2
 		params.staticEdgeCount = 250;
 		params.minStaticHalfExtent = 5.0f;
 		params.maxStaticHalfExtent = 50.0f;
+		params.subTreeWidth = 400.0f;
 		return new ManyBodiesImpl(params);
 	}
 };
@@ -375,6 +379,7 @@ struct ManyBodies3
 		params.borderHalfLength = 4000.0f;
 		params.floaterCount = 20000;
 		params.speedPerRadius = 20.0f;
+		params.subTreeWidth = 500.0f;
 		return new ManyBodiesImpl(params);
 	}
 };
@@ -389,6 +394,7 @@ struct ManyBodies4
 		params.floaterCount = 20000;
 		params.staticSensorCount = 20;
 		params.maxStaticHalfExtent = 200.0f;
+		params.subTreeWidth = 125.0f;
 		return new ManyBodiesImpl(params);
 	}
 };
@@ -405,6 +411,8 @@ struct ManyBodies5
 		params.staticEdgeCount = 100;
 		params.minStaticHalfExtent = 50.0f;
 		params.maxStaticHalfExtent = 200.0f;
+		params.subTreeWidth = 250.0f;
+		params.thickFloaterThresholdRadius = 5.0f;
 		return new ManyBodiesImpl(params);
 	}
 };
@@ -423,6 +431,8 @@ struct ManyBodies6
 		params.staticEdgeCount = 25;
 		params.minStaticHalfExtent = 5.0f;
 		params.maxStaticHalfExtent = 50.0f;
+		params.subTreeWidth = 250.0f;
+		params.thickFloaterThresholdRadius = 5.0f;
 		return new ManyBodiesImpl(params);
 	}
 };
