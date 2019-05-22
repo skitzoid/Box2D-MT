@@ -211,6 +211,7 @@ void b2ContactManager::Collide(uint32 contactsBegin, uint32 contactsEnd, uint32 
 
 		if (c->m_flags & b2Contact::e_inactiveFlag)
 		{
+			b2Assert(IsContactActive(c) == false);
 			continue;
 		}
 

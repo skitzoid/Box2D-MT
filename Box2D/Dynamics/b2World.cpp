@@ -1254,6 +1254,9 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b2Ti
 					continue;
 				}
 
+				// Make sure the contact is active.
+				contact->m_flags &= ~b2Contact::e_inactiveFlag;
+
 				// Is this contact solid and touching?
 				if (contact->IsEnabled() == false ||
 					contact->IsTouching() == false)
