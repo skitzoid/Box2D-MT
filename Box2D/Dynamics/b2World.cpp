@@ -44,22 +44,28 @@ static int32 b2_toiContactCapacity = b2_maxTOIContacts;
 class b2SolveTask : public b2Task
 {
 public:
-	b2SolveTask(b2World* world, const b2TimeStep& timestep, b2SolveTask* next)
-	{
-		m_world = world;
-		m_timestep = &timestep;
-		m_next = next;
-		m_islandCount = 0;
-	}
-
-	void AddIsland(int32 bodyCount, int32 contactCount, int32 jointCount,
+	b2SolveTask(b2World* world, const b2TimeStep& timestep,
 		b2Body** bodies, b2Contact** contacts, b2Joint** joints,
-		b2Velocity* velocities, b2Position* positions, uint32 cost)
+		b2Velocity* velocities, b2Position* positions, b2SolveTask* next)
+	: m_bodies(bodies)
+	, m_contacts(contacts)
+	, m_joints(joints)
+	, m_positions(positions)
+	, m_velocities(velocities)
+	, m_world(world)
+	, m_timestep(&timestep)
+	, m_next(next)
+	, m_islandCount(0)
+	{}
+
+	void AddIsland(int32 bodyCount, int32 contactCount, int32 jointCount, uint32 cost)
 	{
-		m_islands[m_islandCount++] = b2Island(
-			bodyCount, contactCount, jointCount,
-			bodies, contacts, joints,
-			velocities, positions);
+		IslandDesc desc;
+		desc.bodyCount = bodyCount;
+		desc.contactCount = contactCount;
+		desc.jointCount = jointCount;
+
+		m_islands[m_islandCount++] = desc;
 
 		SetCost(GetCost() + cost);
 	}
@@ -79,21 +85,54 @@ public:
 		bool allowSleep = m_world->m_allowSleep;
 
 		b2TimeStep timestep = *m_timestep;
+
+		b2Body** bodies = m_bodies;
+		b2Contact** contacts = m_contacts;
+		b2Joint** joints = m_joints;
+		b2Position* positions = m_positions;
+		b2Velocity* velocities = m_velocities;
+
 		for (uint32 islandIndex = 0; islandIndex < m_islandCount; ++islandIndex)
 		{
-			b2Island& island = m_islands[islandIndex];
+			int32 bodyCount = m_islands[islandIndex].bodyCount;
+			int32 contactCount = m_islands[islandIndex].contactCount;
+			int32 jointCount = m_islands[islandIndex].jointCount;
+
+			b2Island island(bodyCount, contactCount, jointCount,
+				bodies, contacts, joints,
+				velocities, positions);
 
 			island.Solve(&td.m_profile, timestep, gravity, threadCtx.stack, contactListener,
 				threadCtx.threadId, allowSleep, td.m_postSolves);
+
+			bodies += bodyCount;
+			contacts += contactCount;
+			joints += jointCount;
+			positions += bodyCount;
+			velocities += bodyCount;
 		}
 	}
 
 private:
 
-	b2Island m_islands[b2_maxIslandsPerSolveTask];
+	struct IslandDesc
+	{
+		int32 bodyCount;
+		int32 jointCount;
+		int32 contactCount;
+	};
+	IslandDesc m_islands[b2_maxIslandsPerSolveTask];
+
+	b2Body** m_bodies;
+	b2Contact** m_contacts;
+	b2Joint** m_joints;
+	b2Position* m_positions;
+	b2Velocity* m_velocities;
+
 	b2World* m_world;
 	const b2TimeStep* m_timestep;
 	b2SolveTask* m_next;
+
 	uint32 m_islandCount;
 };
 
@@ -1294,15 +1333,14 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b2Ti
 			static_assert(sizeof(b2SolveTask) <= b2_maxBlockSize, "Solve task doesn't fit in the allocator");
 
 			currSolveTask = (b2SolveTask*)m_blockAllocator.Allocate(sizeof(b2SolveTask));
-			new(currSolveTask) b2SolveTask(this, step, solveTaskList);
+			new(currSolveTask) b2SolveTask(this, step, bodies, contacts, joints, velocities, positions, solveTaskList);
 
 			solveTaskList = currSolveTask;
 		}
 
 		uint32 cost = m_bodyCost * bodyCount + m_contactCost * contactCount + m_jointCost * jointCount;
 
-		currSolveTask->AddIsland(bodyCount, contactCount, jointCount,
-			bodies, contacts, joints, velocities, positions, cost);
+		currSolveTask->AddIsland(bodyCount, contactCount, jointCount, cost);
 
 		bodies += bodyCount;
 		contacts += contactCount;
