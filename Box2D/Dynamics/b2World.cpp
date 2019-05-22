@@ -154,26 +154,6 @@ private:
 	b2Body** m_bodies;
 };
 
-class b2BroadphaseFindNewContactsTask : public b2RangeTask
-{
-public:
-	b2BroadphaseFindNewContactsTask() {}
-	b2BroadphaseFindNewContactsTask(const b2RangeTaskRange& range, b2ContactManager* manager)
-		: b2RangeTask(range)
-		, m_contactManager(manager)
-	{}
-
-	virtual b2Task::Type GetType() const override { return b2Task::e_broadPhaseFindContacts; }
-
-	virtual void Execute(const b2ThreadContext& threadCtx, const b2RangeTaskRange& range) override
-	{
-		m_contactManager->FindNewContacts(range.begin, range.end, threadCtx.threadId);
-	}
-
-private:
-	b2ContactManager* m_contactManager;
-};
-
 class b2ClearContactSolveFlags : public b2RangeTask
 {
 public:
@@ -1032,10 +1012,7 @@ void b2World::StepSolveTOI(const b2TimeStep& step, b2Island& island, b2Contact* 
 
 	// Commit fixture proxy movements to the broad-phase so that new contacts are created.
 	// MT note: this is done on a single thread because few moves occur during SolveTOI.
-	{
-		m_contactManager.FindNewContacts(0, m_contactManager.m_broadPhase.GetMoveCount(), 0);
-		m_contactManager.m_broadPhase.ResetBuffers();
-	}
+	m_contactManager.FindNewContactsSingleThread();
 }
 
 void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b2TimeStep& step)
@@ -1051,13 +1028,14 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b
 	b2Contact* minContact = nullptr;
 	float32 minAlpha = 1.0f;
 
-
 	// Do the initial TOI computation on multiple threads.
 	bool useMultithreadedFind = m_stepComplete;
 
 	// Only clear flags if any were modified.
 	// If the step is not complete then they were modified during a previous sub step.
 	bool clearPostSolveTOI = m_stepComplete == false;
+
+	uint32 tempCounter = 0;
 
 	// Find TOI events and solve them.
 	for (;;)
@@ -1089,8 +1067,11 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b
 			{
 				ClearPostSolveTOI(executor, taskGroup);
 			}
+			printf("SolveTOI: %d\n", tempCounter);
 			break;
 		}
+
+		++tempCounter;
 
 		StepSolveTOI(step, island, minContact, minAlpha);
 
@@ -1109,26 +1090,10 @@ void b2World::SolveTOI(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b
 
 void b2World::FindNewContacts(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 {
-	if (m_contactManager.m_broadPhase.GetMoveCount() == 0)
-	{
-		return;
-	}
-
 	SetMtLock(e_mtLocked | e_mtCollisionLocked);
-
-	b2BroadphaseFindNewContactsTask tasks[b2_maxRangeSubTasks];
-	b2PartitionedRange ranges;
-	executor.PartitionRange(b2Task::e_broadPhaseFindContacts, 0, m_contactManager.m_broadPhase.GetMoveCount(), ranges);
-	for (uint32 i = 0; i < ranges.count; ++i)
-	{
-		tasks[i] = b2BroadphaseFindNewContactsTask(ranges[i], &m_contactManager);
-	}
-	m_contactManager.m_deferCreates = true;
-	b2SubmitTasks(executor, taskGroup, tasks, ranges.count);
-	executor.Wait(taskGroup, b2MainThreadCtx(&m_stackAllocator));
-	m_contactManager.m_deferCreates = false;
-
+	m_contactManager.FindNewContacts(executor, taskGroup, m_stackAllocator);
 	SetMtLock(0);
+
 	m_contactManager.FinishFindNewContacts(executor, taskGroup, m_stackAllocator);
 }
 
@@ -1557,7 +1522,7 @@ void b2World::FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup* taskGroup
 
 	// Contacts between bodies with out of sync sweeps need to be processed on a single thread.
 	auto outOfSyncSweeps = b2MakeStackAllocThreadDataSorter<b2Contact*>(m_perThreadData,
-		&PerThreadData::m_outOfSyncSweeps, b2ContactPointerLessThan, m_stackAllocator);
+		&PerThreadData::m_outOfSyncSweeps, m_stackAllocator, b2ContactPointerLessThan);
 
 	b2Sort(outOfSyncSweeps, executor, taskGroup, m_stackAllocator);
 
@@ -1606,7 +1571,7 @@ void b2World::FindMinToiContact(b2Contact** contactOut, float* alphaOut)
 
 		if (b2IsContactActive(c) == false)
 		{
-			continue;
+			//continue;
 		}
 
 		float32 alpha = ComputeToi(c);

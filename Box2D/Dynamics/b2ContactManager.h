@@ -94,8 +94,10 @@ public:
 	// Broad-phase callback.
 	void AddPair(void* proxyUserDataA, void* proxyUserDataB, uint32 threadId);
 
+	void FindNewContacts(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator);
+	void FindNewContactsSingleThread();
+
 	// These are called from multithreaded tasks.
-	void FindNewContacts(uint32 moveBegin, uint32 moveEnd, uint32 threadId);
 	void Collide(uint32 contactsBegin, uint32 contactsEnd, uint32 threadId);
 	void Destroy(b2Contact* contact);
 	void SynchronizeFixtures(b2Body** bodies, uint32 count, uint32 threadId);

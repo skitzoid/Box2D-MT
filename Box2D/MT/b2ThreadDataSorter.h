@@ -24,6 +24,7 @@
 #include "Box2D/MT/b2TaskExecutor.h"
 #include "Box2D/MT/b2MtUtil.h"
 #include <algorithm>
+#include <functional>
 
 // Merge two sorted arrays. No std::merge because we're not requiring C++17 support yet.
 template<typename InputIt, typename OutputIt, typename Compare>
@@ -415,12 +416,12 @@ b2StackAllocThreadDataSorter<T, ThreadData, Member, Compare, ThreadDataCount>::~
 }
 
 // Convenience function to make a sorter with template argument deduction.
-template<typename T, typename ThreadData, typename Member, typename Compare, uint32 ThreadDataCount = b2_maxThreads>
-b2StackAllocThreadDataSorter<T, ThreadData, Member, Compare, ThreadDataCount>
-	b2MakeStackAllocThreadDataSorter(ThreadData* threadDataArray, Member ThreadData::* member, Compare comp,
-		b2StackAllocator& allocator)
+template<typename T, typename ThreadData, typename Member, typename Compare = std::less<T>>
+b2StackAllocThreadDataSorter<T, ThreadData, Member, Compare>
+	b2MakeStackAllocThreadDataSorter(ThreadData* threadDataArray, Member ThreadData::* member,
+		b2StackAllocator& allocator, Compare comp = Compare())
 {
-	return b2StackAllocThreadDataSorter<T, ThreadData, Member, Compare, ThreadDataCount>(threadDataArray, member, comp, allocator);
+	return b2StackAllocThreadDataSorter<T, ThreadData, Member, Compare, b2_maxThreads>(threadDataArray, member, comp, allocator);
 }
 
 // Convenience function to run all sorting tasks and wait for them to finish.

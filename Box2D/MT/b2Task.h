@@ -58,6 +58,7 @@ public:
 		e_merge = e_rangeTypeCount,
 		e_solve,
 		e_sort,
+		e_broadPhaseUpdateSubTree,
 
 		// Number of tasks defined by Box2D-MT
 		e_typeCount,

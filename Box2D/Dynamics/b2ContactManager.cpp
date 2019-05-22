@@ -217,9 +217,21 @@ void b2ContactManager::Collide(uint32 contactsBegin, uint32 contactsEnd, uint32 
 	}
 }
 
-void b2ContactManager::FindNewContacts(uint32 moveBegin, uint32 moveEnd, uint32 threadId)
+void b2ContactManager::FindNewContacts(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator)
 {
-	m_broadPhase.UpdatePairs(moveBegin, moveEnd, this, threadId);
+	if (m_broadPhase.GetMoveCount() == 0)
+	{
+		return;
+	}
+
+	m_deferCreates = true;
+	m_broadPhase.UpdatePairs(executor, taskGroup, allocator, this);
+	m_deferCreates = false;
+}
+
+void b2ContactManager::FindNewContactsSingleThread()
+{
+	m_broadPhase.UpdatePairsSingleThread(this);
 }
 
 void b2ContactManager::AddPair(void* proxyUserDataA, void* proxyUserDataB, uint32 threadId)
@@ -340,11 +352,17 @@ void b2ContactManager::SynchronizeFixtures(b2Body** bodies, uint32 count, uint32
 
 				if (requiresMove)
 				{
+					b2Vec2 displacement = b->m_xf.p - xf1.p;
+#ifdef b2_dynamicTreeOfTrees
+					m_broadPhase.QueueMoveProxy(proxy->proxyId, proxy->aabb, displacement, threadId);
+					B2_NOT_USED(td);
+#else
 					b2DeferredMoveProxy moveProxy;
 					moveProxy.aabb = proxy->aabb;
-					moveProxy.displacement = b->m_xf.p - xf1.p;
+					moveProxy.displacement = displacement;
 					moveProxy.proxyId = proxy->proxyId;
 					td.m_moveProxies.push_back(moveProxy);
+#endif
 				}
 			}
 		}
@@ -353,9 +371,8 @@ void b2ContactManager::SynchronizeFixtures(b2Body** bodies, uint32 count, uint32
 
 void b2ContactManager::FinishFindNewContacts(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator)
 {
-	m_broadPhase.ResetBuffers();
 	auto creates = b2MakeStackAllocThreadDataSorter<b2DeferredContactCreate>(m_perThreadData,
-		&b2ContactManagerPerThreadData::m_creates, b2DeferredContactCreateLessThan, allocator);
+		&b2ContactManagerPerThreadData::m_creates, allocator, b2DeferredContactCreateLessThan);
 
 	b2Sort(creates, executor, taskGroup, allocator);
 
@@ -376,16 +393,16 @@ void b2ContactManager::FinishFindNewContacts(b2TaskExecutor& executor, b2TaskGro
 void b2ContactManager::FinishCollide(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator)
 {
 	auto begins = b2MakeStackAllocThreadDataSorter<b2Contact*>(m_perThreadData,
-		&b2ContactManagerPerThreadData::m_beginContacts, b2ContactPointerLessThan, allocator);
+		&b2ContactManagerPerThreadData::m_beginContacts, allocator, b2ContactPointerLessThan);
 
 	auto ends = b2MakeStackAllocThreadDataSorter<b2Contact*>(m_perThreadData,
-		&b2ContactManagerPerThreadData::m_endContacts, b2ContactPointerLessThan, allocator);
+		&b2ContactManagerPerThreadData::m_endContacts, allocator, b2ContactPointerLessThan);
 
 	auto preSolves = b2MakeStackAllocThreadDataSorter<b2DeferredPreSolve>(m_perThreadData,
-		&b2ContactManagerPerThreadData::m_preSolves, b2DeferredPreSolveLessThan, allocator);
+		&b2ContactManagerPerThreadData::m_preSolves, allocator, b2DeferredPreSolveLessThan);
 
 	auto destroys = b2MakeStackAllocThreadDataSorter<b2Contact*>(m_perThreadData,
-		&b2ContactManagerPerThreadData::m_destroys, b2ContactPointerLessThan, allocator);
+		&b2ContactManagerPerThreadData::m_destroys, allocator, b2ContactPointerLessThan);
 
 	while (true)
 	{
@@ -428,8 +445,17 @@ void b2ContactManager::FinishCollide(b2TaskExecutor& executor, b2TaskGroup* task
 
 void b2ContactManager::FinishSynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator)
 {
+#ifdef b2_dynamicTreeOfTrees
+	m_broadPhase.FinishMoveProxies(executor, taskGroup, allocator);
+#ifdef b2DEBUG
+	for (uint32 i = 0; i < b2_maxThreads; ++i)
+	{
+		b2Assert(m_perThreadData[i].m_moveProxies.size() == 0);
+	}
+#endif
+#else
 	auto moves = b2MakeStackAllocThreadDataSorter<b2DeferredMoveProxy>(m_perThreadData,
-		&b2ContactManagerPerThreadData::m_moveProxies, b2DeferredMoveProxyLessThan, allocator);
+		&b2ContactManagerPerThreadData::m_moveProxies, allocator, b2DeferredMoveProxyLessThan);
 
 	b2Sort(moves, executor, taskGroup, allocator);
 
@@ -437,19 +463,15 @@ void b2ContactManager::FinishSynchronizeFixtures(b2TaskExecutor& executor, b2Tas
 	{
 		m_broadPhase.MoveProxy(it->proxyId, it->aabb, it->displacement);
 	}
+#endif
 }
 
 void b2ContactManager::FinishSolve(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator)
 {
 	auto postSolves = b2MakeStackAllocThreadDataSorter<b2DeferredPostSolve>(m_perThreadData,
-		&b2ContactManagerPerThreadData::m_postSolves, b2DeferredPostSolveLessThan, allocator);
+		&b2ContactManagerPerThreadData::m_postSolves, allocator, b2DeferredPostSolveLessThan);
 
-	while (postSolves.IsSubmitRequired())
-	{
-		postSolves.SubmitSortTask(executor, taskGroup);
-
-		executor.Wait(taskGroup, b2MainThreadCtx(&allocator));
-	}
+	b2Sort(postSolves, executor, taskGroup, allocator);
 
 	for (auto it = postSolves.begin(); it != postSolves.end(); ++it)
 	{

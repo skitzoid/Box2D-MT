@@ -44,6 +44,7 @@ typedef std::uint64_t	uint64;
 typedef float			float32;
 typedef double			float64;
 
+#define	b2_maxInt		std::numeric_limits<int32>::max()
 #define	b2_maxFloat		std::numeric_limits<float32>::max()
 #define	b2_epsilon		std::numeric_limits<float32>::epsilon()
 #define b2_pi			3.14159265359f
