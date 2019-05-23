@@ -32,13 +32,18 @@
 	// This is used on atomic variables to prevent false positive data races that are
 	// detected on conflicting atomic loads and stores (DRD can't recognize atomics).
 	#define b2_drdIgnoreVar(x) DRD_IGNORE_VAR(x)
+	// These tell DRD how memory accesses are ordered around atomic operations.
+	#define b2_drdHappensBefore(x) ANNOTATE_HAPPENS_BEFORE(x)
+	#define b2_drdHappensAfter(x) ANNOTATE_HAPPENS_AFTER(x)
 #else
 	#define b2_drdIgnoreVar(x) do { } while(0)
+	#define b2_drdHappensBefore(x) do { } while(0)
+	#define b2_drdHappensAfter(x) do { } while(0)
 #endif
 
 // This define expands the scope of lock guards to include the condition variable notify.
 // It isn't necessary to hold a lock during notification, and doing so can force the
-// notified thread to wait for the notifier to unlock the mutex, but tools like drd issue
+// notified thread to wait for the notifier to unlock the mutex, but tools like DRD issue
 // a warning when a condition variable is notified without holding a lock.
 #ifdef b2_holdLockDuringNotify
 	#define b2_notifyLockScopeBegin
@@ -76,6 +81,50 @@ b2ThreadPoolTaskGroup::b2ThreadPoolTaskGroup()
 	, m_remainingTasks(0)
 {
 	b2_drdIgnoreVar(m_remainingTasks);
+}
+
+b2LowerLatencyLock::b2LowerLatencyLock()
+: m_lock(ATOMIC_FLAG_INIT)
+{
+	b2_drdIgnoreVar(m_lock);
+}
+
+void b2LowerLatencyLock::lock()
+{
+	// Is it already unlocked?
+	if (m_lock.test_and_set(std::memory_order_acquire) == false)
+	{
+		b2_drdHappensAfter(&m_lock);
+		return;
+	}
+
+	// All threads can spin for this amount of time.
+	const float32 busyWaitTimeoutMs = 0.005f;
+
+	b2Timer timer;
+	while (m_lock.test_and_set(std::memory_order_acquire))
+	{
+		if (timer.GetMilliseconds() > busyWaitTimeoutMs)
+		{
+			// Only one thread at a time can spin for an extended period.
+			std::lock_guard<std::mutex> lk(m_mutex);
+
+			while (m_lock.test_and_set(std::memory_order_acquire))
+			{
+				std::this_thread::yield();
+			}
+			b2_drdHappensAfter(&m_lock);
+			return;
+		}
+		std::this_thread::yield();
+	}
+	b2_drdHappensAfter(&m_lock);
+}
+
+void b2LowerLatencyLock::unlock()
+{
+	b2_drdHappensBefore(&m_lock);
+	m_lock.clear(std::memory_order_release);
 }
 
 b2ThreadPool::b2ThreadPool(const b2ThreadPoolOptions& options)
@@ -122,7 +171,7 @@ void b2ThreadPool::SubmitTasks(b2ThreadPoolTaskGroup& group, b2Task** tasks, uin
 {
 	b2_notifyLockScopeBegin
 		b2Timer lockTimer;
-		std::lock_guard<std::mutex> lk(m_mutex);
+		std::lock_guard<Mutex> lk(m_mutex);
 		m_lockMilliseconds += lockTimer.GetMilliseconds();
 
 		for (uint32 i = 0; i < count; ++i)
@@ -140,7 +189,7 @@ void b2ThreadPool::SubmitTask(b2ThreadPoolTaskGroup& group, b2Task* task)
 {
 	b2_notifyLockScopeBegin
 		b2Timer lockTimer;
-		std::lock_guard<std::mutex> lk(m_mutex);
+		std::lock_guard<Mutex> lk(m_mutex);
 		m_lockMilliseconds += lockTimer.GetMilliseconds();
 
 		m_taskHeap.push_back(task);
@@ -158,7 +207,7 @@ void b2ThreadPool::Wait(const b2ThreadPoolTaskGroup& group, const b2ThreadContex
 	b2Assert(context.threadId == 0);
 
 	b2Timer lockTimer;
-	std::unique_lock<std::mutex> lk(m_mutex);
+	std::unique_lock<Mutex> lk(m_mutex);
 	m_lockMilliseconds += lockTimer.GetMilliseconds();
 
 	while (true)
@@ -237,7 +286,7 @@ void b2ThreadPool::WorkerMain(uint32 threadId)
 	context.threadId = threadId;
 
 	b2Timer lockTimer;
-	std::unique_lock<std::mutex> lk(m_mutex);
+	std::unique_lock<Mutex> lk(m_mutex);
 
 	while (true)
 	{
@@ -306,7 +355,7 @@ void b2ThreadPool::Shutdown()
 {
 	{
 		b2_notifyLockScopeBegin
-			std::lock_guard<std::mutex> lk(m_mutex);
+			std::lock_guard<Mutex> lk(m_mutex);
 			m_signalShutdown = true;
 			m_busyWaitTimeout.store(0, std::memory_order_relaxed);
 		b2_notifyLockScopeEnd
