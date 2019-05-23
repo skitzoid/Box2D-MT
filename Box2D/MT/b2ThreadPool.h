@@ -74,6 +74,7 @@ public:
 	b2LowerLatencyLock();
 	void lock();
 	void unlock();
+	bool try_lock();
 private:
 	// This is used to prevent more than one thread from spinning for an extended time.
 	std::mutex m_mutex;

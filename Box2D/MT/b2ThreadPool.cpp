@@ -91,40 +91,46 @@ b2LowerLatencyLock::b2LowerLatencyLock()
 
 void b2LowerLatencyLock::lock()
 {
-	// Is it already unlocked?
-	if (m_lock.test_and_set(std::memory_order_acquire) == false)
+	if (try_lock())
 	{
-		b2_drdHappensAfter(&m_lock);
 		return;
 	}
 
-	// All threads can spin for this amount of time.
+	// Any number of threads can spin for this amount of time.
 	const float32 busyWaitTimeoutMs = 0.005f;
 
 	b2Timer timer;
-	while (m_lock.test_and_set(std::memory_order_acquire))
+	while (try_lock() == false)
 	{
 		if (timer.GetMilliseconds() > busyWaitTimeoutMs)
 		{
 			// Only one thread at a time can spin for an extended period.
 			std::lock_guard<std::mutex> lk(m_mutex);
 
-			while (m_lock.test_and_set(std::memory_order_acquire))
+			while (try_lock() == false)
 			{
 				std::this_thread::yield();
 			}
-			b2_drdHappensAfter(&m_lock);
 			return;
 		}
 		std::this_thread::yield();
 	}
-	b2_drdHappensAfter(&m_lock);
 }
 
 void b2LowerLatencyLock::unlock()
 {
 	b2_drdHappensBefore(&m_lock);
 	m_lock.clear(std::memory_order_release);
+}
+
+bool b2LowerLatencyLock::try_lock()
+{
+	if (m_lock.test_and_set(std::memory_order_acquire) == false)
+	{
+		b2_drdHappensAfter(&m_lock);
+		return true;
+	}
+	return false;
 }
 
 b2ThreadPool::b2ThreadPool(const b2ThreadPoolOptions& options)
