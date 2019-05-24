@@ -96,7 +96,7 @@ void b2LowerLatencyLock::lock()
 		return;
 	}
 
-	// Any number of threads can spin for this amount of time.
+	// Any number of threads can spin simultaneously for this amount of time.
 	const float32 busyWaitTimeoutMs = 0.005f;
 
 	b2Timer timer;
