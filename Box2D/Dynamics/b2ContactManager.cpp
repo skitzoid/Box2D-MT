@@ -381,15 +381,14 @@ void b2ContactManager::SynchronizeFixtures(b2Body** bodies, uint32 count, uint32
 	}
 }
 
-void b2ContactManager::FinishFindNewContacts(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator)
+void b2ContactManager::FinishFindNewContacts(b2TaskExecutor& executor, b2StackAllocator& allocator)
 {
-	auto creates = b2MakeStackAllocThreadDataSorter<b2DeferredContactCreate>(m_perThreadData,
-		&b2ContactManagerPerThreadData::m_creates, allocator, b2DeferredContactCreateLessThan);
-
-	b2Sort(creates, executor, taskGroup, allocator);
+	b2_threadDataSorter(creates, b2DeferredContactCreate, 1, executor, allocator, m_perThreadData,
+		&b2ContactManagerPerThreadData::m_creates, &b2DeferredContactCreateLessThan);
 
 	b2ContactProxyIds prevIds{};
 
+	creates.wait();
 	for (auto it = creates.begin(); it != creates.end(); ++it)
 	{
 		if (it->proxyIds == prevIds)
@@ -402,53 +401,45 @@ void b2ContactManager::FinishFindNewContacts(b2TaskExecutor& executor, b2TaskGro
 	}
 }
 
-void b2ContactManager::FinishCollide(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator)
+void b2ContactManager::FinishCollide(b2TaskExecutor& executor, b2StackAllocator& allocator)
 {
-	auto begins = b2MakeStackAllocThreadDataSorter<b2Contact*>(m_perThreadData,
-		&b2ContactManagerPerThreadData::m_beginContacts, allocator, b2ContactPointerLessThan);
+	uint32 sortCost = 4;
 
-	auto ends = b2MakeStackAllocThreadDataSorter<b2Contact*>(m_perThreadData,
-		&b2ContactManagerPerThreadData::m_endContacts, allocator, b2ContactPointerLessThan);
+	b2_threadDataSorter(begins, b2Contact*, sortCost--, executor, allocator, m_perThreadData,
+		&b2ContactManagerPerThreadData::m_beginContacts, &b2ContactPointerLessThan);
 
-	auto preSolves = b2MakeStackAllocThreadDataSorter<b2DeferredPreSolve>(m_perThreadData,
-		&b2ContactManagerPerThreadData::m_preSolves, allocator, b2DeferredPreSolveLessThan);
+	b2_threadDataSorter(ends, b2Contact*, sortCost--, executor, allocator, m_perThreadData,
+		&b2ContactManagerPerThreadData::m_endContacts, &b2ContactPointerLessThan);
 
-	auto destroys = b2MakeStackAllocThreadDataSorter<b2Contact*>(m_perThreadData,
-		&b2ContactManagerPerThreadData::m_destroys, allocator, b2ContactPointerLessThan);
+	b2_threadDataSorter(preSolves, b2DeferredPreSolve, sortCost--, executor, allocator, m_perThreadData,
+		&b2ContactManagerPerThreadData::m_preSolves, &b2DeferredPreSolveLessThan);
 
-	while (true)
-	{
-		begins.SubmitSortTask(executor, taskGroup);
-		ends.SubmitSortTask(executor, taskGroup);
-		preSolves.SubmitSortTask(executor, taskGroup);
-		destroys.SubmitSortTask(executor, taskGroup);
+	b2_threadDataSorter(destroys, b2Contact*, sortCost--, executor, allocator, m_perThreadData,
+		&b2ContactManagerPerThreadData::m_destroys, &b2ContactPointerLessThan);
 
-		if (begins.IsSubmitRequired() == false && ends.IsSubmitRequired() == false &&
-			preSolves.IsSubmitRequired() == false && destroys.IsSubmitRequired() == false)
-		{
-			ConsumeAwakes();
-			executor.Wait(taskGroup, b2MainThreadCtx(&allocator));
-			break;
-		}
+	b2Assert(sortCost == 0);
 
-		executor.Wait(taskGroup, b2MainThreadCtx(&allocator));
-	}
+	ConsumeAwakes();
 
+	begins.wait();
 	for (auto it = begins.begin(); it != begins.end(); ++it)
 	{
 		m_contactListener->BeginContact(*it);
 	}
 
+	ends.wait();
 	for (auto it = ends.begin(); it != ends.end(); ++it)
 	{
 		m_contactListener->EndContact(*it);
 	}
 
+	preSolves.wait();
 	for (auto it = preSolves.begin(); it != preSolves.end(); ++it)
 	{
 		m_contactListener->PreSolve(it->contact, &it->oldManifold);
 	}
 
+	destroys.wait();
 	for (auto it = destroys.begin(); it != destroys.end(); ++it)
 	{
 		Destroy(*it);
@@ -478,13 +469,12 @@ void b2ContactManager::FinishSynchronizeFixtures(b2TaskExecutor& executor, b2Tas
 #endif
 }
 
-void b2ContactManager::FinishSolve(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator)
+void b2ContactManager::FinishSolve(b2TaskExecutor& executor, b2StackAllocator& allocator)
 {
-	auto postSolves = b2MakeStackAllocThreadDataSorter<b2DeferredPostSolve>(m_perThreadData,
-		&b2ContactManagerPerThreadData::m_postSolves, allocator, b2DeferredPostSolveLessThan);
+	b2_threadDataSorter(postSolves, b2DeferredPostSolve, 1, executor, allocator, m_perThreadData,
+		&b2ContactManagerPerThreadData::m_postSolves, &b2DeferredPostSolveLessThan);
 
-	b2Sort(postSolves, executor, taskGroup, allocator);
-
+	postSolves.wait();
 	for (auto it = postSolves.begin(); it != postSolves.end(); ++it)
 	{
 		m_contactListener->PostSolve(it->contact, &it->impulse);

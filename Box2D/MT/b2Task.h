@@ -33,7 +33,7 @@ struct b2ThreadContext
 /// Represents a group of tasks. Implemented by executors if needed.
 class b2TaskGroup { };
 
-/// The base class for all tasks that are run by the thread pool.
+/// The base class for all tasks given to executors.
 class b2Task
 {
 public:
@@ -55,9 +55,8 @@ public:
 		e_rangeTypeCount,
 
 		// Non-range tasks.
-		e_merge = e_rangeTypeCount,
-		e_solve,
-		e_sort,
+		e_solve = e_rangeTypeCount,
+		e_sortThreadDataTask,
 		e_broadPhaseUpdateSubTree,
 
 		// Number of tasks defined by Box2D-MT

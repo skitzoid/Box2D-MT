@@ -29,16 +29,6 @@
 	// These prevent the "Probably a race condition" warnings that occur when
 	// notifying a condition variable without the associated mutex being locked.
 	#define b2_holdLockDuringNotify
-	// This is used on atomic variables to prevent false positive data races that are
-	// detected on conflicting atomic loads and stores (DRD can't recognize atomics).
-	#define b2_drdIgnoreVar(x) DRD_IGNORE_VAR(x)
-	// These tell DRD how memory accesses are ordered around atomic operations.
-	#define b2_drdHappensBefore(x) ANNOTATE_HAPPENS_BEFORE(x)
-	#define b2_drdHappensAfter(x) ANNOTATE_HAPPENS_AFTER(x)
-#else
-	#define b2_drdIgnoreVar(x) do { } while(0)
-	#define b2_drdHappensBefore(x) do { } while(0)
-	#define b2_drdHappensAfter(x) do { } while(0)
 #endif
 
 // This define expands the scope of lock guards to include the condition variable notify.
@@ -209,9 +199,6 @@ void b2ThreadPool::SubmitTask(b2ThreadPoolTaskGroup& group, b2Task* task)
 
 void b2ThreadPool::Wait(const b2ThreadPoolTaskGroup& group, const b2ThreadContext& context)
 {
-	// We don't expect worker threads to call wait.
-	b2Assert(context.threadId == 0);
-
 	b2Timer lockTimer;
 	std::unique_lock<Mutex> lk(m_mutex);
 	m_lockMilliseconds += lockTimer.GetMilliseconds();
@@ -379,39 +366,34 @@ void b2ThreadPool::Shutdown()
 
 b2TaskGroup* b2ThreadPoolTaskExecutor::AcquireTaskGroup()
 {
-	for (uint32 i = 0; i < b2_maxWorldStepTaskGroups; ++i)
-	{
-		if (m_taskGroupInUse[i] == false)
-		{
-			m_taskGroupInUse[i] = true;
-			return m_taskGroups + i;
-		}
-	}
-
 	// No task groups available.
 	// Did you forget to release a task group?
 	// Or are you stepping worlds from multiple threads with the same executor?
 	// You can implement b2TaskExecutor if you need support for that.
-	b2Assert(false);
-	return nullptr;
+	b2Assert(m_taskGroupCount < b2_maxWorldStepTaskGroups);
+
+#ifdef b2DEBUG
+	b2Assert(m_taskGroupInUse[m_taskGroupCount] == false);
+	m_taskGroupInUse[m_taskGroupCount] = true;
+#endif
+
+	b2TaskGroup* taskGroup = m_taskGroups + m_taskGroupCount++;
+
+	return taskGroup;
 }
 
 void b2ThreadPoolTaskExecutor::ReleaseTaskGroup(b2TaskGroup* taskGroup)
 {
-	for (uint32 i = 0; i < b2_maxWorldStepTaskGroups; ++i)
-	{
-		b2ThreadPoolTaskGroup* tpTaskGroup = m_taskGroups + i;
-		if (tpTaskGroup == taskGroup)
-		{
-			b2Assert(tpTaskGroup->m_remainingTasks.load(std::memory_order_relaxed) == 0);
+	B2_NOT_USED(taskGroup);
 
-			m_taskGroupInUse[i] = false;
-			return;
-		}
-	}
+	--m_taskGroupCount;
+	b2Assert(&m_taskGroups[m_taskGroupCount] == taskGroup);
+	b2Assert(m_taskGroups[m_taskGroupCount]->m_remainingTasks.load(std::memory_order_relaxed) == 0);
 
-	// Task group not found.
-	b2Assert(false);
+#ifdef b2DEBUG
+	b2Assert(m_taskGroupInUse[m_taskGroupCount] == true);
+	m_taskGroupInUse[m_taskGroupCount] = false;
+#endif
 }
 
 void b2ThreadPoolTaskExecutor::PartitionRange(b2Task::Type type, uint32 begin, uint32 end, b2PartitionedRange& output)

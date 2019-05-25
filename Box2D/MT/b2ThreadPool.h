@@ -184,7 +184,10 @@ public:
 private:
 	b2ThreadPool m_threadPool;
 	b2ThreadPoolTaskGroup m_taskGroups[b2_maxWorldStepTaskGroups];
+	uint32 m_taskGroupCount;
+#ifdef b2DEBUG
 	bool m_taskGroupInUse[b2_maxWorldStepTaskGroups];
+#endif
 };
 
 inline b2ThreadPoolTaskGroup::~b2ThreadPoolTaskGroup()
@@ -212,11 +215,14 @@ inline void b2ThreadPool::ResetTimers()
 
 inline b2ThreadPoolTaskExecutor::b2ThreadPoolTaskExecutor(const b2ThreadPoolOptions& options)
 	: m_threadPool(options)
+	, m_taskGroupCount(0)
 {
 	for (uint32 i = 0; i < b2_maxWorldStepTaskGroups; ++i)
 	{
 		m_taskGroups[i].m_threadPool = &m_threadPool;
+#ifdef b2DEBUG
 		m_taskGroupInUse[i] = false;
+#endif
 	}
 }
 

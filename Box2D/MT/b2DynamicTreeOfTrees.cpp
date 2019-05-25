@@ -66,6 +66,7 @@ void b2DynamicTreeOfTrees::DebugCheck() const
 
 inline void b2DynamicTreeOfTrees::DebugNodeAllocate(int32 nodeId) const
 {
+	B2_NOT_USED(nodeId);
 #ifdef b2_debugEnabled
 	std::lock_guard<std::mutex> lk(g_debugMutex);
 	b2Assert(nodeId < kAllocationBitCount);
@@ -82,6 +83,7 @@ inline void b2DynamicTreeOfTrees::DebugNodeAllocate(int32 nodeId) const
 
 inline void b2DynamicTreeOfTrees::DebugNodeFree(int32 nodeId) const
 {
+	B2_NOT_USED(nodeId);
 #ifdef b2_debugEnabled
 	std::lock_guard<std::mutex> lk(g_debugMutex);
 	b2Assert(nodeId < kAllocationBitCount);
@@ -98,6 +100,7 @@ inline void b2DynamicTreeOfTrees::DebugNodeFree(int32 nodeId) const
 
 inline void b2DynamicTreeOfTrees::DebugNodeSubTreeAllocate(int32 nodeId) const
 {
+	B2_NOT_USED(nodeId);
 #ifdef b2_debugEnabled
 	std::lock_guard<std::mutex> lk(g_debugMutex);
 	b2Assert(nodeId < kAllocationBitCount);
@@ -114,6 +117,7 @@ inline void b2DynamicTreeOfTrees::DebugNodeSubTreeAllocate(int32 nodeId) const
 
 inline void b2DynamicTreeOfTrees::DebugNodeSubTreeFree(int32 nodeId) const
 {
+	B2_NOT_USED(nodeId);
 #ifdef b2_debugEnabled
 	std::lock_guard<std::mutex> lk(g_debugMutex);
 	b2Assert(nodeId < kAllocationBitCount);
@@ -130,6 +134,7 @@ inline void b2DynamicTreeOfTrees::DebugNodeSubTreeFree(int32 nodeId) const
 
 inline void b2DynamicTreeOfTrees::DebugInsert(int32 nodeId) const
 {
+	B2_NOT_USED(nodeId);
 #ifdef b2_debugEnabled
 	std::lock_guard<std::mutex> lk(g_debugMutex);
 	b2Assert(nodeId < kAllocationBitCount);
@@ -145,6 +150,7 @@ inline void b2DynamicTreeOfTrees::DebugInsert(int32 nodeId) const
 
 inline void b2DynamicTreeOfTrees::DebugRemove(int32 nodeId) const
 {
+	B2_NOT_USED(nodeId);
 #ifdef b2_debugEnabled
 	std::lock_guard<std::mutex> lk(g_debugMutex);
 	b2Assert(nodeId < kAllocationBitCount);
@@ -160,6 +166,7 @@ inline void b2DynamicTreeOfTrees::DebugRemove(int32 nodeId) const
 
 inline void b2DynamicTreeOfTrees::DebugReplace(int32 nodeId) const
 {
+	B2_NOT_USED(nodeId);
 #ifdef b2_debugEnabled
 	std::lock_guard<std::mutex> lk(g_debugMutex);
 	if (b2_debugPrintCondition())
@@ -479,38 +486,29 @@ void b2DynamicTreeOfTrees::QueueMoveProxy(int32 proxyId, const b2AABB& aabb1, co
 
 void b2DynamicTreeOfTrees::FinishMoveProxies(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator)
 {
-	// TODO_MT: a more elegant utility for combining/sorting of per thread data.
+	uint32 sortCost = 5;
 
-	auto insertNewSubTrees = b2MakeStackAllocThreadDataSorter<DeferredInsertNewSubTree>(m_perThreadData,
-		&b2DynamicTreeOfTrees::PerThreadData::m_insertNewSubTrees, allocator, b2DeferredInsertNewSubTreeLessThan);
+	b2_threadDataSorter(inserts, DeferredInsert, sortCost--, executor, allocator, m_perThreadData,
+		&b2DynamicTreeOfTrees::PerThreadData::m_inserts, &b2DeferredInsertLessThan);
 
-	auto inserts = b2MakeStackAllocThreadDataSorter<DeferredInsert>(m_perThreadData,
-		&b2DynamicTreeOfTrees::PerThreadData::m_inserts, allocator, b2DeferredInsertLessThan);
+	b2_threadDataSorter(moves, DeferredMove, sortCost--, executor, allocator, m_perThreadData,
+		&b2DynamicTreeOfTrees::PerThreadData::m_moves, &b2DeferredMoveLessThan);
 
-	auto moves = b2MakeStackAllocThreadDataSorter<DeferredMove>(m_perThreadData,
-		&b2DynamicTreeOfTrees::PerThreadData::m_moves, allocator, b2DeferredMoveLessThan);
+	b2_threadDataSorter(removes, DeferredRemove, sortCost--, executor, allocator, m_perThreadData,
+		&b2DynamicTreeOfTrees::PerThreadData::m_removes, &b2DeferredRemoveLessThan);
 
-	auto removes = b2MakeStackAllocThreadDataSorter<DeferredRemove>(m_perThreadData,
-		&b2DynamicTreeOfTrees::PerThreadData::m_removes, allocator, b2DeferredRemoveLessThan);
+	b2_threadDataSorter(insertNewSubTrees, DeferredInsertNewSubTree, sortCost--, executor, allocator, m_perThreadData,
+		&b2DynamicTreeOfTrees::PerThreadData::m_insertNewSubTrees, &b2DeferredInsertNewSubTreeLessThan);
 
-	auto replaces = b2MakeStackAllocThreadDataSorter<DeferredReplace>(m_perThreadData,
-		&b2DynamicTreeOfTrees::PerThreadData::m_replaces, allocator, b2DeferredReplaceLessThan);
+	b2_threadDataSorter(replaces, DeferredReplace, sortCost--, executor, allocator, m_perThreadData,
+		&b2DynamicTreeOfTrees::PerThreadData::m_replaces, &b2DeferredReplaceLessThan);
 
-	while (insertNewSubTrees.IsSubmitRequired() || inserts.IsSubmitRequired() ||
-		moves.IsSubmitRequired() || removes.IsSubmitRequired())
-	{
-		insertNewSubTrees.SubmitSortTask(executor, taskGroup);
-		inserts.SubmitSortTask(executor, taskGroup);
-		moves.SubmitSortTask(executor, taskGroup);
-		removes.SubmitSortTask(executor, taskGroup);
-		replaces.SubmitSortTask(executor, taskGroup);
-
-		executor.Wait(taskGroup, b2MainThreadCtx(&allocator));
-	}
+	b2Assert(sortCost == 0);
 
 	DebugCheck();
 
 	// Allocate nodes for insertions.
+	inserts.wait();
 	for (DeferredInsert* it = inserts.begin(); it != inserts.end(); ++it)
 	{
 		int32 baseLeaf = it->baseLeaf;
@@ -540,6 +538,8 @@ void b2DynamicTreeOfTrees::FinishMoveProxies(b2TaskExecutor& executor, b2TaskGro
 	uint32 removalBaseLeavesCount = 0;
 
 	// Run tasks to process sub-tree events.
+	moves.wait();
+	removes.wait();
 	DeferredInsert* insertBegin = inserts.begin();
 	DeferredMove* moveBegin = moves.begin();
 	DeferredRemove* removeBegin = removes.begin();
@@ -608,6 +608,10 @@ void b2DynamicTreeOfTrees::FinishMoveProxies(b2TaskExecutor& executor, b2TaskGro
 		new(currTask) b2UpdateSubTreeTask(this, insertBegin, insertCount,
 			moveBegin, moveCount, removeBegin, removeCount);
 
+		// TODO_MT: Why does this seem to make Solve slower?
+		//uint32 cost = insertCount + 2 * moveCount + removeCount;
+		//currTask->SetCost(cost);
+
 		b2SubmitTask(executor, taskGroup, currTask);
 
 		++currTask;
@@ -645,6 +649,7 @@ void b2DynamicTreeOfTrees::FinishMoveProxies(b2TaskExecutor& executor, b2TaskGro
 	DebugCheck();
 
 	// Create sub-trees and insert proxies.
+	insertNewSubTrees.wait();
 	for (DeferredInsertNewSubTree* it = insertNewSubTrees.begin(); it != insertNewSubTrees.end(); ++it)
 	{
 		int32 subProxy = AllocateNode();
@@ -661,6 +666,7 @@ void b2DynamicTreeOfTrees::FinishMoveProxies(b2TaskExecutor& executor, b2TaskGro
 	DebugCheck();
 
 	// Replace removed user proxies with valid sub-proxies.
+	replaces.wait();
 	for (DeferredReplace* it = replaces.begin(); it != replaces.end(); ++it)
 	{
 		DebugCheck();

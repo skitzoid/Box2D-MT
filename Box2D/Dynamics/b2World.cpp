@@ -1113,7 +1113,7 @@ void b2World::FindNewContacts(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 	m_contactManager.FindNewContacts(executor, taskGroup, m_stackAllocator);
 	SetMtLock(0);
 
-	m_contactManager.FinishFindNewContacts(executor, taskGroup, m_stackAllocator);
+	m_contactManager.FinishFindNewContacts(executor, m_stackAllocator);
 }
 
 void b2World::Collide(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
@@ -1136,7 +1136,7 @@ void b2World::Collide(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
 	executor.Wait(taskGroup, b2MainThreadCtx(&m_stackAllocator));
 
 	SetMtLock(0);
-	m_contactManager.FinishCollide(executor, taskGroup, m_stackAllocator);
+	m_contactManager.FinishCollide(executor, m_stackAllocator);
 }
 
 void b2World::SynchronizeFixtures(b2TaskExecutor& executor, b2TaskGroup* taskGroup)
@@ -1403,7 +1403,7 @@ void b2World::Solve(b2TaskExecutor& executor, b2TaskGroup* taskGroup, const b2Ti
 	m_stackAllocator.Free(allBodies);
 
 	SetMtLock(0);
-	m_contactManager.FinishSolve(executor, taskGroup, m_stackAllocator);
+	m_contactManager.FinishSolve(executor, m_stackAllocator);
 
 	{
 		b2Timer timer;
@@ -1542,11 +1542,10 @@ void b2World::FindMinToiContact(b2TaskExecutor& executor, b2TaskGroup* taskGroup
 	float32 minAlpha = tasks[0].GetMinAlpha();
 
 	// Contacts between bodies with out of sync sweeps need to be processed on a single thread.
-	auto outOfSyncSweeps = b2MakeStackAllocThreadDataSorter<b2Contact*>(m_perThreadData,
-		&PerThreadData::m_outOfSyncSweeps, m_stackAllocator, b2ContactPointerLessThan);
+	b2_threadDataSorter(outOfSyncSweeps, b2Contact*, 1, executor, m_stackAllocator, m_perThreadData,
+		&PerThreadData::m_outOfSyncSweeps, &b2ContactPointerLessThan);
 
-	b2Sort(outOfSyncSweeps, executor, taskGroup, m_stackAllocator);
-
+	outOfSyncSweeps.wait();
 	for (auto it = outOfSyncSweeps.begin(); it != outOfSyncSweeps.end(); ++it)
 	{
 		b2Contact* c = *it;

@@ -172,7 +172,7 @@ typedef double			float64;
 #define b2_maxIslandsPerSolveTask				45
 
 /// The number of task groups used by a world's step. Do not change this value.
-#define b2_maxWorldStepTaskGroups				1
+#define b2_maxWorldStepTaskGroups				11
 
 /// Defining this enables a modified broad-phase that tends to perform better with
 /// many fixtures.

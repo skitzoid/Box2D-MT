@@ -274,10 +274,10 @@ void b2BroadPhase::UpdatePairs(b2TaskExecutor& executor, b2TaskGroup* taskGroup,
 #endif
 
 	// Sort per-thread moves.
-	auto moves = b2MakeStackAllocThreadDataSorter<int32>(m_perThreadData,
-		&b2BroadPhasePerThreadData::m_moveBuffer, allocator);
+	b2_threadDataSorter(moves, int32, 1, executor, allocator, m_perThreadData,
+		&b2BroadPhasePerThreadData::m_moveBuffer, std::less<int32>());
 
-	b2Sort(moves, executor, taskGroup, allocator);
+	moves.wait();
 
 	// Update pairs for the moved proxies.
 	b2BroadphaseFindContactsTask<T> tasks[b2_maxRangeSubTasks];
