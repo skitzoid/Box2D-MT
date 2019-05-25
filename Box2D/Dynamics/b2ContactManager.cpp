@@ -97,8 +97,8 @@ inline bool b2ContactManager::IsContactActive(b2Contact* c)
 	b2Body* bodyB = c->m_nodeA.other;
 
 	// At least one body must be awake and it must be dynamic or kinematic.
-	if ((bodyA->IsAwake() && bodyA->GetType() != b2_staticBody) ||
-		(bodyB->IsAwake() && bodyB->GetType() != b2_staticBody))
+	if ((bodyA->GetType() != b2_staticBody && bodyA->IsAwake()) ||
+		(bodyB->GetType() != b2_staticBody && bodyB->IsAwake()))
 	{
 		return true;
 	}
