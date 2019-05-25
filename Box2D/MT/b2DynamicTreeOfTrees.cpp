@@ -23,7 +23,7 @@
 #include "Box2D/MT/b2MtUtil.h"
 #include "Box2D/MT/b2ThreadDataSorter.h"
 
-#define b2_debugEnabled
+//#define b2_debugEnabled
 
 #ifdef b2_debugEnabled
 
