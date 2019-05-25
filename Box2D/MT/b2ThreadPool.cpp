@@ -388,7 +388,7 @@ void b2ThreadPoolTaskExecutor::ReleaseTaskGroup(b2TaskGroup* taskGroup)
 
 	--m_taskGroupCount;
 	b2Assert(&m_taskGroups[m_taskGroupCount] == taskGroup);
-	b2Assert(m_taskGroups[m_taskGroupCount]->m_remainingTasks.load(std::memory_order_relaxed) == 0);
+	b2Assert(m_taskGroups[m_taskGroupCount].m_remainingTasks.load(std::memory_order_relaxed) == 0);
 
 #ifdef b2DEBUG
 	b2Assert(m_taskGroupInUse[m_taskGroupCount] == true);
