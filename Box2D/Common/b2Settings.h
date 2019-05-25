@@ -176,7 +176,7 @@ typedef double			float64;
 
 /// Defining this enables a modified broad-phase that tends to perform better with
 /// many fixtures.
-#define b2_dynamicTreeOfTrees
+//#define b2_dynamicTreeOfTrees
 
 // Memory Allocation
 
