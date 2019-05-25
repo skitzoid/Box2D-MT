@@ -573,8 +573,6 @@ void b2DynamicTreeOfTrees::FinishMoveProxies(b2TaskExecutor& executor, b2TaskGro
 			removeCount = removeEnd - removeBegin;
 			removalBaseLeaves[removalBaseLeavesCount++] = minBaseLeaf;
 			b2Assert(removalBaseLeavesCount <= m_subTreeCount);
-
-			b2Assert(m_nodes[removeBegin->subProxy].parent != b2_nullNode);
 		}
 
 		// TODO_MT: Cost threshold.
