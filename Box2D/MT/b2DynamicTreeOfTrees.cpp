@@ -23,7 +23,7 @@
 #include "Box2D/MT/b2MtUtil.h"
 #include "Box2D/MT/b2ThreadDataSorter.h"
 
-//#define b2_debugEnabled
+#define b2_debugEnabled
 
 #ifdef b2_debugEnabled
 
@@ -33,12 +33,12 @@
 #include <mutex>
 
 static const int32 kAllocationBitCount = 131072;
-std::bitset<kAllocationBitCount> g_debugAllocated;
-std::bitset<kAllocationBitCount> g_debugInBaseLeafFreeList;
-std::bitset<kAllocationBitCount> g_debugInserted;
-std::mutex g_debugMutex;
-uint32 g_debugCounter;
-uint32 g_debugFinishMoveProxyCounter;
+static std::bitset<kAllocationBitCount> g_debugAllocated;
+static std::bitset<kAllocationBitCount> g_debugInBaseLeafFreeList;
+static std::bitset<kAllocationBitCount> g_debugInserted;
+static std::mutex g_debugMutex;
+static uint32 g_debugCounter;
+static uint32 g_debugFinishMoveProxyCounter;
 
 #define b2_debugPrintCondition() (nodeId == b2_nullNode)
 #define b2_debugPrintExtra()
@@ -54,13 +54,6 @@ void b2DebugReset()
 	g_debugInserted.reset();
 	g_debugCounter = 0;
 	g_debugFinishMoveProxyCounter = 0;
-#endif
-}
-
-void b2DynamicTreeOfTrees::DebugCheck() const
-{
-#ifdef b2_debugEnabled
-	//std::lock_guard<std::mutex> lk(g_debugMutex);
 #endif
 }
 
@@ -278,8 +271,6 @@ public:
 
 	virtual void Execute(const b2ThreadContext&) override
 	{
-		m_tree->DebugCheck();
-
 		// Remove proxies.
 		for (uint32 i = 0; i < m_removeCount; ++i)
 		{
@@ -295,8 +286,6 @@ public:
 			}
 		}
 
-		m_tree->DebugCheck();
-
 		// Move proxies.
 		for (uint32 i = 0; i < m_moveCount; ++i)
 		{
@@ -310,8 +299,6 @@ public:
 			m_tree->SubTreeInsertLeaf<true>(&m_tree->m_nodes[baseLeaf].subTreeRoot, subProxy);
 		}
 
-		m_tree->DebugCheck();
-
 		// Insert proxies.
 		for (uint32 i = 0; i < m_insertCount; ++i)
 		{
@@ -323,8 +310,6 @@ public:
 
 			m_tree->SubTreeInsertLeaf<true>(&m_tree->m_nodes[baseLeaf].subTreeRoot, subProxy);
 		}
-
-		m_tree->DebugCheck();
 	}
 
 private:
@@ -339,8 +324,6 @@ private:
 
 void b2DynamicTreeOfTrees::QueueMoveProxy(int32 proxyId, const b2AABB& aabb1, const b2Vec2& displacement, uint32 threadId)
 {
-	DebugCheck();
-
 	PerThreadData& td = m_perThreadData[threadId];
 
 	b2AABB aabb = ComputeAABB(aabb1, displacement);
@@ -356,7 +339,6 @@ void b2DynamicTreeOfTrees::QueueMoveProxy(int32 proxyId, const b2AABB& aabb1, co
 	for (int32 subProxy = proxyId; subProxy != b2_nullNode; subProxy = m_nodes[subProxy].nextProxy)
 	{
 		b2Assert(m_nodes[subProxy].IsLeaf());
-		DebugCheck();
 
 		int32 baseTreeLeaf = m_nodes[subProxy].baseTreeLeaf;
 		int32 x = m_nodes[baseTreeLeaf].subTreePosition.x;
@@ -377,7 +359,6 @@ void b2DynamicTreeOfTrees::QueueMoveProxy(int32 proxyId, const b2AABB& aabb1, co
 		}
 		else
 		{
-			DebugCheck();
 			b2Assert(m_nodes[baseTreeLeaf].subTreeRoot == subProxy || m_nodes[subProxy].parent != b2_nullNode); // TEMP_MT
 
 			// Remove the sub-proxy.
@@ -480,8 +461,6 @@ void b2DynamicTreeOfTrees::QueueMoveProxy(int32 proxyId, const b2AABB& aabb1, co
 		replace.proxy = proxyId;
 		td.m_replaces.push_back(replace);
 	}
-
-	DebugCheck();
 }
 
 void b2DynamicTreeOfTrees::FinishMoveProxies(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator)
@@ -505,8 +484,6 @@ void b2DynamicTreeOfTrees::FinishMoveProxies(b2TaskExecutor& executor, b2TaskGro
 
 	b2Assert(sortCost == 0);
 
-	DebugCheck();
-
 	// Allocate nodes for insertions.
 	inserts.wait();
 	for (DeferredInsert* it = inserts.begin(); it != inserts.end(); ++it)
@@ -525,11 +502,7 @@ void b2DynamicTreeOfTrees::FinishMoveProxies(b2TaskExecutor& executor, b2TaskGro
 		m_nodes[proxy].nextProxy = subProxy;
 
 		it->proxy = subProxy;
-
-		DebugCheck();
 	}
-
-	DebugCheck();
 
 	b2UpdateSubTreeTask* tasks = (b2UpdateSubTreeTask*)allocator.Allocate(m_subTreeCount * sizeof(b2UpdateSubTreeTask));
 	b2UpdateSubTreeTask* currTask = tasks;
@@ -622,8 +595,6 @@ void b2DynamicTreeOfTrees::FinishMoveProxies(b2TaskExecutor& executor, b2TaskGro
 
 	executor.Wait(taskGroup, b2MainThreadCtx(&allocator));
 
-	DebugCheck();
-
 	// Free nodes no longer in use.
 	for (uint32 i = 0; i < removalBaseLeavesCount; ++i)
 	{
@@ -646,8 +617,6 @@ void b2DynamicTreeOfTrees::FinishMoveProxies(b2TaskExecutor& executor, b2TaskGro
 		}
 	}
 
-	DebugCheck();
-
 	// Create sub-trees and insert proxies.
 	insertNewSubTrees.wait();
 	for (DeferredInsertNewSubTree* it = insertNewSubTrees.begin(); it != insertNewSubTrees.end(); ++it)
@@ -663,14 +632,10 @@ void b2DynamicTreeOfTrees::FinishMoveProxies(b2TaskExecutor& executor, b2TaskGro
 		InsertNewSubTree(it->subTreePosition, subProxy);
 	}
 
-	DebugCheck();
-
 	// Replace removed user proxies with valid sub-proxies.
 	replaces.wait();
 	for (DeferredReplace* it = replaces.begin(); it != replaces.end(); ++it)
 	{
-		DebugCheck();
-
 		int32 dstProxy = it->proxy;
 		int32 srcProxy = m_nodes[dstProxy].nextProxy;
 		b2Assert(srcProxy != b2_nullNode);
@@ -706,10 +671,7 @@ void b2DynamicTreeOfTrees::FinishMoveProxies(b2TaskExecutor& executor, b2TaskGro
 		DebugRemove(srcProxy);
 		DebugInsert(dstProxy);
 		FreeNode(srcProxy);
-		DebugCheck();
 	}
-
-	DebugCheck();
 
 	allocator.Free(removalBaseLeaves);
 	allocator.Free(tasks);
@@ -862,7 +824,6 @@ void b2DynamicTreeOfTrees::SubTreeFreeNode(int32 nodeId, int32 baseLeaf)
 
 void b2DynamicTreeOfTrees::InsertNewSubTree(const SubTreePosition& subTreePosition, int32 subProxy)
 {
-	DebugCheck();
 	b2Assert(m_nodes[subProxy].IsLeaf());
 
 	b2Vec2 subTreeCenter;
@@ -897,8 +858,6 @@ void b2DynamicTreeOfTrees::InsertNewSubTree(const SubTreePosition& subTreePositi
 		m_nodes[subProxy].baseTreeLeaf = baseTreeLeaf;
 		SubTreeInsertLeaf<false>(&m_nodes[baseTreeLeaf].subTreeRoot, subProxy);
 	}
-
-	DebugCheck();
 }
 
 void b2DynamicTreeOfTrees::Reset(float32 subTreeWidth, float32 subTreeHeight)
@@ -1021,8 +980,6 @@ struct b2InsertLeafQueryCallback
 
     bool QueryCallback(int32 baseTreeLeaf)
     {
-		m_tree->DebugCheck();
-
 		b2Assert(m_tree->m_nodes[baseTreeLeaf].subTreePosition.x < 10000); // TEMP_MT
 
         if (m_insertCount == 0)
@@ -1066,9 +1023,6 @@ struct b2InsertLeafQueryCallback
 
 b2_forceInline void b2DynamicTreeOfTrees::InsertLeaf(int32 proxy, uint32 threadId)
 {
-	// TODO_MT: Replace/combine with logic in QueueMoveProxy
-	DebugCheck();
-
     b2AABB proxyAABB = m_nodes[proxy].aabb;
 
     // Insert the leaf into all existing overlapped sub-trees.
@@ -1131,7 +1085,6 @@ b2_forceInline void b2DynamicTreeOfTrees::InsertLeaf(int32 proxy, uint32 threadI
     {
         for (int32 x = beginX; x < endX; ++x)
         {
-			DebugCheck();
             // Look for the sub-tree.
             b2Vec2 subTreeCenter(x * m_subTreeWidth, y * m_subTreeHeight);
             b2FindFirstLeafQueryCallback findQuery(this);
@@ -1166,8 +1119,6 @@ b2_forceInline void b2DynamicTreeOfTrees::InsertLeaf(int32 proxy, uint32 threadI
 
 b2_forceInline void b2DynamicTreeOfTrees::RemoveLeaf(int32 proxy)
 {
-	DebugCheck();
-
     // Remove the proxy from each sub-tree it's in.
     int32 currentProxy = proxy;
 
@@ -1188,15 +1139,12 @@ b2_forceInline void b2DynamicTreeOfTrees::RemoveLeaf(int32 proxy)
         }
         currentProxy = nextProxy;
     }
-
-	DebugCheck();
 }
 
 template<bool useSubTreeFreeList>
 b2_forceInline void b2DynamicTreeOfTrees::SubTreeInsertLeaf(int32* rootInOut, int32 leaf)
 {
 	DebugInsert(leaf);
-	DebugCheck();
 	b2Assert(m_nodes[leaf].IsLeaf());
 
 	m_nodes[leaf].parent = b2_nullNode;
@@ -1280,8 +1228,6 @@ b2_forceInline void b2DynamicTreeOfTrees::SubTreeInsertLeaf(int32* rootInOut, in
 		}
 	}
 
-	DebugCheck();
-
 	int32 sibling = index;
 
 	// Create a new parent.
@@ -1327,8 +1273,6 @@ b2_forceInline void b2DynamicTreeOfTrees::SubTreeInsertLeaf(int32* rootInOut, in
 		root = newParent;
 	}
 
-	DebugCheck();
-
 	// Walk back up the tree fixing heights and AABBs
 	index = m_nodes[leaf].parent;
 	while (index != b2_nullNode)
@@ -1349,8 +1293,6 @@ b2_forceInline void b2DynamicTreeOfTrees::SubTreeInsertLeaf(int32* rootInOut, in
 
 	*rootInOut = root;
 
-	DebugCheck();
-
 #ifdef b2_validateTree
 	ValidateStructure<true>(root);
 	ValidateMetrics<true>(root);
@@ -1361,7 +1303,6 @@ template<bool useSubTreeFreeList>
 void b2DynamicTreeOfTrees::SubTreeRemoveLeaf(int32* rootInOut, int32 leaf)
 {
 	DebugRemove(leaf);
-	DebugCheck();
 
 	int32 root = *rootInOut;
 
@@ -1440,8 +1381,6 @@ void b2DynamicTreeOfTrees::SubTreeRemoveLeaf(int32* rootInOut, int32 leaf)
 	}
 
 	*rootInOut = root;
-
-	DebugCheck();
 
 #ifdef b2_validateTree
 	ValidateStructure<true>(root);

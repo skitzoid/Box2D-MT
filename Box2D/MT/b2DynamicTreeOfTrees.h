@@ -277,7 +277,6 @@ private:
 	template <bool querySubTrees, typename T>
 	bool RayCast(int32 root, T* callback, const b2RayCastInput& input, uint32 threadId);
 
-	void DebugCheck() const;
 	void DebugNodeAllocate(int32 nodeId) const;
 	void DebugNodeFree(int32 nodeId) const;
 	void DebugNodeSubTreeAllocate(int32 nodeId) const;
