@@ -175,7 +175,7 @@ typedef double			float64;
 #define b2_maxWorldStepTaskGroups				11
 
 /// Defining this enables a modified broad-phase that tends to perform better with
-/// many fixtures.
+/// many fixtures. This is still experimental.
 //#define b2_dynamicTreeOfTrees
 
 // Memory Allocation
