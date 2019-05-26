@@ -35,8 +35,7 @@ class b2StackAllocator;
 /// A dynamic AABB tree-of-trees broad-phase, based on Erin Cato's b2DynamicTree.
 /// The base tree's leaves form a sparse grid, with each containing the root node
 /// of a sub-tree. This can improve tree quality in the case of thousands of proxies,
-/// and allows parallel sub-tree proxy insertion/removal (in theory; TODO_MT:
-/// implement parallel SynchronizeFixtures).
+/// and allows parallel sub-tree proxy insertion/removal.
 ///
 /// A dynamic tree arranges data in a binary tree to accelerate
 /// queries such as volume queries and ray casts. Leafs are proxies
