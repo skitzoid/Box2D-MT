@@ -147,6 +147,8 @@ public:
 	{}
 
 	/// Execute the task over the specified range.
+	/// Custom executors can use this to execute the task via something like
+	/// parallel_for instead of implementing b2TaskExecutor::PartitionRange.
 	virtual void Execute(const b2ThreadContext& ctx, const b2RangeTaskRange& range) = 0;
 
 	/// Execute the task over the stored range.
