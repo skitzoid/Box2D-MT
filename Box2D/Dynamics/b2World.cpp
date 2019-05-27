@@ -1610,6 +1610,8 @@ void b2World::FindMinToiContact(b2Contact** contactOut, float* alphaOut)
 void b2World::Step(float32 dt, int32 velocityIterations, int32 positionIterations, b2TaskExecutor& executor)
 {
 	uint32 threadCount = executor.GetThreadCount();
+	b2Assert(threadCount > 0);
+	b2Assert(threadCount <= b2_maxThreads);
 
 	b2Timer stepTimer;
 
