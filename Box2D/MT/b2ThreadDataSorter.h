@@ -60,16 +60,16 @@ public:
 	{
 		struct alignas(b2_cacheLineSize) PerThreadData
 		{
-			T* outputs[2];
 			b2GrowableArray<T>* input;
 			std::atomic<uint32> counter;
 			uint32 outputIndex;
 			uint32 outputCount;
 		};
 		PerThreadData perThreadData[b2_maxThreads];
+		T* outputs[2];
 		b2TaskExecutor* executor;
 		b2TaskGroup* taskGroup;
-		uint32 subTaskCost;
+		uint32 taskCost;
 		std::atomic<uint32> mergeCounter;
 		alignas(b2_cacheLineSize) Compare comp;
 	};
@@ -84,6 +84,7 @@ public:
 
 	virtual void Execute(const b2ThreadContext& ctx) override
 	{
+		// Sort the input per-thread data arrays.
 		SortInputs();
 
 		if ((m_index & 1) != 0)
@@ -97,11 +98,14 @@ public:
 			return;
 		}
 
+		// Merge pairs of sorted input arrays into half of the output buffer.
 		MergeFromInputs();
 
+		// The final thread to finish MergeFromInputs submits subsequent merges.
 		if (b2FetchAdd(m_work->mergeCounter, -1) == 1)
 		{
-			// The final thread to finish MergeFromInputs submits subsequent merges.
+			// Merge pairs of sorted ranges from one half of the output buffer
+			// to the other half, until all sorted ranges have been merged.
 			MergeOutputs(ctx);
 		}
 	}
@@ -124,18 +128,16 @@ private:
 			typename Work::PerThreadData& tdA = m_work->perThreadData[m_indexA];
 			typename Work::PerThreadData& tdB = m_work->perThreadData[m_indexB];
 
-			const T* beginA = tdA.outputs[0] + tdA.outputIndex;
-			const T* beginB = tdB.outputs[0] + tdB.outputIndex;
+			const T* beginA = m_work->outputs[0] + tdA.outputIndex;
+			const T* beginB = m_work->outputs[0] + tdB.outputIndex;
 			const T* endA = beginA + tdA.outputCount;
 			const T* endB = beginB + tdB.outputCount;
 
-			T* output = tdA.outputs[1] + tdA.outputIndex;
+			T* output = m_work->outputs[1] + tdA.outputIndex;
 
 			b2Merge(beginA, endA, beginB, endB, output, m_work->comp);
 
 			tdA.outputCount += tdB.outputCount;
-
-			std::swap(tdA.outputs[0], tdA.outputs[1]);
 		}
 
 		Work* m_work;
@@ -161,7 +163,7 @@ private:
 		b2GrowableArray<T>& inputA = *tdA.input;
 		b2GrowableArray<T>& inputB = *tdB.input;
 
-		T* output = tdA.outputs[0] + tdA.outputIndex;
+		T* output = m_work->outputs[0] + tdA.outputIndex;
 
 		b2Merge(inputA.begin(), inputA.end(), inputB.begin(), inputB.end(), output, m_work->comp);
 
@@ -177,7 +179,7 @@ private:
 
 		b2TaskExecutor& executor = *m_work->executor;
 		b2TaskGroup* taskGroup = m_work->taskGroup;
-		uint32 taskCost = m_work->subTaskCost;
+		uint32 taskCost = m_work->taskCost;
 
 		for (uint32 stride = 2; stride < b2_maxThreads; stride *= 2)
 		{
@@ -200,6 +202,8 @@ private:
 				b2Assert(taskCount == 1);
 				tasks[0].Execute(ctx);
 			}
+
+			std::swap(m_work->outputs[0], m_work->outputs[1]);
 		}
 	}
 
@@ -212,10 +216,15 @@ template<typename T, typename ThreadData, typename Member, typename Compare>
 class b2ThreadDataSorter
 {
 public:
-	/// Construct the sorter.
-	/// Allocate output storage using allocator.
+	/// Construct the sorter and submit the sorting tasks.
+	/// @param executor runs the sorting tasks
+	/// @param allocator used for allocating output storage
+	/// @param threadDataArray the input thread data array of size b2_maxThreads
+	/// @param member pointer to a member of ThreadData
+	/// @param comp comparison function object equivalent to "bool comp(const T& a, const T& b)"
+	/// @param taskCost the cost given to tasks (tasks from sorters with higher cost may execute first)
 	b2ThreadDataSorter(b2TaskExecutor& executor, b2StackAllocator& allocator,
-		ThreadData threadDataArray, Member member, Compare comp, uint32 subTaskCost);
+		ThreadData threadDataArray, Member member, Compare comp, uint32 taskCost = 0);
 
 	/// No copies.
 	b2ThreadDataSorter(b2ThreadDataSorter&) = delete;
@@ -229,35 +238,34 @@ public:
 
 	/// Get the sorted output beginning.
 	/// @warning only valid after wait is called.
-	T* begin() const;
+	const T* begin() const;
+	T* begin();
 
 	/// Get the sorted output end.
 	/// @warning only valid after wait is called.
-	T* end() const;
+	const T* end() const;
+	T* end();
 
 	/// Get the size of the sorted output.
 	/// @warning only valid after wait is called.
 	uint32 size() const;
 
-	/// Is the per thread data input empty?
+private:
 	bool is_empty() const;
 
-private:
 	typename b2SortThreadDataTask<T, Compare>::Work m_work;
 	b2SortThreadDataTask<T, Compare> m_tasks[b2_maxThreads];
 	b2TaskGroup* m_taskGroup;
 	b2StackAllocator* m_allocator;
 	void* m_mem;
-	uint32 m_subTaskCost;
 };
 
 template<typename T, typename ThreadData, typename Member, typename Compare>
 b2ThreadDataSorter<T, ThreadData, Member, Compare>::b2ThreadDataSorter(
 	b2TaskExecutor& executor, b2StackAllocator& allocator,
-	ThreadData threadDataArray, Member member, Compare comp, uint32 subTaskCost)
+	ThreadData threadDataArray, Member member, Compare comp, uint32 taskCost)
 : m_allocator(&allocator)
 , m_mem(nullptr)
-, m_subTaskCost(subTaskCost)
 {
 	uint32 outputCount = 0;
 	for (int32 i = 0; i < b2_maxThreads; ++i)
@@ -273,16 +281,16 @@ b2ThreadDataSorter<T, ThreadData, Member, Compare>::b2ThreadDataSorter(
 	}
 
 	m_mem = allocator.Allocate(2 * outputCount * sizeof(T));
+	m_work.outputs[0] = (T*)m_mem;
+	m_work.outputs[1] = (T*)m_mem + outputCount;
 
 	for (uint32 i = 0; i < b2_maxThreads; ++i)
 	{
 		m_work.perThreadData[i].input = &(threadDataArray[i].*member);
-		m_work.perThreadData[i].outputs[0] = (T*)m_mem;
-		m_work.perThreadData[i].outputs[1] = (T*)m_mem + outputCount;
 		m_work.perThreadData[i].counter.store(0, std::memory_order_relaxed);
 
 		m_tasks[i] = b2SortThreadDataTask<T, Compare>(m_work, i);
-		m_tasks[i].SetCost(subTaskCost);
+		m_tasks[i].SetCost(taskCost);
 
 		b2_drdIgnoreVar(m_work.perThreadData[i].counter);
 	}
@@ -295,6 +303,7 @@ b2ThreadDataSorter<T, ThreadData, Member, Compare>::b2ThreadDataSorter(
 	uint32 mergeCounter = b2_maxThreads / 2;
 	m_work.mergeCounter.store(mergeCounter, std::memory_order_relaxed);
 	m_work.comp = comp;
+	m_work.taskCost = taskCost;
 
 	b2SubmitTasks(executor, m_taskGroup, m_tasks, b2_maxThreads);
 }
@@ -320,15 +329,27 @@ void b2ThreadDataSorter<T, ThreadData, Member, Compare>::wait()
 }
 
 template<typename T, typename ThreadData, typename Member, typename Compare>
-T* b2ThreadDataSorter<T, ThreadData, Member, Compare>::begin() const
+const T* b2ThreadDataSorter<T, ThreadData, Member, Compare>::begin() const
 {
-	return m_work.perThreadData[0].outputs[0];
+	return m_work.outputs[0];
 }
 
 template<typename T, typename ThreadData, typename Member, typename Compare>
-T* b2ThreadDataSorter<T, ThreadData, Member, Compare>::end() const
+T* b2ThreadDataSorter<T, ThreadData, Member, Compare>::begin()
 {
-	return m_work.perThreadData[0].outputs[0] + m_work.perThreadData[0].outputCount;
+	return m_work.outputs[0];
+}
+
+template<typename T, typename ThreadData, typename Member, typename Compare>
+const T* b2ThreadDataSorter<T, ThreadData, Member, Compare>::end() const
+{
+	return m_work.outputs[0] + m_work.perThreadData[0].outputCount;
+}
+
+template<typename T, typename ThreadData, typename Member, typename Compare>
+T* b2ThreadDataSorter<T, ThreadData, Member, Compare>::end()
+{
+	return m_work.outputs[0] + m_work.perThreadData[0].outputCount;
 }
 
 template<typename T, typename ThreadData, typename Member, typename Compare>
