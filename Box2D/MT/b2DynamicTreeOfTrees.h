@@ -70,7 +70,7 @@ public:
 	/// @see MoveProxy
 	void QueueMoveProxy(int32 proxyId, const b2AABB& aabb1, const b2Vec2& displacement, uint32 threadId);
 
-	/// TODO_MT
+	/// Consume queued proxy moves.
 	void FinishMoveProxies(b2TaskExecutor& executor, b2TaskGroup* taskGroup, b2StackAllocator& allocator);
 
 	/// Get proxy user data.
@@ -177,7 +177,8 @@ private:
 			int32 subTreeRoot;
 		};
 
-		// The user-facing proxy for a sub-tree leaf. This is the head of the nextProxy list.
+		// The head of the next proxy list. For a sub-tree leaf this is the user-facing proxy.
+		// For other nodes this is a self reference.
 		int32 proxy;
 
 		// This is used for thread-safe node allocations through a base tree leaf.
@@ -246,7 +247,7 @@ private:
 
 	void InsertNewSubTree(const SubTreePosition& subTreePosition, int32 subProxy);
 
-	void InsertLeaf(int32 node, uint32 threadId);
+	void InsertLeaf(int32 node);
 	template<bool useSubTreeFreeList>
 	void SubTreeInsertLeaf(int32* rootInOut, int32 node);
 

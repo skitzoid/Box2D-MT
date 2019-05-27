@@ -71,6 +71,7 @@
 #include "TheoJansen.h"
 #include "Tiles.h"
 #include "TimeOfImpact.h"
+#include "TreeOfTreesMissingProxyTest.h"
 #include "TunnelingTest.h"
 #include "Tumbler.h"
 #include "VaryingFriction.h"
@@ -94,6 +95,7 @@ TestEntry g_testEntries[] =
 	{"Sleep Collide Test", SleepCollideTest::Create, 1800},
 	{"Tunneling Test", TunnelingTest::Create, 1800},
 	{"Query Test", QueryTest::Create, 1},
+	{"Missing Proxy Test", TreeOfTreesMissingProxyTest::Create, 1},
 	{"Shape Cast", ShapeCast::Create, 1},
 	{"Time of Impact", TimeOfImpact::Create, 1},
 	{"Character Collision", CharacterCollision::Create, 240},

@@ -768,7 +768,6 @@ int32 b2DynamicTreeOfTrees::AllocateNode()
 
 	// Peel a node off the free list.
 	int32 nodeId = m_freeList;
-	DebugNodeAllocate(nodeId);
 	m_freeList = m_nodes[nodeId].next;
 	m_nodes[nodeId].parent = b2_nullNode;
 	m_nodes[nodeId].child1 = b2_nullNode;
@@ -777,6 +776,7 @@ int32 b2DynamicTreeOfTrees::AllocateNode()
 	m_nodes[nodeId].userData = nullptr;
 	m_nodes[nodeId].proxy = nodeId;
 	m_nodes[nodeId].subTreeNextFree = b2_nullNode;
+	DebugNodeAllocate(nodeId);
 	++m_nodeCount;
 	return nodeId;
 }
@@ -895,7 +895,7 @@ int32 b2DynamicTreeOfTrees::CreateProxy(const b2AABB& aabb, void* userData)
 	m_nodes[proxyId].userData = userData;
 	m_nodes[proxyId].height = 0;
 
-	InsertLeaf(proxyId, 0);
+	InsertLeaf(proxyId);
 
 	return proxyId;
 }
@@ -929,7 +929,7 @@ bool b2DynamicTreeOfTrees::MoveProxy(int32 proxyId, const b2AABB& aabb, const b2
 
 	m_nodes[proxyId].aabb = ComputeAABB(aabb, displacement);
 
-	InsertLeaf(proxyId, 0);
+	InsertLeaf(proxyId);
 
 	return true;
 }
@@ -978,8 +978,6 @@ struct b2InsertLeafQueryCallback
 
     bool QueryCallback(int32 baseTreeLeaf)
     {
-		b2Assert(m_tree->m_nodes[baseTreeLeaf].subTreePosition.x < 10000); // TEMP_MT
-
         if (m_insertCount == 0)
         {
             m_aabb = m_tree->m_nodes[baseTreeLeaf].aabb;
@@ -1019,14 +1017,14 @@ struct b2InsertLeafQueryCallback
     uint32 m_insertCount;
 };
 
-b2_forceInline void b2DynamicTreeOfTrees::InsertLeaf(int32 proxy, uint32 threadId)
+b2_forceInline void b2DynamicTreeOfTrees::InsertLeaf(int32 proxy)
 {
     b2AABB proxyAABB = m_nodes[proxy].aabb;
 
     // Insert the leaf into all existing overlapped sub-trees.
     b2InsertLeafQueryCallback insertQuery(this, proxy);
 
-    Query<false, false>(m_root, &insertQuery, proxyAABB, threadId);
+    Query<false, false>(m_root, &insertQuery, proxyAABB, 0);
 
     // Is the leaf fully contained by the sub-trees it was inserted into?
     // Note: if the leaf AABB spans more than 2 sub-trees per dimension, then it's
@@ -1040,21 +1038,7 @@ b2_forceInline void b2DynamicTreeOfTrees::InsertLeaf(int32 proxy, uint32 threadI
             return;
         }
 
-        float32 leafWx = proxyAABB.upperBound.x - proxyAABB.lowerBound.x;
-        float32 leafWy = proxyAABB.upperBound.y - proxyAABB.lowerBound.y;
-
-        // Is the leaf AABB small enough to be contained by a single sub-tree?
-        // This means that it can't span more than 2 sub-trees per dimension,
-        // and must have been inserted into all overlapped sub-trees.
-        if (leafWx < m_subTreeWidth && leafWy < m_subTreeHeight)
-        {
-            b2Assert(insertQuery.m_insertCount <= 4);
-            return;
-        }
-
-        // The leaf AABB is large enough to span more than 2 sub-trees per dimension,
-        // so we need to rule out gaps in the query AABB by checking if it has the
-        // expected number of insertions.
+        // Rule out gaps in the query AABB by checking if it has the expected number of insertions.
 
         float32 queryWx = insertQuery.m_aabb.upperBound.x - insertQuery.m_aabb.lowerBound.x;
         float32 queryWy = insertQuery.m_aabb.upperBound.y - insertQuery.m_aabb.lowerBound.y;
