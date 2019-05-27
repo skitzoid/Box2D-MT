@@ -23,18 +23,20 @@ struct RayCastCounter : public b2RayCastCallback
 {
     RayCastCounter()
     {
-        count = 0;
+        m_hit = false;
     }
 
     float32 ReportFixture(b2Fixture* fixture, const b2Vec2& point,
                           const b2Vec2& normal, float32 fraction) override
     {
-        ++count;
+        m_hit = true;
+        m_point = point;
 
-        return fraction;
+        return -1.0f;
     }
 
-    uint32 count;
+    b2Vec2 m_point;
+    bool m_hit;
 };
 
 // Regression test for a bug where b2DynamicTreeOfTrees could fail to create
@@ -69,44 +71,39 @@ public:
             m_groundBody->CreateFixture(&shape, 0.0f);
         }
 
-        // Ensure that we can detect the proxies in the top-left and bottom-right sub-trees.
-        RayCastCounter rayCallback;
-
-        {
-            b2Vec2 p1(0.0f, 10.0f);
-            b2Vec2 p2(4.0f, 6.0f);
-            m_world->RayCast(&rayCallback, p1, p2);
-        }
-
-        {
-            b2Vec2 p1(10.0f, 0.0f);
-            b2Vec2 p2(6.0f, 4.0f);
-            m_world->RayCast(&rayCallback, p1, p2);
-        }
-
-        m_passed = rayCallback.count == 2;
+        m_passed = true;
     }
 
     void Step(Settings* settings)
     {
         Test::Step(settings);
 
-        {
-            b2Vec2 p1(0.0f, 10.0f);
-            b2Vec2 p2(4.0f, 6.0f);
-            g_debugDraw.DrawSegment(p1, p2, b2Color(1.0f, 1.0f, 1.0f));
-        }
+        // Ensure that we can detect the proxy in the top-left sub-tree.
+        RayCast(b2Vec2(0.0f, 10.0f), b2Vec2(4.0f, 6.0f));
 
-        {
-            b2Vec2 p1(10.0f, 0.0f);
-            b2Vec2 p2(6.0f, 4.0f);
-            g_debugDraw.DrawSegment(p1, p2, b2Color(1.0f, 1.0f, 1.0f));
-        }
+        // Ensure that we can detect the proxy in the bottom-right sub-tree.
+        RayCast(b2Vec2(10.0f, 0.0f), b2Vec2(6.0f, 4.0f));
 
         g_debugDraw.DrawString(5, m_textLine, "This is a regression test for missing sub-proxies in b2DynamicTreeOfTrees.");
         m_textLine += DRAW_STRING_NEW_LINE;
         g_debugDraw.DrawString(5, m_textLine, "Status: %s", m_passed ? "PASSED" : "FAILED");
         m_textLine += DRAW_STRING_NEW_LINE;
+    }
+
+    void RayCast(b2Vec2 p1, b2Vec2 p2)
+    {
+        RayCastCounter rayCallback;
+
+        m_world->RayCast(&rayCallback, p1, p2);
+        if (rayCallback.m_hit)
+        {
+            p2 = rayCallback.m_point;
+        }
+        else
+        {
+            m_passed = false;
+        }
+        g_debugDraw.DrawSegment(p1, p2, b2Color(1.0f, 1.0f, 1.0f));
     }
 
     static Test* Create()
