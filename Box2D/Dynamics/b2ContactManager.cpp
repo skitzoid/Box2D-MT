@@ -457,11 +457,10 @@ void b2ContactManager::FinishSynchronizeFixtures(b2TaskExecutor& executor, b2Tas
 	}
 #endif
 #else
-	auto moves = b2MakeStackAllocThreadDataSorter<b2DeferredMoveProxy>(m_perThreadData,
-		&b2ContactManagerPerThreadData::m_moveProxies, allocator, b2DeferredMoveProxyLessThan);
+	b2_threadDataSorter(moves, b2DeferredMoveProxy, 1, executor, allocator, m_perThreadData,
+		&b2ContactManagerPerThreadData::m_moveProxies, &b2DeferredMoveProxyLessThan);
 
-	b2Sort(moves, executor, taskGroup, allocator);
-
+	moves.wait();
 	for (auto it = moves.begin(); it != moves.end(); ++it)
 	{
 		m_broadPhase.MoveProxy(it->proxyId, it->aabb, it->displacement);
