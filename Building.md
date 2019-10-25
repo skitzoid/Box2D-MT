@@ -30,7 +30,7 @@ Debug build:
 - Command line: `cd Testbed`
 - Command line: `../Build/bin/x86_64/Debug/Testbed`
 
-Realese build:
+Release build:
 - Command line: `premake5 gmake`
 - Command line: `make -C Build config=release_x86_64`
 - Command line: `cd Testbed`
